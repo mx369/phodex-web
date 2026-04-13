@@ -39,20 +39,20 @@ Done when:
 Status: open
 
 Why:
-- Turn timelines and the composer work-state band are now present, but the page still misses other source `TurnView` secondary states.
+- Turn timelines, the composer work-state band, and the empty timeline state are now present, but the page still misses other source `TurnView` secondary states.
 
 Main work:
-- Bring the empty-state branch closer to source instead of leaving it as a generic assistant greeting.
 - Add the remaining source-informed toolbar/sheet affordances that belong to TurnView rather than the global drawer.
 - Decide whether structured-input replacement is needed, or explicitly document why it remains out of scope.
+- Tighten any remaining TurnView spacing/copy mismatches only after the missing branches above are resolved.
 
 Likely files:
 - `apps/web/src/App.vue`
 - `apps/web/src/style.css`
 
 Done when:
-- Turn empty and turn-with-messages states are both source-closer, not just structurally functional.
-- Remaining TurnView differences are narrowed to small visual polish instead of missing branches.
+- Turn empty and turn-with-messages states are both source-closer, and the remaining gaps are secondary affordances rather than missing core branches.
+- Remaining TurnView differences are narrowed to small visual polish instead of missing toolbar/structured-input paths.
 - The change is verified in a real browser flow and documented with fresh evidence.
 
 ## Blockers And Caveats

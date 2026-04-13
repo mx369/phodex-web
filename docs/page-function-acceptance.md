@@ -16,6 +16,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Removed inert Fast/Plan toggles so composer and settings only expose backed controls.
 - Mapped real Codex execution items into turn activity cards and added a source-closer turn toolbar summary strip.
 - Grouped queued drafts into a visible composer work-state band and promoted `/plan` replies into pinned-plan surfaces.
+- Replaced the generic turn-empty welcome card with an embedded empty-timeline block that keeps the composer in the same working layout.
 
 ## Result Legend
 
@@ -42,7 +43,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Page | Entry path | Function points checked in this pass | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | Home Empty | fresh OTP login after source-parity pass | connected state, source-closer header chips, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-52-home-page-parity.png` |
-| Turn Empty | clean authenticated chat after placeholder cleanup | empty-copy render, composer visible, no voice/attachment/Fast/Plan placeholders | pass | `.artifacts/qa-61-turn-empty-real-controls.png` |
+| Turn Empty | clean authenticated chat after empty-state parity pass | embedded empty-timeline block, source-closer guidance copy, composer visible, no voice/attachment/Fast/Plan placeholders | pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |

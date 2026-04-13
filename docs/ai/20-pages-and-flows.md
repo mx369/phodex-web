@@ -12,7 +12,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
-| Turn empty | Partial | Real selected thread and composer; the composer now only shows backed controls | Structured-input replacement state and final empty-state polish are still missing |
+| Turn empty | Partial | Real selected thread, embedded empty-timeline block, and backed composer | Structured-input replacement state and final micro-spacing/polish are still missing |
 | Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, and a visible composer work-state band for queued drafts and plans | Secondary toolbar/sheet affordances and deeper TurnView choreography still differ from source |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
 | Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |

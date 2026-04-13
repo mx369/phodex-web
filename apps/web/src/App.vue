@@ -1568,11 +1568,18 @@ function readShellPageState(): ShellPageState | null {
                         </article>
                       </template>
 
-                      <div v-else-if="currentThread" class="phone-empty-state">
-                        <img :src="remodexAppLogo" alt="" class="phone-empty-state__logo" />
-                        <span class="section-label">Conversation</span>
-                        <h2>Hi! How can I help you?</h2>
-                        <p>Messages stream from the Codex session running on your Mac.</p>
+                      <div v-else-if="currentThread" class="turn-empty-state">
+                        <div class="turn-empty-state__marker" aria-hidden="true"></div>
+                        <div class="turn-empty-state__card">
+                          <span class="section-label">Empty Timeline</span>
+                          <h2>Start the next turn from the composer.</h2>
+                          <p>Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands.</p>
+                          <div class="turn-empty-state__chips">
+                            <span class="turn-empty-state__chip">/plan</span>
+                            <span class="turn-empty-state__chip">@files</span>
+                            <span class="turn-empty-state__chip">$skills</span>
+                          </div>
+                        </div>
                       </div>
 
                       <div v-else class="home-empty-state">

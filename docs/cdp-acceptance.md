@@ -22,7 +22,7 @@ All screenshots in this file were captured from real browser renders through the
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
 | Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
-| Turn Empty | Same authenticated session, opened a clean chat after trimming the composer to backed controls only | `.artifacts/qa-61-turn-empty-real-controls.png` |
+| Turn Empty | Same authenticated session, opened a clean chat after the empty-timeline pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Turn View Work-State Band | Same authenticated session, created a clean test thread and verified queued-draft and pinned-plan accessory states above the composer | `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
@@ -37,6 +37,7 @@ All screenshots in this file were captured from real browser renders through the
 - The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
 - Sidebar and archived evidence now reflect the restore-only delete policy: no destructive delete affordance is shown.
 - Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
+- Turn-empty evidence now reflects the embedded timeline block rather than the earlier generic welcome card.
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
 - Turn-view evidence now reflects the summary toolbar plus real Codex execution cards instead of chat-only message rows.
 - Turn-view work-state evidence now reflects visible queued-draft and pinned-plan accessory surfaces instead of hiding that state in thread metadata alone.
