@@ -25,6 +25,7 @@ All screenshots in this file were captured from real browser renders through the
 | Turn Empty | Same authenticated session, opened a clean chat after the empty-timeline pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Turn View Work-State Band | Same authenticated session, created a clean test thread and verified queued-draft and pinned-plan accessory states above the composer | `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |
+| Turn View Scroll State | Same authenticated session, used a long thread to verify internal timeline scrolling, visible `Scroll to latest`, and return-to-bottom behavior after the source-informed scroll-state pass | `.artifacts/qa-72-turn-scroll-latest.png`, `.artifacts/qa-73-turn-scroll-bottom.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
 | Settings | Authenticated session reloaded at `/?page=settings` after trimming runtime defaults to backed fields only | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
@@ -41,4 +42,5 @@ All screenshots in this file were captured from real browser renders through the
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
 - Turn-view evidence now reflects the summary toolbar plus real Codex execution cards instead of chat-only message rows.
 - Turn-view work-state evidence now reflects visible queued-draft and pinned-plan accessory surfaces instead of hiding that state in thread metadata alone.
+- Turn-view scroll evidence now reflects a fixed mobile shell with an internally scrolling timeline and a source-informed `Scroll to latest` affordance.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

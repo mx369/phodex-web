@@ -40,10 +40,9 @@ Status: open
 
 Why:
 - Turn timelines, the composer work-state band, and the empty timeline state are now present, but the page still misses other source `TurnView` secondary states.
+- The source-informed turn scroll state machine and `Scroll to latest` affordance are now present, so the next gaps are the remaining secondary branches around empty states, queued follow-ups, and toolbar drill-ins.
 
 Main work:
-- Add the source-confirmed turn scroll state machine:
-  `followBottom` / `manual` / `anchorAssistantResponse`, plus bottom threshold, cooldown, and scroll-to-latest affordance.
 - Add the remaining empty-state branches:
   running-empty and pinned-plan-empty behavior.
 - Add queued-draft follow-up behavior that still differs from source:

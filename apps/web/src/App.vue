@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type { ThreadRecord } from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
@@ -20,6 +20,8 @@ type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
   | { kind: "archive-group"; projectLabel: string; liveCount: number };
 
+type TurnAutoScrollMode = "followBottom" | "anchorAssistantResponse" | "manual";
+
 const verificationCode = ref("");
 const dismissedBannerId = ref<string | null>(null);
 const rootFlowState = ref<RootFlowState>(readRootFlowState());
@@ -35,6 +37,27 @@ const activePanel = computed(() => shellPageStack.value.at(-1) ?? null);
 const panelCanGoBack = computed(() => shellPageStack.value.length > 1);
 const dialogState = ref<AppDialogState | null>(null);
 const dialogInput = ref("");
+const conversationScrollEl = ref<HTMLElement | null>(null);
+const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
+const isScrolledToBottom = ref(true);
+const isUserScrolling = ref(false);
+const autoScrollCooldownUntil = ref<number | null>(null);
+const previousConversationHeight = ref(0);
+const assistantAnchorState = ref<{ threadId: string | null; previousAssistantId: string | null } | null>(null);
+
+const TURN_BOTTOM_THRESHOLD = 12;
+const TURN_USER_SCROLL_COOLDOWN_MS = 250;
+const TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD = 1;
+const TURN_SCROLL_COALESCE_MS = 16;
+const TURN_RECOVERY_DELAYS_MS = [0, 16, 50, 100] as const;
+const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
+const WHEEL_SCROLL_END_DEBOUNCE_MS = 140;
+
+let followBottomTimer: number | null = null;
+let wheelScrollEndTimer: number | null = null;
+let timelineSyncTimer: number | null = null;
+let programmaticScrollUntil = 0;
+let recoveryTimers: number[] = [];
 
 const onboardingScreens = [
   {
@@ -230,6 +253,13 @@ onMounted(() => {
   });
 });
 
+onBeforeUnmount(() => {
+  clearFollowBottomTimer();
+  clearWheelScrollEndTimer();
+  clearTimelineSyncTimer();
+  clearRecoveryTimers();
+});
+
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
@@ -389,6 +419,7 @@ const planAccessory = computed(() => {
   return null;
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
+const showScrollToLatestButton = computed(() => Boolean(currentThread.value?.messages.length && !isScrolledToBottom.value));
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
   if (!match) {
@@ -481,6 +512,66 @@ const activePanelTitle = computed(() => {
       return "";
   }
 });
+
+watch(
+  () => currentThread.value?.id ?? null,
+  async (nextThreadId) => {
+    clearFollowBottomTimer();
+    clearWheelScrollEndTimer();
+    clearTimelineSyncTimer();
+    clearRecoveryTimers();
+
+    isUserScrolling.value = false;
+    autoScrollCooldownUntil.value = null;
+
+    if (assistantAnchorState.value?.threadId && nextThreadId && assistantAnchorState.value.threadId !== nextThreadId) {
+      assistantAnchorState.value = null;
+    }
+
+    autoScrollMode.value = assistantAnchorState.value ? "anchorAssistantResponse" : "followBottom";
+
+    if (assistantAnchorState.value && !assistantAnchorState.value.threadId && nextThreadId) {
+      assistantAnchorState.value = {
+        ...assistantAnchorState.value,
+        threadId: nextThreadId,
+      };
+    }
+
+    if (!nextThreadId) {
+      previousConversationHeight.value = 0;
+      isScrolledToBottom.value = true;
+      assistantAnchorState.value = null;
+      autoScrollMode.value = "followBottom";
+      return;
+    }
+
+    await nextTick();
+    previousConversationHeight.value = conversationScrollEl.value?.scrollHeight ?? 0;
+    isScrolledToBottom.value = isConversationPinnedToBottom();
+    scheduleRecoverySnaps(nextThreadId);
+  },
+  { flush: "post" }
+);
+
+watch(
+  () => {
+    const thread = currentThread.value;
+    const lastMessage = thread?.messages.at(-1);
+    return [
+      thread?.id ?? "",
+      thread?.state ?? "",
+      thread?.messages.length ?? 0,
+      lastMessage?.id ?? "",
+      lastMessage?.text.length ?? 0,
+      lastMessage?.isStreaming ? 1 : 0,
+      lastMessage?.role ?? "",
+    ].join("|");
+  },
+  () => {
+    queueTimelineScrollSync();
+  },
+  { flush: "post" }
+);
 
 function formatRelativeTime(value: string) {
   const deltaMinutes = Math.max(1, Math.round((Date.now() - Date.parse(value)) / 60_000));
@@ -636,11 +727,19 @@ async function handleVerifyCode() {
 }
 
 function handleSend() {
+  const activeThread = currentThread.value;
+  const shouldArmAssistantAnchor = activeThread ? activeThread.state !== "running" : true;
   if (!currentThread.value) {
     client.createThreadAndSend("Phodex Web", "local");
+    if (shouldArmAssistantAnchor) {
+      armAssistantAnchor(null);
+    }
     return;
   }
-  client.sendComposer(currentThread.value.id);
+  const didSend = client.sendComposer(currentThread.value.id);
+  if (didSend && shouldArmAssistantAnchor) {
+    armAssistantAnchor(currentThread.value.id);
+  }
 }
 
 function handleRenameThread(threadId: string, currentTitle: string) {
@@ -815,6 +914,243 @@ function readShellPageState(): ShellPageState | null {
   }
 
   return null;
+}
+
+function queueTimelineScrollSync() {
+  clearTimelineSyncTimer();
+  timelineSyncTimer = window.setTimeout(() => {
+    timelineSyncTimer = null;
+    void syncTimelineScrollAfterMutation();
+  }, TURN_SCROLL_COALESCE_MS);
+}
+
+async function syncTimelineScrollAfterMutation() {
+  await nextTick();
+  const thread = currentThread.value;
+  const scrollEl = conversationScrollEl.value;
+  if (!thread || !scrollEl) {
+    return;
+  }
+
+  const previousHeight = previousConversationHeight.value;
+  const nextHeight = scrollEl.scrollHeight;
+  const wasPinnedToBottom = isScrolledToBottom.value || autoScrollMode.value !== "manual";
+  const shouldCorrectBottom =
+    wasPinnedToBottom &&
+    previousHeight > 0 &&
+    nextHeight > 0 &&
+    Math.abs(nextHeight - previousHeight) > TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD;
+
+  if (assistantAnchorState.value && thread.state !== "running" && !latestAssistantMessage(thread)) {
+    assistantAnchorState.value = null;
+    autoScrollMode.value = isConversationPinnedToBottom() ? "followBottom" : "manual";
+  }
+
+  if (assistantAnchorState.value && autoScrollMode.value === "anchorAssistantResponse") {
+    const latestAssistant = latestAssistantMessage(thread);
+    const anchorThreadId = assistantAnchorState.value.threadId ?? thread.id;
+    const hasNewAssistant =
+      anchorThreadId === thread.id &&
+      latestAssistant &&
+      latestAssistant.id !== assistantAnchorState.value.previousAssistantId;
+
+    if (hasNewAssistant && latestAssistant) {
+      scrollMessageToTop(latestAssistant.id, "smooth", 260);
+      assistantAnchorState.value = null;
+      autoScrollMode.value = "manual";
+      previousConversationHeight.value = nextHeight;
+      return;
+    }
+
+    if (!isAutomaticScrollingPaused()) {
+      scheduleFollowBottomScroll();
+    }
+    previousConversationHeight.value = nextHeight;
+    return;
+  }
+
+  if (autoScrollMode.value === "followBottom" && !isAutomaticScrollingPaused()) {
+    scheduleFollowBottomScroll();
+  } else if (shouldCorrectBottom && !isAutomaticScrollingPaused()) {
+    scheduleFollowBottomScroll();
+  }
+
+  previousConversationHeight.value = nextHeight;
+  isScrolledToBottom.value = isConversationPinnedToBottom();
+}
+
+function armAssistantAnchor(threadId: string | null) {
+  assistantAnchorState.value = {
+    threadId,
+    previousAssistantId: latestAssistantMessage(currentThread.value)?.id ?? null,
+  };
+  autoScrollMode.value = "anchorAssistantResponse";
+  autoScrollCooldownUntil.value = null;
+}
+
+function latestAssistantMessage(thread: ThreadRecord | null) {
+  if (!thread) {
+    return null;
+  }
+  return [...thread.messages].reverse().find((message) => message.role === "assistant") ?? null;
+}
+
+function isAutomaticScrollingPaused(now = Date.now()) {
+  if (isUserScrolling.value) {
+    return true;
+  }
+  return autoScrollCooldownUntil.value !== null && now < autoScrollCooldownUntil.value;
+}
+
+function isConversationPinnedToBottom() {
+  const scrollEl = conversationScrollEl.value;
+  if (!scrollEl) {
+    return true;
+  }
+  return scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - TURN_BOTTOM_THRESHOLD;
+}
+
+function scheduleFollowBottomScroll() {
+  if (followBottomTimer !== null) {
+    return;
+  }
+  followBottomTimer = window.setTimeout(() => {
+    followBottomTimer = null;
+    scrollConversationToBottom("auto", PROGRAMMATIC_SCROLL_LOCK_MS);
+  }, TURN_SCROLL_COALESCE_MS);
+}
+
+function clearFollowBottomTimer() {
+  if (followBottomTimer !== null) {
+    window.clearTimeout(followBottomTimer);
+    followBottomTimer = null;
+  }
+}
+
+function clearWheelScrollEndTimer() {
+  if (wheelScrollEndTimer !== null) {
+    window.clearTimeout(wheelScrollEndTimer);
+    wheelScrollEndTimer = null;
+  }
+}
+
+function clearTimelineSyncTimer() {
+  if (timelineSyncTimer !== null) {
+    window.clearTimeout(timelineSyncTimer);
+    timelineSyncTimer = null;
+  }
+}
+
+function clearRecoveryTimers() {
+  for (const timer of recoveryTimers) {
+    window.clearTimeout(timer);
+  }
+  recoveryTimers = [];
+}
+
+function scrollConversationToBottom(behavior: ScrollBehavior = "auto", lockDurationMs = PROGRAMMATIC_SCROLL_LOCK_MS) {
+  const scrollEl = conversationScrollEl.value;
+  if (!scrollEl) {
+    return;
+  }
+  programmaticScrollUntil = Date.now() + lockDurationMs;
+  scrollEl.scrollTo({
+    top: scrollEl.scrollHeight,
+    behavior,
+  });
+  previousConversationHeight.value = scrollEl.scrollHeight;
+  window.setTimeout(() => {
+    isScrolledToBottom.value = isConversationPinnedToBottom();
+  }, 0);
+}
+
+function scrollMessageToTop(messageId: string, behavior: ScrollBehavior = "smooth", lockDurationMs = 260) {
+  const scrollEl = conversationScrollEl.value;
+  if (!scrollEl) {
+    return;
+  }
+  const target = scrollEl.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
+  if (!target) {
+    scrollConversationToBottom(behavior, lockDurationMs);
+    return;
+  }
+  programmaticScrollUntil = Date.now() + lockDurationMs;
+  scrollEl.scrollTo({
+    top: Math.max(0, target.offsetTop - 8),
+    behavior,
+  });
+  window.setTimeout(() => {
+    isScrolledToBottom.value = isConversationPinnedToBottom();
+  }, 0);
+}
+
+function scheduleRecoverySnaps(threadId: string) {
+  clearRecoveryTimers();
+  recoveryTimers = TURN_RECOVERY_DELAYS_MS.map((delay) =>
+    window.setTimeout(() => {
+      if (currentThread.value?.id !== threadId || autoScrollMode.value === "manual") {
+        return;
+      }
+      scrollConversationToBottom("auto", PROGRAMMATIC_SCROLL_LOCK_MS);
+    }, delay)
+  );
+}
+
+function beginUserScrollIntent() {
+  isUserScrolling.value = true;
+  if (autoScrollMode.value !== "anchorAssistantResponse") {
+    autoScrollMode.value = "manual";
+  }
+}
+
+function finishUserScrollIntent() {
+  clearWheelScrollEndTimer();
+  isUserScrolling.value = false;
+  autoScrollCooldownUntil.value = Date.now() + TURN_USER_SCROLL_COOLDOWN_MS;
+  if (autoScrollMode.value === "anchorAssistantResponse") {
+    return;
+  }
+  autoScrollMode.value = isConversationPinnedToBottom() ? "followBottom" : "manual";
+}
+
+function handleConversationPointerDown() {
+  beginUserScrollIntent();
+}
+
+function handleConversationPointerUp() {
+  finishUserScrollIntent();
+}
+
+function handleConversationWheel() {
+  beginUserScrollIntent();
+  clearWheelScrollEndTimer();
+  wheelScrollEndTimer = window.setTimeout(() => {
+    finishUserScrollIntent();
+  }, WHEEL_SCROLL_END_DEBOUNCE_MS);
+}
+
+function handleConversationScroll() {
+  isScrolledToBottom.value = isConversationPinnedToBottom();
+  previousConversationHeight.value = conversationScrollEl.value?.scrollHeight ?? previousConversationHeight.value;
+
+  if (Date.now() < programmaticScrollUntil) {
+    return;
+  }
+
+  if (autoScrollMode.value === "anchorAssistantResponse") {
+    return;
+  }
+
+  if (!isScrolledToBottom.value && isUserScrolling.value) {
+    autoScrollMode.value = "manual";
+  }
+}
+
+function handleScrollToLatest() {
+  assistantAnchorState.value = null;
+  autoScrollMode.value = "followBottom";
+  autoScrollCooldownUntil.value = null;
+  scrollConversationToBottom("smooth", 260);
 }
 </script>
 
@@ -1481,12 +1817,21 @@ function readShellPageState(): ShellPageState | null {
                     </div>
                   </section>
 
-                  <section class="phone-conversation">
+                  <section
+                    ref="conversationScrollEl"
+                    class="phone-conversation"
+                    @pointerdown="handleConversationPointerDown"
+                    @pointerup="handleConversationPointerUp"
+                    @pointercancel="handleConversationPointerUp"
+                    @wheel.passive="handleConversationWheel"
+                    @scroll.passive="handleConversationScroll"
+                  >
                     <div class="phone-conversation__inner">
                       <template v-if="currentThread && currentThread.messages.length">
                         <article
                           v-for="message in currentThread.messages"
                           :key="message.id"
+                          :data-message-id="message.id"
                           class="phone-message"
                           :class="`phone-message--${message.role}`"
                         >
@@ -1622,6 +1967,11 @@ function readShellPageState(): ShellPageState | null {
 
                   <footer v-if="currentThread" class="phone-composer-dock">
                     <div class="phone-composer-dock__inner">
+                      <button v-if="showScrollToLatestButton" class="scroll-latest-cta" @click="handleScrollToLatest">
+                        <span>↓</span>
+                        <strong>Scroll to latest</strong>
+                      </button>
+
                       <div v-if="composerWorkStateVisible" class="composer-work-state">
                         <div v-if="planAccessory" class="plan-accessory" :class="`plan-accessory--${planAccessory.tone}`">
                           <div class="plan-accessory__head">

@@ -40,10 +40,10 @@ Legend:
 
 | Upstream interaction | Source truth | Current web status | Priority |
 | --- | --- | --- | --- |
-| auto-scroll state machine | `followBottom` / `anchorAssistantResponse` / `manual` modes | `missing` | P1 |
-| bottom threshold + anti-jitter behavior | `12pt` bottom threshold, `1pt` correction threshold, `250ms` cooldown, coalesced follow scrolls | `missing` | P1 |
-| scroll-to-latest affordance | floating button when not at bottom | `missing` | P1 |
-| initial scroll recovery | multi-pass recovery snap on thread change | `missing` | P1 |
+| auto-scroll state machine | `followBottom` / `anchorAssistantResponse` / `manual` modes | `done` | closed |
+| bottom threshold + anti-jitter behavior | `12pt` bottom threshold, `1pt` correction threshold, `250ms` cooldown, coalesced follow scrolls | `done` | closed |
+| scroll-to-latest affordance | floating button when not at bottom | `done` | closed |
+| initial scroll recovery | multi-pass recovery snap on thread change | `done` | closed |
 | large-thread tail rendering | render last 40 rows first, then “Load earlier messages” | `missing` | P2 |
 | empty timeline static mode | empty chats avoid inert scrolling | `partial` | empty card exists, but scroll behavior is still generic |
 | running-empty state | “Working on it… / You can stop it below” while a thread is running but still empty | `missing` | P1 |
@@ -60,12 +60,10 @@ Legend:
 
 ## Current Serial Execution Order
 
-1. turn auto-scroll state machine
-2. scroll-to-latest affordance plus bottom-threshold behavior
-3. running-empty and pinned-plan-empty branching
-4. queued draft steer / pause / resume semantics
-5. toolbar path / diff / thread-actions affordances
-6. secondary composer bar parity
+1. running-empty and pinned-plan-empty branching
+2. queued draft steer / pause / resume semantics
+3. toolbar path / diff / thread-actions affordances
+4. secondary composer bar parity
 
 ## Evidence Pointers
 

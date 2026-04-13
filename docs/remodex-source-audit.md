@@ -210,8 +210,7 @@ Treat the following as source references only, not implementation targets:
 ## Immediate Follow-On Work
 
 The source-backed highest-value gap list is now:
-1. turn auto-scroll state machine and “scroll to latest” affordance
-2. turn running-empty / pinned-plan empty branching
-3. queued draft steer / pause / resume semantics
-4. toolbar secondary actions and thread-path / diff drill-ins
-5. secondary composer bar parity
+1. turn running-empty / pinned-plan empty branching
+2. queued draft steer / pause / resume semantics
+3. toolbar secondary actions and thread-path / diff drill-ins
+4. secondary composer bar parity
