@@ -33,6 +33,7 @@ Important notes:
 ## Optional
 
 - [Current state](./docs/ai/10-current-state.md): Expanded status summary and known blockers.
+- [Open TODO](./docs/ai/50-open-todo.md): Dedicated unfinished-work list for follow-on AI agents.
 - [Standards and rationale](./docs/ai/90-standards-and-rationale.md): Why this repo uses layered AI docs and how to consume them.
 - [Source audit](./docs/remodex-source-audit.md): Reverse-engineered source notes.
 - [Remodex page matrix](./docs/remodex-page-matrix.md): Detailed page mapping from the upstream app.

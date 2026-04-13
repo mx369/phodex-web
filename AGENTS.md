@@ -54,6 +54,7 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 
 - `/Users/young/mx/tmp/phodex-web/llms.txt`: cross-tool LLM index.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md`: high-priority durable product overrides.
+- `/Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md`: dedicated unfinished-work list for follow-on AI agents.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md`: broader state and known gaps.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`: page matrix and feature status.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`: technical interfaces and bridge behavior.

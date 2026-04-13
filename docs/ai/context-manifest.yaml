@@ -33,6 +33,7 @@ routers:
       - /Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md
   project_status_or_handoff:
     read:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
@@ -71,8 +72,21 @@ resources:
       You need a broad status summary, a handoff, or a gap list before planning work.
     stop_if_sufficient: true
     next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+
+  - id: open_todo
+    level: 1
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md
+    approx_tokens: 1100
+    read_when: >
+      You are continuing unfinished work, picking the next task, or preparing a handoff for another AI.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md
 
   - id: web_scope
     level: 1
