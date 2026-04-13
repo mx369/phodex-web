@@ -1199,12 +1199,9 @@ function readShellPageState(): ShellPageState | null {
                     <div class="phone-drawer__head">
                       <div class="drawer-brand">
                         <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
-                        <div>
-                          <span class="section-label">Connected</span>
-                          <h2>Remodex</h2>
-                        </div>
+                        <strong class="drawer-brand__title">Remodex</strong>
                       </div>
-                      <button class="icon-button" @click="closeSidebar">×</button>
+                      <button class="icon-button" aria-label="Close menu" @click="closeSidebar">☰</button>
                     </div>
 
                     <input
