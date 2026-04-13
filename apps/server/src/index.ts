@@ -79,6 +79,12 @@ type ThreadListResponse = {
   nextCursor: string | null;
 };
 
+type OtpMailConfig = {
+  resendApiKey: string;
+  authEmailFrom: string;
+  sourceLabel: string;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -96,11 +102,14 @@ const DEV_AUTH_BYPASS = process.env.PHODEX_DEV_AUTH_BYPASS !== "false";
 const STATIC_BACKDOOR_CODE = process.env.PHODEX_BACKDOOR_CODE ?? "424242";
 const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
+const AUTH_ENV_FALLBACK_FILE =
+  process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const CODEX_BIN = resolveCodexBinary();
+const OTP_MAIL_CONFIG = resolveOtpMailConfig();
 const DEV_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -232,6 +241,13 @@ const server = Bun.serve<SocketData>({
 console.log(`[phodex] HTTPS relay listening on https://localhost:${PORT}`);
 console.log(`[phodex] WSS endpoint ready at wss://localhost:${PORT}/relay`);
 console.log(`[phodex] Codex target ${CODEX_WS_URL}`);
+if (OTP_MAIL_CONFIG) {
+  console.log(
+    `[phodex] OTP email delivery via Resend (${OTP_MAIL_CONFIG.sourceLabel}) from ${OTP_MAIL_CONFIG.authEmailFrom}`
+  );
+} else {
+  console.log(`[phodex] OTP email delivery using local mailbox fallback`);
+}
 if (DEV_AUTH_BYPASS) {
   console.log(`[phodex] Dev auth bypass enabled. Static backdoor code: ${STATIC_BACKDOOR_CODE}`);
 }
@@ -249,7 +265,14 @@ async function handleRequestCode(req: Request) {
   const user = ensureUser(email);
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
-  const delivery = deliverCode(email, code);
+  let delivery: DeliveryMode;
+
+  try {
+    delivery = await deliverCode(email, code);
+  } catch (error) {
+    console.error(`[phodex] failed to deliver OTP for ${email}`, error);
+    return json({ ok: false, error: "Unable to send verification code right now." }, 502);
+  }
 
   persisted.otpCodes[email] = {
     code,
@@ -266,7 +289,11 @@ async function handleRequestCode(req: Request) {
     expiresInMs: OTP_TTL_MS,
   };
 
-  console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} code=${code}`);
+  if (delivery === "local-mailbox") {
+    console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} code=${code}`);
+  } else {
+    console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} expiresAt=${expiresAt}`);
+  }
   return json(response);
 }
 
@@ -1895,8 +1922,176 @@ function normalizeEmail(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
-function deliverCode(_email: string, _code: string): DeliveryMode {
-  return "local-mailbox";
+async function deliverCode(email: string, code: string): Promise<DeliveryMode> {
+  if (!OTP_MAIL_CONFIG) {
+    return "local-mailbox";
+  }
+
+  const payload = renderOtpEmail(code);
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${OTP_MAIL_CONFIG.resendApiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from: OTP_MAIL_CONFIG.authEmailFrom,
+      to: [email],
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = (await response.text()).trim();
+    throw new Error(
+      `Resend rejected OTP email (${response.status})${detail ? `: ${detail.slice(0, 240)}` : ""}`
+    );
+  }
+
+  return "resend";
+}
+
+function resolveOtpMailConfig(): OtpMailConfig | null {
+  const fallbackEnv = readOptionalEnvFile(AUTH_ENV_FALLBACK_FILE);
+  const resendApiKey =
+    readConfigValue(process.env.PHODEX_RESEND_API_KEY) ||
+    readConfigValue(process.env.RESEND_API_KEY) ||
+    fallbackEnv.RESEND_API_KEY ||
+    "";
+  const authEmailFrom =
+    readConfigValue(process.env.PHODEX_AUTH_EMAIL_FROM) ||
+    readConfigValue(process.env.AUTH_EMAIL_FROM) ||
+    fallbackEnv.AUTH_EMAIL_FROM ||
+    "";
+
+  if (!resendApiKey || !authEmailFrom) {
+    return null;
+  }
+
+  const sourceLabel =
+    readConfigValue(process.env.PHODEX_RESEND_API_KEY) || readConfigValue(process.env.RESEND_API_KEY)
+      ? readConfigValue(process.env.PHODEX_AUTH_EMAIL_FROM) || readConfigValue(process.env.AUTH_EMAIL_FROM)
+        ? "process env"
+        : "mixed env + fallback file"
+      : `fallback file ${AUTH_ENV_FALLBACK_FILE}`;
+
+  return {
+    resendApiKey,
+    authEmailFrom,
+    sourceLabel,
+  };
+}
+
+function readOptionalEnvFile(filePath: string) {
+  if (!existsSync(filePath)) {
+    return {} as Record<string, string>;
+  }
+
+  const values: Record<string, string> = {};
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) {
+      continue;
+    }
+
+    const [, key, rawValue] = match;
+    const value = readConfigValue(rawValue);
+    if (value) {
+      values[key] = value;
+    }
+  }
+
+  return values;
+}
+
+function readConfigValue(value: string | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed;
+}
+
+function renderOtpEmail(code: string) {
+  const title = "Continue with email verification.";
+  const subtitle =
+    "Use this one-time verification code to connect your phone to the relay session running on your Mac.";
+  const expiresLabel = `${Math.round(OTP_TTL_MS / 60_000)} minutes`;
+  const subject = "Your Phodex verification code";
+
+  return {
+    subject,
+    text: [
+      "Phodex",
+      "",
+      title,
+      subtitle,
+      "",
+      `Verification code: ${code}`,
+      `Expires in ${expiresLabel}.`,
+      "",
+      "If you did not request this code, you can ignore this email.",
+    ].join("\n"),
+    html: `<!doctype html>
+<html lang="en">
+  <body style="margin:0;background:#050505;color:#f5f7fb;font-family:Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+    <div style="padding:32px 18px;background:
+      radial-gradient(circle at top, rgba(92,109,255,0.24), transparent 34%),
+      radial-gradient(circle at bottom, rgba(239,142,85,0.18), transparent 28%),
+      #050505;">
+      <div style="max-width:540px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.1);border-radius:28px;background:rgba(14,14,18,0.92);box-shadow:0 28px 60px rgba(0,0,0,0.34);">
+        <div style="display:inline-flex;align-items:center;min-height:28px;padding:0 12px;border:1px solid rgba(255,255,255,0.1);border-radius:999px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.66);font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Email OTP</div>
+        <div style="margin-top:18px;display:grid;gap:14px;">
+          <div style="width:64px;height:64px;border-radius:18px;background:
+            radial-gradient(circle at 35% 30%, rgba(255,255,255,0.26), transparent 36%),
+            linear-gradient(180deg, rgba(92,109,255,0.98), rgba(58,66,195,0.98));box-shadow:0 18px 42px rgba(92,109,255,0.28);color:#ffffff;font-size:24px;font-weight:800;line-height:64px;text-align:center;">P</div>
+          <div>
+            <h1 style="margin:0;font-size:32px;line-height:1.02;letter-spacing:-0.05em;color:#ffffff;">${escapeHtml(title)}</h1>
+            <p style="margin:10px 0 0;color:rgba(255,255,255,0.64);font-size:15px;line-height:1.7;">${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+        <div style="margin-top:24px;padding:18px;border:1px solid rgba(255,255,255,0.08);border-radius:24px;background:
+          linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));">
+          <div style="color:rgba(255,255,255,0.56);font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">Verification code</div>
+          <div style="margin-top:12px;padding:18px 20px;border-radius:20px;background:rgba(255,255,255,0.06);color:#ffffff;font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace;font-size:34px;font-weight:700;letter-spacing:0.22em;text-align:center;">${escapeHtml(code)}</div>
+          <p style="margin:12px 0 0;color:rgba(255,255,255,0.62);font-size:13px;line-height:1.6;">This code expires in ${escapeHtml(expiresLabel)}.</p>
+        </div>
+        <div style="margin-top:18px;padding:14px 16px;border:1px solid rgba(255,255,255,0.06);border-radius:20px;background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:13px;line-height:1.7;">
+          If you did not request this code, you can ignore this email.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`,
+  };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function safeJson(req: Request) {

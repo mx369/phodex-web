@@ -90,6 +90,7 @@ For browser-state reset, use the hidden session and clear origin storage before 
 ## Login Flow
 
 The app accepts the static backdoor code `424242` in development.
+If the server has Resend configured, `Send verification code` will also issue a real OTP email; the runbook still uses the backdoor path so screenshots remain repeatable and inbox access is not required.
 
 Recommended login path:
 

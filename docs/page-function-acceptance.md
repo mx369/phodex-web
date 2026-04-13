@@ -55,7 +55,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 ## Interaction Flows
 
-- OTP login: pass in a real browser flow with a local dev mailbox and backdoor code `424242`.
+- OTP login: pass in a real browser flow; repeatable QA still uses the backdoor code `424242`, and the current server build now prefers live Resend delivery for request-code before falling back to the local mailbox.
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.

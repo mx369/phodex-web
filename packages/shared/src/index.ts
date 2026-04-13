@@ -2,7 +2,7 @@ export type AccessMode = "read-only" | "on-request" | "full-access";
 export type ThreadState = "idle" | "running" | "queued" | "archived";
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageKind = "chat" | "plan" | "status";
-export type DeliveryMode = "smtp" | "local-mailbox" | "backdoor";
+export type DeliveryMode = "smtp" | "resend" | "local-mailbox" | "backdoor";
 export type ThreadCreateMode = "local" | "worktree";
 
 export interface DiffStats {

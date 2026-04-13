@@ -9,7 +9,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists, and now routes directly into Email OTP | Not pixel-perfect; copy/layout still approximate |
 | Bootstrap failure | Shell | Rendered and navigable with preview-only subscription copy | No real purchase or restore flow |
 | Subscription gate | Shell | Plan selection UI and navigation exist with preview-only purchase copy | No real purchase or restore flow |
-| Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
+| Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly, and OTP delivery now uses live Resend when configured | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
 | Turn empty | Partial | Real selected thread, embedded empty-timeline block, and backed composer | Structured-input replacement state and final micro-spacing/polish are still missing |
@@ -24,7 +24,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Flow | Status | Notes |
 | --- | --- | --- |
 | Onboarding -> Email OTP | Real | Fresh unauthenticated users now move from onboarding directly into the email verification screen |
-| Email OTP login | Real | Uses `/api/auth/request-code`, `/api/auth/verify-code`, and optional `/api/auth/dev-code` |
+| Email OTP login | Real | Uses `/api/auth/request-code`, `/api/auth/verify-code`, and optional `/api/auth/dev-code`; request-code now prefers live Resend delivery and falls back to the local mailbox only when mail config is unavailable |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | First send creates a thread and flushes the composer |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |

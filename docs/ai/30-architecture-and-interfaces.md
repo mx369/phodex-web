@@ -13,7 +13,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - `GET /api/health`: relay and Codex bridge health summary.
 - `GET /api/bootstrap`: authenticated snapshot bootstrap.
-- `POST /api/auth/request-code`: issue OTP.
+- `POST /api/auth/request-code`: issue OTP and send it through Resend when mail config is available.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /api/auth/dev-code`: read current OTP/static bypass when dev bypass is enabled.
 - `GET /relay?token=...`: WSS upgrade endpoint.
@@ -82,5 +82,12 @@ Read this file for relay, auth, client, and Codex bridge work.
 ## Invariants
 
 - Server transport must stay Bun-native for HTTPS and WSS. Do not add third-party HTTP or websocket server dependencies.
+- OTP email delivery should stay dependency-light: direct HTTP to Resend is acceptable, but do not add a mail SDK just to send one transactional message.
 - Keep the local Codex bridge real. Do not regress to fake assistant scripts.
 - Preserve the OTP dev bypass for local validation unless the user explicitly removes it.
+
+## Auth Delivery Notes
+
+- The server resolves OTP mail config from `PHODEX_RESEND_API_KEY` / `PHODEX_AUTH_EMAIL_FROM` first, then `RESEND_API_KEY` / `AUTH_EMAIL_FROM`, then the workstation fallback file configured by `PHODEX_AUTH_ENV_FILE`.
+- On this workstation, the default fallback file points at the existing `remote-terminal/.env.cloudflare` setup so local Phodex can reuse the already-provisioned Resend sender without committing secrets into this repo.
+- If no mail config is available, `/api/auth/request-code` still succeeds by returning `delivery=local-mailbox`, and the dev bypass/backdoor path remains available for local QA.

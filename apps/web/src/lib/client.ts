@@ -113,8 +113,8 @@ export function createAppClient() {
       state.auth.staticBackdoorCode = response.staticBackdoorCode;
       state.ui.authStatus =
         response.delivery === "local-mailbox"
-          ? "SMTP is not configured, so the OTP was delivered to the local dev mailbox."
-          : "Verification code sent.";
+          ? "Email delivery is in local dev mode, so the OTP stayed in the local mailbox."
+          : "Verification code sent. Check your inbox for the Phodex email.";
       pushToast("success", "Verification code ready.");
     } catch (error) {
       pushToast("error", readErrorMessage(error));
