@@ -44,6 +44,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications now map richer Codex execution items into structured thread cards.
 - Completion banners are synthesized after run completion.
+- The web client now inserts a local pending-thread placeholder as soon as `thread:create` is sent, then removes it when the server snapshot or thread update for the real thread arrives.
 
 ## Codex App-Server Methods In Use
 

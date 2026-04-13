@@ -289,6 +289,9 @@ const currentThread = computed(() => {
   }
   return state.snapshot.threads.find((thread) => thread.id === state.snapshot?.selectedThreadId) ?? null;
 });
+const isCurrentThreadPendingCreate = computed(() =>
+  Boolean(currentThread.value?.id.startsWith("pending-thread:"))
+);
 const liveThreads = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived"));
 const visibleBanner = computed(() => {
   const banner = state.snapshot?.banner;
@@ -338,11 +341,14 @@ const connectionStatusLabel = computed(() => {
       return "Unknown";
   }
 });
-const composerPlaceholder = computed(() =>
-  currentThread.value?.state === "running"
+const composerPlaceholder = computed(() => {
+  if (isCurrentThreadPendingCreate.value) {
+    return "Starting a new chat on your Mac…";
+  }
+  return currentThread.value?.state === "running"
     ? "Write a follow-up while this run is still streaming..."
-    : "Ask anything... @files, $skills, /commands"
-);
+    : "Ask anything... @files, $skills, /commands";
+});
 const homeStatusLabel = computed(() => {
   switch (state.snapshot?.connection.state) {
     case "connected":
@@ -401,7 +407,7 @@ const currentThreadRepoName = computed(() => {
   return segments.at(-1) ?? repoLabel;
 });
 const planAccessory = computed(() => {
-  if (!currentThread.value) {
+  if (!currentThread.value || isCurrentThreadPendingCreate.value) {
     return null;
   }
   const latestPlan = [...currentThread.value.messages]
@@ -419,6 +425,15 @@ const planAccessory = computed(() => {
   return null;
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
+const turnEmptyLabel = computed(() => (isCurrentThreadPendingCreate.value ? "Starting Chat" : "Empty Timeline"));
+const turnEmptyTitle = computed(() =>
+  isCurrentThreadPendingCreate.value ? "Creating a new chat on your Mac." : "Start the next turn from the composer."
+);
+const turnEmptyCopy = computed(() =>
+  isCurrentThreadPendingCreate.value
+    ? "The relay is asking Codex to start a fresh thread. The composer will unlock as soon as it lands."
+    : "Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands."
+);
 const showScrollToLatestButton = computed(() => Boolean(currentThread.value?.messages.length && !isScrolledToBottom.value));
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
@@ -600,7 +615,14 @@ function formatMessageKind(kind: string) {
   return kind === "status" ? "activity" : kind;
 }
 
-function formatThreadState(stateValue: ThreadRecord["state"]) {
+function formatThreadState(thread: ThreadRecord | null) {
+  if (!thread) {
+    return "Ready";
+  }
+  if (thread.id.startsWith("pending-thread:")) {
+    return "Starting";
+  }
+  const stateValue = thread.state;
   switch (stateValue) {
     case "running":
       return "Running";
@@ -613,7 +635,14 @@ function formatThreadState(stateValue: ThreadRecord["state"]) {
   }
 }
 
-function threadStateTone(stateValue: ThreadRecord["state"]) {
+function threadStateTone(thread: ThreadRecord | null) {
+  if (!thread) {
+    return "green";
+  }
+  if (thread.id.startsWith("pending-thread:")) {
+    return "amber";
+  }
+  const stateValue = thread.state;
   switch (stateValue) {
     case "running":
       return "amber";
@@ -765,6 +794,7 @@ function handleArchiveGroup(projectLabel: string) {
 
 function startLocalChat() {
   client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "local");
+  closeSidebar();
 }
 
 function startWorktreeChat() {
@@ -1800,8 +1830,8 @@ function handleScrollToLatest() {
                   <section v-if="currentThread" class="turn-toolbar">
                     <div class="turn-toolbar__inner">
                       <div class="turn-toolbar__strip">
-                        <span class="turn-chip" :class="`turn-chip--${threadStateTone(currentThread.state)}`">
-                          {{ formatThreadState(currentThread.state) }}
+                        <span class="turn-chip" :class="`turn-chip--${threadStateTone(currentThread)}`">
+                          {{ formatThreadState(currentThread) }}
                         </span>
                         <span class="turn-chip">+{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}</span>
                         <span class="turn-chip">{{ currentThread.branch }}</span>
@@ -1916,9 +1946,9 @@ function handleScrollToLatest() {
                       <div v-else-if="currentThread" class="turn-empty-state">
                         <div class="turn-empty-state__marker" aria-hidden="true"></div>
                         <div class="turn-empty-state__card">
-                          <span class="section-label">Empty Timeline</span>
-                          <h2>Start the next turn from the composer.</h2>
-                          <p>Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands.</p>
+                          <span class="section-label">{{ turnEmptyLabel }}</span>
+                          <h2>{{ turnEmptyTitle }}</h2>
+                          <p>{{ turnEmptyCopy }}</p>
                           <div class="turn-empty-state__chips">
                             <span class="turn-empty-state__chip">/plan</span>
                             <span class="turn-empty-state__chip">@files</span>
@@ -2029,13 +2059,14 @@ function handleScrollToLatest() {
                         <textarea
                           v-model="state.ui.composerText"
                           class="phone-composer__input"
+                          :disabled="isCurrentThreadPendingCreate"
                           :placeholder="composerPlaceholder"
                           rows="3"
                         ></textarea>
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
-                            <select v-model="state.ui.selectedModel" class="phone-select">
+                            <select v-model="state.ui.selectedModel" class="phone-select" :disabled="isCurrentThreadPendingCreate">
                               <option v-for="model in MODELS" :key="model">{{ model }}</option>
                             </select>
                           </div>
@@ -2048,7 +2079,18 @@ function handleScrollToLatest() {
                             >
                               ■
                             </button>
-                            <button class="send-cta send-cta--circle" :title="currentThread?.state === 'running' ? 'Queue' : 'Send'" @click="handleSend">
+                            <button
+                              class="send-cta send-cta--circle"
+                              :disabled="isCurrentThreadPendingCreate"
+                              :title="
+                                isCurrentThreadPendingCreate
+                                  ? 'Starting'
+                                  : currentThread?.state === 'running'
+                                    ? 'Queue'
+                                    : 'Send'
+                              "
+                              @click="handleSend"
+                            >
                               {{ currentThread?.state === "running" ? "+" : "↑" }}
                             </button>
                           </div>
@@ -2059,6 +2101,7 @@ function handleScrollToLatest() {
                         <span class="pill">Local</span>
                         <button
                           class="pill pill--button"
+                          :disabled="isCurrentThreadPendingCreate"
                           @click="
                             state.ui.accessMode =
                               state.ui.accessMode === 'full-access'

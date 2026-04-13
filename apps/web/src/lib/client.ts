@@ -23,8 +23,15 @@ type UiToast = {
 };
 
 type AuthPhase = "idle" | "requested" | "authenticated";
+type PendingThreadCreate = {
+  tempId: string;
+  previousSelectedThreadId: string | null;
+  timeoutId: number;
+};
 
 const SESSION_STORAGE_KEY = "phodex.session";
+const PENDING_THREAD_PREFIX = "pending-thread:";
+const PENDING_THREAD_TIMEOUT_MS = 12_000;
 const runtimeHost = window.location.hostname || "localhost";
 const inferredApiOrigin =
   window.location.port === "3443" && window.location.protocol === "https:"
@@ -64,6 +71,7 @@ export const state = reactive({
 let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let pendingSendAfterThreadCreate = false;
+let pendingThreadCreate: PendingThreadCreate | null = null;
 
 export function createAppClient() {
   async function restoreSession() {
@@ -186,16 +194,29 @@ export function createAppClient() {
   }
 
   function createThread(projectLabel?: string, mode: ThreadCreateMode = "local") {
-    send({
+    if (pendingThreadCreate) {
+      pushToast("info", "A new chat is already starting on your Mac.");
+      return false;
+    }
+
+    const sent = send({
       type: "thread:create",
       projectLabel,
       mode,
     });
+    if (!sent) {
+      return false;
+    }
+
+    beginPendingThreadCreate(projectLabel ?? "Phodex Web", mode);
+    return true;
   }
 
   function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local") {
-    pendingSendAfterThreadCreate = true;
-    createThread(projectLabel, mode);
+    const created = createThread(projectLabel, mode);
+    if (created) {
+      pendingSendAfterThreadCreate = true;
+    }
   }
 
   function selectThread(threadId: string) {
@@ -339,15 +360,17 @@ function disconnectSocket() {
 function send(event: ClientEvent) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     pushToast("error", "Relay not connected yet.");
-    return;
+    return false;
   }
   socket.send(JSON.stringify(event));
+  return true;
 }
 
 function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
     case "snapshot":
       applySnapshot(event.snapshot);
+      resolvePendingThreadCreate(event.snapshot.selectedThreadId);
       if (pendingSendAfterThreadCreate && event.snapshot.selectedThreadId) {
         const thread = event.snapshot.threads.find((entry) => entry.id === event.snapshot.selectedThreadId);
         if (thread && thread.messages.length === 0) {
@@ -362,6 +385,7 @@ function handleServerEvent(event: ServerEvent) {
       }
       upsertThread(event.thread);
       state.snapshot.selectedThreadId = event.selectedThreadId;
+      resolvePendingThreadCreate(event.selectedThreadId);
       if (pendingSendAfterThreadCreate && event.selectedThreadId === event.thread.id && event.thread.messages.length === 0) {
         pendingSendAfterThreadCreate = false;
         flushComposer(event.thread.id);
@@ -406,6 +430,9 @@ function handleServerEvent(event: ServerEvent) {
       }
       break;
     case "toast":
+      if (event.tone === "error" && pendingThreadCreate && state.snapshot?.selectedThreadId === pendingThreadCreate.tempId) {
+        rollbackPendingThreadCreate(false);
+      }
       pushToast(event.tone, event.message);
       break;
   }
@@ -437,11 +464,108 @@ function updateConnectionState(next: AppSnapshot["connection"]["state"]) {
   state.snapshot.connection.state = next;
 }
 
+function beginPendingThreadCreate(projectLabel: string, mode: ThreadCreateMode) {
+  if (!state.snapshot) {
+    return;
+  }
+
+  rollbackPendingThreadCreate(false);
+
+  const tempId = `${PENDING_THREAD_PREFIX}${crypto.randomUUID()}`;
+  const previousSelectedThreadId = state.snapshot.selectedThreadId;
+  const seedThread =
+    state.snapshot.threads.find((thread) => thread.id === previousSelectedThreadId) ??
+    state.snapshot.threads.find((thread) => thread.projectLabel === projectLabel) ??
+    state.snapshot.threads[0] ??
+    null;
+
+  const tempThread: ThreadRecord = {
+    id: tempId,
+    title: projectLabel,
+    preview: mode === "worktree" ? "Starting a worktree chat on your Mac…" : "Starting a new chat on your Mac…",
+    projectLabel,
+    repoLabel: seedThread?.repoLabel ?? "",
+    branch: seedThread?.branch ?? "main",
+    state: "queued",
+    lastActivityAt: new Date().toISOString(),
+    unreadCount: 0,
+    subagentCount: 0,
+    isWorktree: mode === "worktree",
+    isForked: mode === "worktree",
+    diff: { additions: 0, deletions: 0 },
+    queuedDrafts: [],
+    messages: [],
+  };
+
+  state.snapshot.selectedThreadId = tempId;
+  state.snapshot.threads = [tempThread, ...state.snapshot.threads.filter((thread) => thread.id !== tempId)];
+
+  pendingThreadCreate = {
+    tempId,
+    previousSelectedThreadId,
+    timeoutId: window.setTimeout(() => {
+      rollbackPendingThreadCreate(false);
+      pushToast("error", "Starting the new chat took too long. Try again.");
+    }, PENDING_THREAD_TIMEOUT_MS),
+  };
+}
+
+function resolvePendingThreadCreate(selectedThreadId: string | null) {
+  if (
+    !pendingThreadCreate ||
+    !selectedThreadId ||
+    selectedThreadId === pendingThreadCreate.tempId ||
+    selectedThreadId === pendingThreadCreate.previousSelectedThreadId
+  ) {
+    return;
+  }
+
+  const tempId = pendingThreadCreate.tempId;
+  if (state.snapshot) {
+    state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
+  }
+
+  window.clearTimeout(pendingThreadCreate.timeoutId);
+  pendingThreadCreate = null;
+}
+
+function rollbackPendingThreadCreate(pushFallbackToast = true) {
+  if (!pendingThreadCreate) {
+    return;
+  }
+
+  const { tempId, previousSelectedThreadId, timeoutId } = pendingThreadCreate;
+  window.clearTimeout(timeoutId);
+
+  if (state.snapshot) {
+    state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
+    if (state.snapshot.selectedThreadId === tempId) {
+      const nextSelectedThreadId =
+        previousSelectedThreadId &&
+        state.snapshot.threads.some((thread) => thread.id === previousSelectedThreadId)
+          ? previousSelectedThreadId
+          : state.snapshot.threads[0]?.id ?? null;
+      state.snapshot.selectedThreadId = nextSelectedThreadId;
+    }
+  }
+
+  pendingThreadCreate = null;
+
+  if (pushFallbackToast) {
+    pushToast("error", "Unable to keep the pending chat open.");
+  }
+}
+
 function findThread(threadId: string) {
   return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
 }
 
 function flushComposer(threadId: string) {
+  if (threadId.startsWith(PENDING_THREAD_PREFIX)) {
+    pushToast("info", "The new chat is still starting on your Mac.");
+    return false;
+  }
+
   const text = state.ui.composerText.trim();
   if (!text) {
     pushToast("error", "Compose something first.");
