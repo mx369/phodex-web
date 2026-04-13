@@ -1,0 +1,525 @@
+import { reactive } from "vue";
+import type {
+  AccessMode,
+  AppSettings,
+  AppSnapshot,
+  AuthSession,
+  ClientEvent,
+  DeliveryMode,
+  DevCodeResponse,
+  RequestCodeResponse,
+  ServerEvent,
+  ThreadCreateMode,
+  ThreadRecord,
+  VerifyCodeResponse,
+} from "@phodex/shared";
+
+type ToastTone = "info" | "success" | "error";
+
+type UiToast = {
+  id: string;
+  tone: ToastTone;
+  message: string;
+};
+
+type AuthPhase = "idle" | "requested" | "authenticated";
+
+const SESSION_STORAGE_KEY = "phodex.session";
+const runtimeHost = window.location.hostname || "localhost";
+const inferredApiOrigin =
+  window.location.port === "3443" && window.location.protocol === "https:"
+    ? window.location.origin
+    : `https://${runtimeHost}:3443`;
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || inferredApiOrigin;
+const WS_ORIGIN = API_ORIGIN.replace(/^http/, "ws");
+
+export const state = reactive({
+  auth: {
+    phase: "idle" as AuthPhase,
+    email: "",
+    delivery: "local-mailbox" as DeliveryMode,
+    devAuthBypassEnabled: false,
+    staticBackdoorCode: null as string | null,
+  },
+  session: null as AuthSession | null,
+  snapshot: null as AppSnapshot | null,
+  ui: {
+    loadingSession: true,
+    sendingCode: false,
+    verifyingCode: false,
+    composerText: "",
+    search: "",
+    selectedModel: "GPT-5.4",
+    fastMode: false,
+    planArmed: false,
+    accessMode: "full-access" as AccessMode,
+    sidebarOpen: false,
+    settingsOpen: false,
+    devCode: null as string | null,
+    authStatus: "",
+    toasts: [] as UiToast[],
+  },
+});
+
+let socket: WebSocket | null = null;
+let reconnectTimer: number | null = null;
+let pendingSendAfterThreadCreate = false;
+
+export function createAppClient() {
+  async function restoreSession() {
+    state.ui.loadingSession = true;
+    const stored = readStoredSession();
+    if (!stored) {
+      state.ui.loadingSession = false;
+      return;
+    }
+
+    state.session = stored;
+    state.auth.email = stored.user.email;
+    state.auth.phase = "authenticated";
+
+    try {
+      const snapshot = await fetchJson<AppSnapshot>("/api/bootstrap", {
+        method: "GET",
+      });
+      applySnapshot(snapshot);
+      connectSocket();
+    } catch {
+      clearSession();
+      pushToast("error", "Previous session expired. Sign in again.");
+    } finally {
+      state.ui.loadingSession = false;
+    }
+  }
+
+  async function requestCode() {
+    const email = state.auth.email.trim().toLowerCase();
+    if (!email) {
+      pushToast("error", "Enter your email first.");
+      return;
+    }
+
+    state.ui.sendingCode = true;
+    try {
+      const response = await fetchJson<RequestCodeResponse>("/api/auth/request-code", {
+        method: "POST",
+        body: {
+          email,
+        },
+      });
+      state.auth.phase = "requested";
+      state.auth.delivery = response.delivery;
+      state.auth.devAuthBypassEnabled = response.devAuthBypassEnabled;
+      state.auth.staticBackdoorCode = response.staticBackdoorCode;
+      state.ui.authStatus =
+        response.delivery === "local-mailbox"
+          ? "SMTP is not configured, so the OTP was delivered to the local dev mailbox."
+          : "Verification code sent.";
+      pushToast("success", "Verification code ready.");
+    } catch (error) {
+      pushToast("error", readErrorMessage(error));
+    } finally {
+      state.ui.sendingCode = false;
+    }
+  }
+
+  async function verifyCode(code: string) {
+    const email = state.auth.email.trim().toLowerCase();
+    if (!email || !code.trim()) {
+      pushToast("error", "Email and code are both required.");
+      return false;
+    }
+
+    state.ui.verifyingCode = true;
+    try {
+      const response = await fetchJson<VerifyCodeResponse>("/api/auth/verify-code", {
+        method: "POST",
+        body: {
+          email,
+          code: code.trim(),
+        },
+      });
+      state.session = response.session;
+      writeStoredSession(response.session);
+      state.auth.phase = "authenticated";
+      state.auth.staticBackdoorCode = response.snapshot.staticBackdoorCode;
+      state.auth.devAuthBypassEnabled = response.snapshot.devAuthBypassEnabled;
+      applySnapshot(response.snapshot);
+      connectSocket();
+      pushToast("success", "Connected to the secure relay.");
+      return true;
+    } catch (error) {
+      pushToast("error", readErrorMessage(error));
+      return false;
+    } finally {
+      state.ui.verifyingCode = false;
+    }
+  }
+
+  async function loadDevCode() {
+    if (!state.auth.devAuthBypassEnabled) {
+      return;
+    }
+
+    try {
+      const response = await fetchJson<DevCodeResponse>(
+        `/api/auth/dev-code?email=${encodeURIComponent(state.auth.email.trim().toLowerCase())}`,
+        { method: "GET" }
+      );
+      state.ui.devCode = response.code;
+      state.auth.staticBackdoorCode = response.staticBackdoorCode;
+      pushToast("info", "Loaded local backdoor data.");
+    } catch (error) {
+      pushToast("error", readErrorMessage(error));
+    }
+  }
+
+  function logout() {
+    disconnectSocket();
+    clearSession();
+    state.snapshot = null;
+    state.auth.phase = "idle";
+    state.ui.composerText = "";
+    state.ui.devCode = null;
+    state.ui.settingsOpen = false;
+    pushToast("info", "Signed out.");
+  }
+
+  function createThread(projectLabel?: string, mode: ThreadCreateMode = "local") {
+    send({
+      type: "thread:create",
+      projectLabel,
+      mode,
+    });
+  }
+
+  function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local") {
+    pendingSendAfterThreadCreate = true;
+    createThread(projectLabel, mode);
+  }
+
+  function selectThread(threadId: string) {
+    send({
+      type: "thread:select",
+      threadId,
+    });
+    if (state.snapshot) {
+      state.snapshot.selectedThreadId = threadId;
+    }
+    state.ui.sidebarOpen = false;
+  }
+
+  function clearThreadSelection() {
+    send({
+      type: "thread:clearSelection",
+    });
+    if (state.snapshot) {
+      state.snapshot.selectedThreadId = null;
+    }
+    state.ui.sidebarOpen = false;
+  }
+
+  function renameThread(threadId: string, title: string) {
+    send({
+      type: "thread:rename",
+      threadId,
+      title,
+    });
+  }
+
+  function deleteThread(threadId: string) {
+    send({
+      type: "thread:delete",
+      threadId,
+    });
+  }
+
+  function toggleArchiveThread(thread: ThreadRecord) {
+    send({
+      type: "thread:archive",
+      threadId: thread.id,
+    });
+  }
+
+  function sendComposer(threadId: string) {
+    return flushComposer(threadId);
+  }
+
+  function resumeDraft(threadId: string, draftId: string) {
+    send({
+      type: "draft:resume",
+      threadId,
+      draftId,
+    });
+  }
+
+  function removeDraft(threadId: string, draftId: string) {
+    send({
+      type: "draft:remove",
+      threadId,
+      draftId,
+    });
+  }
+
+  function stopRun(threadId: string) {
+    send({
+      type: "run:stop",
+      threadId,
+    });
+  }
+
+  function updateSettings(patch: Partial<AppSettings>) {
+    if (state.snapshot) {
+      state.snapshot.settings = {
+        ...state.snapshot.settings,
+        ...patch,
+      };
+    }
+    send({
+      type: "settings:update",
+      patch,
+    });
+  }
+
+    return {
+      restoreSession,
+      requestCode,
+      verifyCode,
+      loadDevCode,
+      logout,
+      createThread,
+      createThreadAndSend,
+      selectThread,
+      clearThreadSelection,
+      renameThread,
+      deleteThread,
+      toggleArchiveThread,
+    sendComposer,
+    resumeDraft,
+    removeDraft,
+    stopRun,
+    updateSettings,
+  };
+}
+
+function connectSocket() {
+  if (!state.session) {
+    return;
+  }
+  disconnectSocket();
+
+  socket = new WebSocket(`${WS_ORIGIN}/relay?token=${encodeURIComponent(state.session.token)}`);
+  updateConnectionState("connecting");
+
+  socket.addEventListener("open", () => {
+    updateConnectionState("connected");
+    send({ type: "bootstrap" });
+  });
+
+  socket.addEventListener("message", (event) => {
+    const payload = JSON.parse(event.data) as ServerEvent;
+    handleServerEvent(payload);
+  });
+
+  socket.addEventListener("close", () => {
+    updateConnectionState("disconnected");
+    if (state.session) {
+      reconnectTimer = window.setTimeout(connectSocket, 1200);
+    }
+  });
+
+  socket.addEventListener("error", () => {
+    updateConnectionState("disconnected");
+  });
+}
+
+function disconnectSocket() {
+  if (reconnectTimer) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    socket.close();
+    socket = null;
+  }
+}
+
+function send(event: ClientEvent) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    pushToast("error", "Relay not connected yet.");
+    return;
+  }
+  socket.send(JSON.stringify(event));
+}
+
+function handleServerEvent(event: ServerEvent) {
+  switch (event.type) {
+    case "snapshot":
+      applySnapshot(event.snapshot);
+      if (pendingSendAfterThreadCreate && event.snapshot.selectedThreadId) {
+        const thread = event.snapshot.threads.find((entry) => entry.id === event.snapshot.selectedThreadId);
+        if (thread && thread.messages.length === 0) {
+          pendingSendAfterThreadCreate = false;
+          flushComposer(thread.id);
+        }
+      }
+      break;
+    case "thread:updated":
+      if (!state.snapshot) {
+        return;
+      }
+      upsertThread(event.thread);
+      state.snapshot.selectedThreadId = event.selectedThreadId;
+      if (pendingSendAfterThreadCreate && event.selectedThreadId === event.thread.id && event.thread.messages.length === 0) {
+        pendingSendAfterThreadCreate = false;
+        flushComposer(event.thread.id);
+      }
+      break;
+    case "message:appended": {
+      const thread = findThread(event.threadId);
+      if (!thread) {
+        return;
+      }
+      if (!thread.messages.some((message) => message.id === event.message.id)) {
+        thread.messages.push(event.message);
+        thread.lastActivityAt = event.message.createdAt;
+      }
+      break;
+    }
+    case "message:delta": {
+      const thread = findThread(event.threadId);
+      const message = thread?.messages.find((item) => item.id === event.messageId);
+      if (message) {
+        message.text += event.delta;
+        message.isStreaming = true;
+      }
+      break;
+    }
+    case "message:finished": {
+      const thread = findThread(event.threadId);
+      const message = thread?.messages.find((item) => item.id === event.messageId);
+      if (message) {
+        message.isStreaming = false;
+      }
+      break;
+    }
+    case "banner":
+      if (state.snapshot) {
+        state.snapshot.banner = event.banner;
+      }
+      break;
+    case "presence":
+      if (state.snapshot) {
+        state.snapshot.connection = event.connection;
+      }
+      break;
+    case "toast":
+      pushToast(event.tone, event.message);
+      break;
+  }
+}
+
+function applySnapshot(snapshot: AppSnapshot) {
+  state.snapshot = snapshot;
+  state.auth.devAuthBypassEnabled = snapshot.devAuthBypassEnabled;
+  state.auth.staticBackdoorCode = snapshot.staticBackdoorCode;
+  updateConnectionState(snapshot.connection.state);
+}
+
+function upsertThread(nextThread: ThreadRecord) {
+  if (!state.snapshot) {
+    return;
+  }
+  const index = state.snapshot.threads.findIndex((thread) => thread.id === nextThread.id);
+  if (index === -1) {
+    state.snapshot.threads.unshift(nextThread);
+    return;
+  }
+  state.snapshot.threads[index] = nextThread;
+}
+
+function updateConnectionState(next: AppSnapshot["connection"]["state"]) {
+  if (!state.snapshot) {
+    return;
+  }
+  state.snapshot.connection.state = next;
+}
+
+function findThread(threadId: string) {
+  return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
+}
+
+function flushComposer(threadId: string) {
+  const text = state.ui.composerText.trim();
+  if (!text) {
+    pushToast("error", "Compose something first.");
+    return false;
+  }
+
+  send({
+    type: "message:send",
+    threadId,
+    text,
+    model: state.ui.selectedModel,
+    planArmed: state.ui.planArmed,
+    fastMode: state.ui.fastMode,
+    accessMode: state.ui.accessMode,
+  });
+  state.ui.composerText = "";
+  return true;
+}
+
+async function fetchJson<T>(path: string, init: { method: string; body?: unknown }) {
+  const response = await fetch(`${API_ORIGIN}${path}`, {
+    method: init.method,
+    headers: {
+      "content-type": "application/json",
+      ...(state.session ? { authorization: `Bearer ${state.session.token}` } : {}),
+    },
+    body: init.body ? JSON.stringify(init.body) : undefined,
+  });
+
+  const raw = await response.text();
+  const data = raw ? JSON.parse(raw) : {};
+  if (!response.ok) {
+    throw new Error(data.error || "Request failed");
+  }
+  return data as T;
+}
+
+function pushToast(tone: ToastTone, message: string) {
+  const toast: UiToast = {
+    id: crypto.randomUUID(),
+    tone,
+    message,
+  };
+  state.ui.toasts.push(toast);
+  window.setTimeout(() => {
+    state.ui.toasts = state.ui.toasts.filter((item) => item.id !== toast.id);
+  }, 3600);
+}
+
+function readStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as AuthSession;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSession(session: AuthSession) {
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+  state.session = null;
+}
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Request failed";
+}

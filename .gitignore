@@ -1,0 +1,4 @@
+node_modules/
+.artifacts/
+apps/web/dist/
+apps/server/data/

@@ -1,0 +1,1735 @@
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomInt, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
+import { hostname } from "node:os";
+import { fileURLToPath } from "node:url";
+import type {
+  AppSettings,
+  AppSnapshot,
+  AuthSession,
+  ClientEvent,
+  CompletionBanner,
+  DeliveryMode,
+  DevCodeResponse,
+  DiffStats,
+  QueuedDraft,
+  RelayConnection,
+  RequestCodeResponse,
+  ServerEvent,
+  ThreadMessage,
+  ThreadRecord,
+  UserSummary,
+  VerifyCodeResponse,
+} from "@phodex/shared";
+
+type PersistedUser = {
+  profile: UserSummary;
+  settings: AppSettings;
+  selectedThreadId: string | null;
+  banner: CompletionBanner | null;
+};
+
+type SessionRecord = {
+  userId: string;
+  expiresAt: string;
+};
+
+type OtpRecord = {
+  code: string;
+  expiresAt: string;
+  delivery: DeliveryMode;
+};
+
+type ThreadLocalState = {
+  queuedDrafts: QueuedDraft[];
+  diff: DiffStats;
+};
+
+type PersistedState = {
+  users: Record<string, PersistedUser>;
+  sessions: Record<string, SessionRecord>;
+  otpCodes: Record<string, OtpRecord>;
+  threadLocal: Record<string, ThreadLocalState>;
+};
+
+type SocketData = {
+  userId: string;
+  token: string;
+};
+
+type PendingCodexRequest = {
+  method: string;
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type ActiveTurnState = {
+  threadId: string;
+  turnId: string;
+  assistantMessageId: string | null;
+  startedAt: string;
+};
+
+type ThreadListResponse = {
+  data: any[];
+  nextCursor: string | null;
+};
+
+const currentFile = fileURLToPath(import.meta.url);
+const currentDir = dirname(currentFile);
+const serverRoot = resolve(currentDir, "..");
+const appRoot = resolve(serverRoot, "../..");
+const dataDir = resolve(serverRoot, "data");
+const dataFile = resolve(dataDir, "state.json");
+const certDir = resolve(serverRoot, "certs");
+const distDir = resolve(appRoot, "apps/web/dist");
+
+const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
+const PORT = Number(process.env.PHODEX_PORT ?? "3443");
+const OTP_TTL_MS = 5 * 60 * 1000;
+const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const DEV_AUTH_BYPASS = process.env.PHODEX_DEV_AUTH_BYPASS !== "false";
+const STATIC_BACKDOOR_CODE = process.env.PHODEX_BACKDOOR_CODE ?? "424242";
+const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
+const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
+const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
+const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
+const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
+const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
+const CODEX_BIN = resolveCodexBinary();
+const DEV_ORIGINS = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://localhost:5173",
+  "https://127.0.0.1:5173",
+  `https://localhost:${PORT}`,
+  `https://127.0.0.1:${PORT}`,
+]);
+
+let persisted = loadState();
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
+const threadCache = new Map<string, ThreadRecord>();
+const activeTurns = new Map<string, ActiveTurnState>();
+const codexRequestWaiters = new Map<string, PendingCodexRequest>();
+
+let codexProcess: ChildProcessWithoutNullStreams | null = null;
+let codexSocket: WebSocket | null = null;
+let codexReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let codexConnectionState: RelayConnection["state"] = "connecting";
+let codexLastSyncAt: string | null = null;
+let codexRequestSeq = 0;
+let threadSyncInFlight: Promise<void> | null = null;
+
+const tls = ensureLocalTls();
+
+void ensureCodexBridge();
+
+const server = Bun.serve<SocketData>({
+  hostname: HOST,
+  port: PORT,
+  tls,
+  async fetch(req, serverInstance) {
+    const url = new URL(req.url);
+    if (url.pathname === "/relay") {
+      const token = url.searchParams.get("token");
+      const session = token ? persisted.sessions[token] : null;
+      if (!token || !session || sessionExpired(session.expiresAt)) {
+        return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
+      }
+
+      const upgraded = serverInstance.upgrade(req, {
+        data: {
+          token,
+          userId: session.userId,
+        },
+      });
+      return upgraded ? undefined : withCors(req, json({ ok: false, error: "Upgrade failed" }, 400));
+    }
+
+    if (req.method === "OPTIONS") {
+      return withCors(req, new Response(null, { status: 204 }));
+    }
+
+    if (url.pathname === "/api/health") {
+      return withCors(
+        req,
+        json({
+          ok: true,
+          relay: RELAY_LABEL,
+          secure: true,
+          codex: {
+            state: codexConnectionState,
+            wsUrl: CODEX_WS_URL,
+            bin: CODEX_BIN || null,
+            managed: MANAGE_CODEX,
+          },
+          users: Object.keys(persisted.users).length,
+        })
+      );
+    }
+
+    if (url.pathname === "/api/bootstrap" && req.method === "GET") {
+      const session = authenticate(req);
+      if (!session) {
+        return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
+      }
+      return withCors(req, json(snapshotForUser(session.userId)));
+    }
+
+    if (url.pathname === "/api/auth/request-code" && req.method === "POST") {
+      return withCors(req, await handleRequestCode(req));
+    }
+
+    if (url.pathname === "/api/auth/verify-code" && req.method === "POST") {
+      return withCors(req, await handleVerifyCode(req));
+    }
+
+    if (url.pathname === "/api/auth/dev-code" && req.method === "GET") {
+      if (!DEV_AUTH_BYPASS) {
+        return withCors(req, json({ ok: false, error: "Not found" }, 404));
+      }
+
+      const email = normalizeEmail(url.searchParams.get("email") ?? "");
+      const record = email ? persisted.otpCodes[email] : null;
+      const body: DevCodeResponse = {
+        ok: true,
+        email,
+        code: record && !otpExpired(record.expiresAt) ? record.code : null,
+        staticBackdoorCode: STATIC_BACKDOOR_CODE,
+      };
+      return withCors(req, json(body));
+    }
+
+    return withCors(req, serveStatic(url.pathname));
+  },
+  websocket: {
+    open(ws) {
+      registerSocket(ws);
+      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(ws.data.userId) });
+      publishPresenceToAllUsers();
+    },
+    message(ws, raw) {
+      try {
+        const message = JSON.parse(raw.toString()) as ClientEvent;
+        handleClientEvent(ws, message);
+      } catch {
+        sendEvent(ws, { type: "toast", tone: "error", message: "Invalid event payload." });
+      }
+    },
+    close(ws) {
+      unregisterSocket(ws);
+      publishPresenceToAllUsers();
+    },
+  },
+});
+
+console.log(`[phodex] HTTPS relay listening on https://localhost:${PORT}`);
+console.log(`[phodex] WSS endpoint ready at wss://localhost:${PORT}/relay`);
+console.log(`[phodex] Codex target ${CODEX_WS_URL}`);
+if (DEV_AUTH_BYPASS) {
+  console.log(`[phodex] Dev auth bypass enabled. Static backdoor code: ${STATIC_BACKDOOR_CODE}`);
+}
+
+process.on("SIGINT", shutdownCodexBridge);
+process.on("SIGTERM", shutdownCodexBridge);
+
+async function handleRequestCode(req: Request) {
+  const body = await safeJson(req);
+  const email = normalizeEmail(body?.email);
+  if (!email) {
+    return json({ ok: false, error: "A valid email is required." }, 400);
+  }
+
+  const user = ensureUser(email);
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
+  const delivery = deliverCode(email, code);
+
+  persisted.otpCodes[email] = {
+    code,
+    expiresAt,
+    delivery,
+  };
+  schedulePersist();
+
+  const response: RequestCodeResponse = {
+    ok: true,
+    delivery,
+    devAuthBypassEnabled: DEV_AUTH_BYPASS,
+    staticBackdoorCode: DEV_AUTH_BYPASS ? STATIC_BACKDOOR_CODE : null,
+    expiresInMs: OTP_TTL_MS,
+  };
+
+  console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} code=${code}`);
+  return json(response);
+}
+
+async function handleVerifyCode(req: Request) {
+  const body = await safeJson(req);
+  const email = normalizeEmail(body?.email);
+  const code = String(body?.code ?? "").trim();
+  if (!email || !code) {
+    return json({ ok: false, error: "Email and verification code are required." }, 400);
+  }
+
+  const record = persisted.otpCodes[email];
+  const validDynamicCode = record && !otpExpired(record.expiresAt) && record.code === code;
+  const validBackdoorCode = DEV_AUTH_BYPASS && code === STATIC_BACKDOOR_CODE;
+
+  if (!validDynamicCode && !validBackdoorCode) {
+    return json({ ok: false, error: "Invalid or expired code." }, 401);
+  }
+
+  const user = ensureUser(email);
+  const token = randomUUID();
+  const session: AuthSession = {
+    token,
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+    user: user.profile,
+  };
+
+  persisted.sessions[token] = {
+    userId: user.profile.id,
+    expiresAt: session.expiresAt,
+  };
+  delete persisted.otpCodes[email];
+  schedulePersist();
+
+  const response: VerifyCodeResponse = {
+    ok: true,
+    session,
+    snapshot: snapshotForUser(user.profile.id),
+  };
+  return json(response);
+}
+
+function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) {
+  const user = persisted.users[ws.data.userId];
+  if (!user) {
+    sendEvent(ws, { type: "toast", tone: "error", message: "Session user not found." });
+    return;
+  }
+
+  switch (event.type) {
+    case "bootstrap":
+      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      void syncAllThreadsFromCodex().then(() => {
+        const selectedThreadId = persisted.users[user.profile.id]?.selectedThreadId;
+        if (selectedThreadId) {
+          return syncThreadFromCodex(selectedThreadId, true);
+        }
+      }).catch((error) => {
+        sendToast(user.profile.id, "error", readErrorMessage(error));
+      });
+      break;
+    case "thread:create":
+      void handleThreadCreate(user);
+      break;
+    case "thread:select":
+      user.selectedThreadId = event.threadId;
+      schedulePersist();
+      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      void syncThreadFromCodex(event.threadId, true).catch((error) => {
+        sendToast(user.profile.id, "error", readErrorMessage(error));
+      });
+      break;
+    case "thread:clearSelection":
+      user.selectedThreadId = null;
+      schedulePersist();
+      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      break;
+    case "thread:rename":
+      void handleThreadRename(user, event.threadId, event.title);
+      break;
+    case "thread:delete":
+      sendToast(user.profile.id, "error", "Codex app-server does not expose thread deletion. Archive the thread instead.");
+      break;
+    case "thread:archive":
+      void handleThreadArchive(user, event.threadId);
+      break;
+    case "message:send":
+      void handleMessageSend(user, event);
+      break;
+    case "draft:resume":
+      void handleDraftResume(user, event.threadId, event.draftId);
+      break;
+    case "draft:remove":
+      handleDraftRemove(user.profile.id, event.threadId, event.draftId);
+      break;
+    case "run:stop":
+      void handleRunStop(user.profile.id, event.threadId);
+      break;
+    case "settings:update":
+      user.settings = {
+        ...user.settings,
+        ...event.patch,
+      };
+      schedulePersist();
+      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      break;
+  }
+}
+
+async function handleThreadCreate(user: PersistedUser) {
+  try {
+    ensureCodexReady();
+    const result = await codexRequest("thread/start", {
+      cwd: DEFAULT_THREAD_CWD,
+      model: "gpt-5.4",
+      sandbox: "danger-full-access",
+      approvalPolicy: "never",
+      personality: "pragmatic",
+    });
+    const thread = mergeCodexThread(result.thread, false, false);
+    threadCache.set(thread.id, thread);
+    user.selectedThreadId = thread.id;
+    clearAllBanners();
+    schedulePersist();
+    broadcastThreadToAllUsers(thread.id);
+    broadcastSnapshotsToAllUsers();
+    codexLastSyncAt = new Date().toISOString();
+    publishPresenceToAllUsers();
+    void syncAllThreadsFromCodex();
+  } catch (error) {
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+  }
+}
+
+async function handleThreadRename(user: PersistedUser, threadId: string, title: string) {
+  if (!title.trim()) {
+    sendToast(user.profile.id, "error", "Thread name cannot be empty.");
+    return;
+  }
+
+  try {
+    ensureCodexReady();
+    await codexRequest("thread/name/set", {
+      threadId,
+      name: title.trim(),
+    });
+    await syncAllThreadsFromCodex();
+  } catch (error) {
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+  }
+}
+
+async function handleThreadArchive(user: PersistedUser, threadId: string) {
+  try {
+    ensureCodexReady();
+    const thread = threadCache.get(threadId);
+    const isArchived = thread?.state === "archived";
+    await codexRequest(isArchived ? "thread/unarchive" : "thread/archive", { threadId });
+    if (!isArchived && user.selectedThreadId === threadId) {
+      user.selectedThreadId = findFirstLiveThreadId(threadId);
+    }
+    schedulePersist();
+    await syncAllThreadsFromCodex();
+  } catch (error) {
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+  }
+}
+
+async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent, { type: "message:send" }>) {
+  const text = event.text.trim();
+  if (!text) {
+    sendToast(user.profile.id, "error", "Compose something first.");
+    return;
+  }
+
+  try {
+    ensureCodexReady();
+    const thread = threadCache.get(event.threadId) ?? await syncThreadFromCodex(event.threadId, false);
+    if (!thread) {
+      sendToast(user.profile.id, "error", "Thread not found.");
+      return;
+    }
+
+    if (thread.state === "running") {
+      const local = ensureThreadLocal(thread.id);
+      local.queuedDrafts.unshift({
+        id: randomUUID(),
+        text,
+        createdAt: new Date().toISOString(),
+      });
+      thread.queuedDrafts = local.queuedDrafts;
+      thread.state = "running";
+      thread.preview = text;
+      thread.lastActivityAt = new Date().toISOString();
+      schedulePersist();
+      broadcastThreadToAllUsers(thread.id);
+      sendToast(user.profile.id, "info", "Draft queued while the current run finishes.");
+      return;
+    }
+
+    user.selectedThreadId = thread.id;
+    clearAllBanners();
+    markThreadRunning(thread.id, text);
+    schedulePersist();
+    broadcastThreadToAllUsers(thread.id);
+    broadcastSnapshotsToAllUsers();
+
+    const turnResponse = await codexRequest("turn/start", {
+      threadId: thread.id,
+      input: [{ type: "text", text }],
+      model: normalizeModel(event.model),
+      approvalPolicy: mapApprovalPolicy(event.accessMode),
+      sandboxPolicy: mapSandboxPolicy(event.accessMode),
+    });
+    const turnId = readString(turnResponse?.turn?.id);
+    if (turnId) {
+      activeTurns.set(thread.id, {
+        threadId: thread.id,
+        turnId,
+        assistantMessageId: null,
+        startedAt: new Date().toISOString(),
+      });
+    }
+    codexLastSyncAt = new Date().toISOString();
+    publishPresenceToAllUsers();
+  } catch (error) {
+    const thread = threadCache.get(event.threadId);
+    if (thread) {
+      thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
+      broadcastThreadToAllUsers(thread.id);
+    }
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+  }
+}
+
+async function handleDraftResume(user: PersistedUser, threadId: string, draftId: string) {
+  const local = ensureThreadLocal(threadId);
+  const draftIndex = local.queuedDrafts.findIndex((draft) => draft.id === draftId);
+  if (draftIndex === -1) {
+    return;
+  }
+
+  const [draft] = local.queuedDrafts.splice(draftIndex, 1);
+  const thread = threadCache.get(threadId);
+  if (thread) {
+    thread.queuedDrafts = local.queuedDrafts;
+    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
+    broadcastThreadToAllUsers(threadId);
+  }
+  schedulePersist();
+
+  await handleMessageSend(user, {
+    type: "message:send",
+    threadId,
+    text: draft.text,
+    model: "GPT-5.4",
+    planArmed: false,
+    fastMode: false,
+    accessMode: "full-access",
+  });
+}
+
+function handleDraftRemove(userId: string, threadId: string, draftId: string) {
+  const local = ensureThreadLocal(threadId);
+  local.queuedDrafts = local.queuedDrafts.filter((draft) => draft.id !== draftId);
+  const thread = threadCache.get(threadId);
+  if (thread) {
+    thread.queuedDrafts = local.queuedDrafts;
+    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
+    broadcastThreadToAllUsers(threadId);
+  }
+  schedulePersist();
+  publishPresenceToAllUsers();
+  sendToast(userId, "info", "Queued draft removed.");
+}
+
+async function handleRunStop(userId: string, threadId: string) {
+  const activeTurn = activeTurns.get(threadId);
+  if (!activeTurn) {
+    sendToast(userId, "info", "There is no active run to stop.");
+    return;
+  }
+
+  try {
+    ensureCodexReady();
+    await codexRequest("turn/interrupt", {
+      threadId,
+      turnId: activeTurn.turnId,
+    });
+    sendToast(userId, "info", "Interrupt sent to local Codex.");
+  } catch (error) {
+    sendToast(userId, "error", readErrorMessage(error));
+  }
+}
+
+async function ensureCodexBridge() {
+  clearCodexReconnectTimer();
+  setCodexConnectionState("connecting");
+
+  if (await probeCodexReady()) {
+    connectCodexSocket();
+    return;
+  }
+
+  if (!MANAGE_CODEX) {
+    setCodexConnectionState("disconnected");
+    console.error("[phodex] Codex app-server is unavailable and automatic management is disabled.");
+    publishPresenceToAllUsers();
+    return;
+  }
+
+  if (!CODEX_BIN) {
+    setCodexConnectionState("disconnected");
+    console.error("[phodex] Could not resolve a valid Codex CLI binary. Set PHODEX_CODEX_BIN.");
+    publishPresenceToAllUsers();
+    return;
+  }
+
+  startManagedCodexProcess();
+  const ready = await waitForCodexReady(12_000);
+  if (!ready) {
+    setCodexConnectionState("disconnected");
+    console.error("[phodex] Timed out waiting for Codex app-server to become ready.");
+    publishPresenceToAllUsers();
+    return;
+  }
+
+  connectCodexSocket();
+}
+
+function connectCodexSocket() {
+  if (codexSocket && (codexSocket.readyState === WebSocket.OPEN || codexSocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  setCodexConnectionState("connecting");
+  const socket = new WebSocket(CODEX_WS_URL);
+  codexSocket = socket;
+
+  socket.addEventListener("open", () => {
+    void codexRequest(
+      "initialize",
+      {
+        clientInfo: {
+          name: "phodex-web",
+          version: "0.1.0",
+        },
+      },
+      { allowBeforeReady: true }
+    ).then(() => {
+      sendCodexNotification("initialized");
+      setCodexConnectionState("connected");
+      codexLastSyncAt = new Date().toISOString();
+      console.log("[phodex] Connected to local Codex app-server.");
+      return syncAllThreadsFromCodex();
+    }).catch((error) => {
+      console.error(`[phodex] Failed to initialize Codex app-server: ${readErrorMessage(error)}`);
+      socket.close();
+    });
+  });
+
+  socket.addEventListener("message", (event) => {
+    handleCodexRpcMessage(typeof event.data === "string" ? event.data : event.data.toString());
+  });
+
+  socket.addEventListener("error", () => {
+    setCodexConnectionState("disconnected");
+    publishPresenceToAllUsers();
+  });
+
+  socket.addEventListener("close", () => {
+    if (codexSocket === socket) {
+      codexSocket = null;
+    }
+    setCodexConnectionState("disconnected");
+    publishPresenceToAllUsers();
+    scheduleCodexReconnect();
+  });
+}
+
+function handleCodexRpcMessage(raw: string) {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return;
+  }
+
+  if (parsed?.id != null) {
+    const requestId = String(parsed.id);
+    const waiter = codexRequestWaiters.get(requestId);
+    if (!waiter) {
+      return;
+    }
+
+    codexRequestWaiters.delete(requestId);
+    clearTimeout(waiter.timer);
+    if (parsed.error) {
+      const error = new Error(parsed.error.message || `Codex request failed: ${waiter.method}`);
+      (error as Error & { code?: unknown; data?: unknown }).code = parsed.error.code;
+      (error as Error & { code?: unknown; data?: unknown }).data = parsed.error.data;
+      waiter.reject(error);
+      return;
+    }
+
+    waiter.resolve(parsed.result ?? null);
+    return;
+  }
+
+  if (typeof parsed?.method !== "string") {
+    return;
+  }
+
+  handleCodexNotification(parsed.method, parsed.params ?? {});
+}
+
+function handleCodexNotification(method: string, params: any) {
+  switch (method) {
+    case "thread/started": {
+      const rawThread = params?.thread;
+      if (!rawThread) {
+        return;
+      }
+      const thread = mergeCodexThread(rawThread, false, false);
+      threadCache.set(thread.id, thread);
+      broadcastThreadToAllUsers(thread.id);
+      break;
+    }
+    case "thread/status/changed":
+      applyThreadStatusUpdate(readString(params?.threadId), readString(params?.status?.type));
+      break;
+    case "thread/name/updated":
+    case "thread/archived":
+    case "thread/unarchived":
+    case "thread/closed":
+      void syncAllThreadsFromCodex();
+      break;
+    case "turn/started":
+      handleTurnStarted(params);
+      break;
+    case "item/started":
+      handleItemStarted(params);
+      break;
+    case "item/agentMessage/delta":
+      handleAgentMessageDelta(params);
+      break;
+    case "item/completed":
+      handleItemCompleted(params);
+      break;
+    case "turn/diff/updated":
+      handleTurnDiffUpdated(params);
+      break;
+    case "turn/completed":
+      handleTurnCompleted(params);
+      break;
+    case "error":
+      console.error(`[phodex] Codex notification error: ${readString(params?.message) || "unknown error"}`);
+      break;
+  }
+
+  codexLastSyncAt = new Date().toISOString();
+  publishPresenceToAllUsers();
+}
+
+function handleTurnStarted(params: any) {
+  const threadId = readString(params?.threadId);
+  const turnId = readString(params?.turn?.id);
+  if (!threadId || !turnId) {
+    return;
+  }
+
+  const thread = ensureThreadRecord(threadId);
+  thread.state = "running";
+  thread.lastActivityAt = toIsoFromEpoch(params?.turn?.startedAt) ?? new Date().toISOString();
+  activeTurns.set(threadId, {
+    threadId,
+    turnId,
+    assistantMessageId: null,
+    startedAt: thread.lastActivityAt,
+  });
+  broadcastThreadToAllUsers(threadId);
+}
+
+function handleItemStarted(params: any) {
+  const threadId = readString(params?.threadId);
+  const item = params?.item;
+  if (!threadId || !item || typeof item !== "object") {
+    return;
+  }
+
+  const startedAt = activeTurns.get(threadId)?.startedAt ?? new Date().toISOString();
+  if (item.type === "userMessage") {
+    const message = mapLiveItemToMessage(item, startedAt);
+    if (!message) {
+      return;
+    }
+    appendMessage(threadId, message);
+    broadcastToAllUsers({ type: "message:appended", threadId, message });
+    broadcastThreadToAllUsers(threadId);
+    return;
+  }
+
+  if (item.type === "agentMessage") {
+    const message = mapLiveItemToMessage(item, startedAt);
+    if (!message) {
+      return;
+    }
+    message.isStreaming = true;
+    const activeTurn = activeTurns.get(threadId);
+    if (activeTurn) {
+      activeTurn.assistantMessageId = message.id;
+    }
+    appendMessage(threadId, message);
+    broadcastToAllUsers({ type: "message:appended", threadId, message });
+    broadcastThreadToAllUsers(threadId);
+  }
+}
+
+function handleAgentMessageDelta(params: any) {
+  const threadId = readString(params?.threadId);
+  const messageId = readString(params?.itemId);
+  const delta = typeof params?.delta === "string" ? params.delta : "";
+  if (!threadId || !messageId || !delta) {
+    return;
+  }
+
+  const thread = ensureThreadRecord(threadId);
+  let message = thread.messages.find((entry) => entry.id === messageId);
+  if (!message) {
+    message = {
+      id: messageId,
+      role: "assistant",
+      kind: "chat",
+      text: "",
+      createdAt: activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
+      isStreaming: true,
+    };
+    appendMessage(threadId, message);
+    broadcastToAllUsers({ type: "message:appended", threadId, message });
+  }
+
+  message.text += delta;
+  message.isStreaming = true;
+  thread.preview = message.text || thread.preview;
+  thread.lastActivityAt = new Date().toISOString();
+  broadcastToAllUsers({ type: "message:delta", threadId, messageId, delta });
+}
+
+function handleItemCompleted(params: any) {
+  const threadId = readString(params?.threadId);
+  const item = params?.item;
+  if (!threadId || !item || typeof item !== "object") {
+    return;
+  }
+
+  const thread = ensureThreadRecord(threadId);
+  const message = mapLiveItemToMessage(item, activeTurns.get(threadId)?.startedAt ?? new Date().toISOString());
+  if (!message) {
+    return;
+  }
+
+  appendMessage(threadId, message);
+  if (message.role === "assistant") {
+    const liveMessage = thread.messages.find((entry) => entry.id === message.id);
+    if (liveMessage) {
+      liveMessage.isStreaming = false;
+    }
+    broadcastToAllUsers({ type: "message:finished", threadId, messageId: message.id });
+  }
+  broadcastThreadToAllUsers(threadId);
+}
+
+function handleTurnDiffUpdated(params: any) {
+  const threadId = readString(params?.threadId);
+  if (!threadId) {
+    return;
+  }
+
+  const additions = readNumber(params?.diff?.additions) ?? 0;
+  const deletions = readNumber(params?.diff?.deletions) ?? 0;
+  const local = ensureThreadLocal(threadId);
+  local.diff = { additions, deletions };
+  const thread = threadCache.get(threadId);
+  if (thread) {
+    thread.diff = local.diff;
+    broadcastThreadToAllUsers(threadId);
+  }
+}
+
+function handleTurnCompleted(params: any) {
+  const threadId = readString(params?.threadId);
+  if (!threadId) {
+    return;
+  }
+
+  activeTurns.delete(threadId);
+  const thread = ensureThreadRecord(threadId);
+  const local = ensureThreadLocal(threadId);
+  thread.state = local.queuedDrafts.length > 0 ? "queued" : "idle";
+  thread.lastActivityAt = new Date().toISOString();
+
+  const banner: CompletionBanner = {
+    id: randomUUID(),
+    threadId,
+    title: thread.title,
+    subtitle: local.queuedDrafts.length > 0 ? "Run finished. One queued draft is ready." : "Run completed and synced.",
+  };
+  for (const user of Object.values(persisted.users)) {
+    user.banner = banner;
+  }
+  schedulePersist();
+  broadcastThreadToAllUsers(threadId);
+  broadcastBannersToAllUsers();
+  void syncThreadFromCodex(threadId, true);
+}
+
+async function syncAllThreadsFromCodex() {
+  if (!isCodexReady()) {
+    return;
+  }
+
+  if (threadSyncInFlight) {
+    return threadSyncInFlight;
+  }
+
+  threadSyncInFlight = (async () => {
+    const [liveThreads, archivedThreads] = await Promise.all([
+      listThreads(false),
+      listThreads(true),
+    ]);
+
+    const nextIds = new Set<string>();
+    const selectedThreadIds = new Set(
+      Object.values(persisted.users)
+        .map((user) => user.selectedThreadId)
+        .filter((threadId): threadId is string => Boolean(threadId))
+    );
+    for (const rawThread of liveThreads) {
+      const thread = mergeCodexThread(rawThread, false, false);
+      threadCache.set(thread.id, thread);
+      nextIds.add(thread.id);
+    }
+    for (const rawThread of archivedThreads) {
+      const thread = mergeCodexThread(rawThread, true, false);
+      threadCache.set(thread.id, thread);
+      nextIds.add(thread.id);
+    }
+
+    for (const threadId of [...threadCache.keys()]) {
+      // Keep a just-created empty thread alive until Codex list starts returning it.
+      if (!nextIds.has(threadId) && !activeTurns.has(threadId) && !selectedThreadIds.has(threadId)) {
+        threadCache.delete(threadId);
+      }
+    }
+    for (const threadId of Object.keys(persisted.threadLocal)) {
+      if (!threadCache.has(threadId) && !activeTurns.has(threadId)) {
+        delete persisted.threadLocal[threadId];
+      }
+    }
+
+    normalizeSelections();
+    codexLastSyncAt = new Date().toISOString();
+    schedulePersist();
+    broadcastSnapshotsToAllUsers();
+    publishPresenceToAllUsers();
+  })().finally(() => {
+    threadSyncInFlight = null;
+  });
+
+  return threadSyncInFlight;
+}
+
+async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
+  if (!isCodexReady()) {
+    return null;
+  }
+
+  const result = await codexRequest("thread/read", {
+    threadId,
+    includeTurns,
+  });
+  if (!result?.thread) {
+    return null;
+  }
+
+  const archived = threadCache.get(threadId)?.state === "archived";
+  const thread = mergeCodexThread(result.thread, archived, includeTurns);
+  threadCache.set(thread.id, thread);
+  codexLastSyncAt = new Date().toISOString();
+  broadcastThreadToAllUsers(thread.id);
+  publishPresenceToAllUsers();
+  return thread;
+}
+
+async function listThreads(archived: boolean) {
+  const items: any[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const response = await codexRequest("thread/list", {
+      archived,
+      cursor,
+      limit: 100,
+    }) as ThreadListResponse;
+    items.push(...(Array.isArray(response?.data) ? response.data : []));
+    cursor = response?.nextCursor ?? null;
+    if (!cursor) {
+      break;
+    }
+  }
+
+  return items;
+}
+
+function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boolean) {
+  const threadId = readString(rawThread?.id) || randomUUID();
+  const existing = threadCache.get(threadId);
+  const local = ensureThreadLocal(threadId);
+  const mappedMessages = includeTurns && Array.isArray(rawThread?.turns)
+    ? dedupeMessages([
+        ...mapTurnsToMessages(rawThread.turns),
+        ...(activeTurns.has(threadId) ? (existing?.messages.filter((message) => message.isStreaming) ?? []) : []),
+      ])
+    : existing?.messages ?? [];
+
+  return {
+    id: threadId,
+    title: deriveThreadTitle(rawThread),
+    preview: readString(rawThread?.preview) || existing?.preview || "Start a new remote coding pass.",
+    projectLabel: deriveProjectLabel(rawThread),
+    repoLabel: readString(rawThread?.cwd) || readString(rawThread?.path) || existing?.repoLabel || DEFAULT_THREAD_CWD,
+    branch: readString(rawThread?.gitInfo?.branch) || existing?.branch || "main",
+    state: deriveThreadState(readString(rawThread?.status?.type), threadId, archived),
+    lastActivityAt: toIsoFromEpoch(rawThread?.updatedAt) ?? toIsoFromEpoch(rawThread?.createdAt) ?? existing?.lastActivityAt ?? new Date().toISOString(),
+    unreadCount: 0,
+    subagentCount: 0,
+    isWorktree: isWorktreeThread(rawThread),
+    isForked: Boolean(rawThread?.forkedFromId),
+    diff: local.diff,
+    queuedDrafts: local.queuedDrafts,
+    messages: mappedMessages,
+  } satisfies ThreadRecord;
+}
+
+function mapTurnsToMessages(turns: any[]) {
+  const messages: ThreadMessage[] = [];
+  for (const turn of turns) {
+    const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
+    for (const item of Array.isArray(turn?.items) ? turn.items : []) {
+      const message = mapLiveItemToMessage(item, createdAt);
+      if (message) {
+        messages.push(message);
+      }
+    }
+  }
+  return messages;
+}
+
+function mapLiveItemToMessage(item: any, createdAt: string) {
+  const itemId = readString(item?.id) || randomUUID();
+  if (item?.type === "userMessage") {
+    return {
+      id: itemId,
+      role: "user",
+      kind: "chat",
+      text: readUserItemText(item),
+      createdAt,
+    } satisfies ThreadMessage;
+  }
+
+  if (item?.type === "agentMessage") {
+    return {
+      id: itemId,
+      role: "assistant",
+      kind: "chat",
+      text: readString(item?.text),
+      createdAt,
+      isStreaming: false,
+    } satisfies ThreadMessage;
+  }
+
+  return null;
+}
+
+function appendMessage(threadId: string, nextMessage: ThreadMessage) {
+  const thread = ensureThreadRecord(threadId);
+  const index = thread.messages.findIndex((message) => message.id === nextMessage.id);
+  if (index === -1) {
+    thread.messages.push(nextMessage);
+  } else {
+    thread.messages[index] = {
+      ...thread.messages[index],
+      ...nextMessage,
+    };
+  }
+  thread.preview = nextMessage.text || thread.preview;
+  thread.lastActivityAt = nextMessage.createdAt;
+  return thread;
+}
+
+function markThreadRunning(threadId: string, preview: string) {
+  const thread = ensureThreadRecord(threadId);
+  thread.state = "running";
+  thread.preview = preview;
+  thread.lastActivityAt = new Date().toISOString();
+}
+
+function applyThreadStatusUpdate(threadId: string, statusType: string) {
+  if (!threadId) {
+    return;
+  }
+
+  const thread = ensureThreadRecord(threadId);
+  thread.state = deriveThreadState(statusType, threadId, thread.state === "archived");
+  thread.lastActivityAt = new Date().toISOString();
+  if (thread.state !== "running") {
+    activeTurns.delete(threadId);
+  }
+  broadcastThreadToAllUsers(threadId);
+}
+
+function deriveThreadState(statusType: string, threadId: string, archived: boolean) {
+  if (archived) {
+    return "archived";
+  }
+  if (statusType === "active" || statusType === "inProgress") {
+    return "running";
+  }
+  return ensureThreadLocal(threadId).queuedDrafts.length > 0 ? "queued" : "idle";
+}
+
+function ensureThreadRecord(threadId: string) {
+  const existing = threadCache.get(threadId);
+  if (existing) {
+    return existing;
+  }
+
+  const local = ensureThreadLocal(threadId);
+  const thread: ThreadRecord = {
+    id: threadId,
+    title: "New Chat",
+    preview: "",
+    projectLabel: basename(DEFAULT_THREAD_CWD),
+    repoLabel: DEFAULT_THREAD_CWD,
+    branch: "main",
+    state: local.queuedDrafts.length > 0 ? "queued" : "idle",
+    lastActivityAt: new Date().toISOString(),
+    unreadCount: 0,
+    subagentCount: 0,
+    isWorktree: false,
+    isForked: false,
+    diff: local.diff,
+    queuedDrafts: local.queuedDrafts,
+    messages: [],
+  };
+  threadCache.set(threadId, thread);
+  return thread;
+}
+
+function snapshotForUser(userId: string): AppSnapshot {
+  const user = persisted.users[userId];
+  const threads = [...threadCache.values()]
+    .sort((left, right) => {
+      const leftArchived = left.state === "archived" ? 1 : 0;
+      const rightArchived = right.state === "archived" ? 1 : 0;
+      if (leftArchived !== rightArchived) {
+        return leftArchived - rightArchived;
+      }
+      return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
+    });
+
+  return {
+    user: user.profile,
+    selectedThreadId: user.selectedThreadId,
+    threads,
+    settings: user.settings,
+    connection: buildConnection(),
+    banner: user.banner,
+    devAuthBypassEnabled: DEV_AUTH_BYPASS,
+    staticBackdoorCode: DEV_AUTH_BYPASS ? STATIC_BACKDOOR_CODE : null,
+  };
+}
+
+function buildConnection(): RelayConnection {
+  return {
+    state: codexConnectionState,
+    relayLabel: RELAY_LABEL,
+    macLabel: MAC_LABEL,
+    latencyMs: codexConnectionState === "connected" ? randomInt(8, 22) : 0,
+    lastSyncAt: codexLastSyncAt,
+  };
+}
+
+function ensureUser(email: string): PersistedUser {
+  const userId = `user-${email.replace(/[^a-z0-9]+/gi, "-")}`;
+  if (!persisted.users[userId]) {
+    persisted.users[userId] = {
+      profile: {
+        id: userId,
+        email,
+        displayName: email.split("@")[0] || "Operator",
+      },
+      settings: {
+        fontStyle: "system",
+        glassMode: true,
+        notifications: true,
+        reducedMotion: false,
+        compactSidebar: false,
+      },
+      selectedThreadId: null,
+      banner: null,
+    };
+    normalizeSelections();
+    schedulePersist();
+  }
+
+  return persisted.users[userId];
+}
+
+function normalizeSelections() {
+  const firstLiveThreadId = findFirstLiveThreadId();
+  const firstAnyThreadId = [...threadCache.values()]
+    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+    .at(0)?.id ?? null;
+
+  for (const user of Object.values(persisted.users)) {
+    if (user.selectedThreadId === null) {
+      continue;
+    }
+    if (threadCache.has(user.selectedThreadId)) {
+      continue;
+    }
+    user.selectedThreadId = firstLiveThreadId ?? firstAnyThreadId;
+  }
+}
+
+function findFirstLiveThreadId(excludingThreadId?: string) {
+  return [...threadCache.values()]
+    .filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
+    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+    .at(0)?.id ?? null;
+}
+
+function ensureThreadLocal(threadId: string) {
+  if (!persisted.threadLocal[threadId]) {
+    persisted.threadLocal[threadId] = {
+      queuedDrafts: [],
+      diff: { additions: 0, deletions: 0 },
+    };
+  }
+  return persisted.threadLocal[threadId];
+}
+
+function deriveThreadTitle(rawThread: any) {
+  const explicitName = readString(rawThread?.name);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  const preview = readString(rawThread?.preview);
+  if (preview) {
+    return preview.slice(0, 64);
+  }
+
+  const cwd = readString(rawThread?.cwd);
+  if (cwd) {
+    return basename(cwd);
+  }
+
+  return "New Chat";
+}
+
+function deriveProjectLabel(rawThread: any) {
+  const cwd = readString(rawThread?.cwd);
+  if (!cwd) {
+    return "Codex";
+  }
+  return basename(cwd) || "Codex";
+}
+
+function isWorktreeThread(rawThread: any) {
+  const cwd = readString(rawThread?.cwd);
+  return cwd.includes("/worktrees/") || cwd.includes("/.codex/worktrees/");
+}
+
+function dedupeMessages(messages: ThreadMessage[]) {
+  const next = new Map<string, ThreadMessage>();
+  for (const message of messages) {
+    next.set(message.id, message);
+  }
+  return [...next.values()];
+}
+
+function readUserItemText(item: any) {
+  const content = Array.isArray(item?.content) ? item.content : [];
+  return content
+    .filter((entry) => entry?.type === "text" && typeof entry.text === "string")
+    .map((entry) => entry.text)
+    .join("\n\n")
+    .trim();
+}
+
+function normalizeModel(model: string) {
+  const normalized = model.trim().toLowerCase();
+  if (normalized === "gpt-5.4 mini") {
+    return "gpt-5.4-mini";
+  }
+  if (normalized === "gpt-5.4") {
+    return "gpt-5.4";
+  }
+  if (normalized === "o4-mini") {
+    return "o4-mini";
+  }
+  return normalized || "gpt-5.4";
+}
+
+function mapApprovalPolicy(accessMode: "read-only" | "on-request" | "full-access") {
+  if (accessMode === "on-request") {
+    return "on-request";
+  }
+  return "never";
+}
+
+function mapSandboxPolicy(accessMode: "read-only" | "on-request" | "full-access") {
+  if (accessMode === "read-only") {
+    return {
+      type: "readOnly",
+      access: {
+        type: "fullAccess",
+      },
+      networkAccess: false,
+    };
+  }
+
+  if (accessMode === "on-request") {
+    return {
+      type: "workspaceWrite",
+      networkAccess: false,
+      readOnlyAccess: {
+        type: "fullAccess",
+      },
+      writableRoots: [DEFAULT_THREAD_CWD],
+    };
+  }
+
+  return {
+    type: "dangerFullAccess",
+  };
+}
+
+function readThreadStatusType(state: ThreadRecord["state"]) {
+  return state === "running" ? "active" : "idle";
+}
+
+function buildOrigin(req: Request) {
+  const origin = req.headers.get("origin");
+  if (origin && DEV_ORIGINS.has(origin)) {
+    return origin;
+  }
+  return `https://localhost:${PORT}`;
+}
+
+function withCors(req: Request, response: Response) {
+  response.headers.set("access-control-allow-origin", buildOrigin(req));
+  response.headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
+  response.headers.set("access-control-allow-headers", "content-type,authorization");
+  response.headers.set("access-control-allow-credentials", "true");
+  return response;
+}
+
+function authenticate(req: Request) {
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const session = persisted.sessions[token];
+  if (!session || sessionExpired(session.expiresAt)) {
+    return null;
+  }
+  return session;
+}
+
+function registerSocket(ws: ServerWebSocket<SocketData>) {
+  const sockets = clientsByUserId.get(ws.data.userId) ?? new Set<ServerWebSocket<SocketData>>();
+  sockets.add(ws);
+  clientsByUserId.set(ws.data.userId, sockets);
+}
+
+function unregisterSocket(ws: ServerWebSocket<SocketData>) {
+  const sockets = clientsByUserId.get(ws.data.userId);
+  sockets?.delete(ws);
+  if (sockets && sockets.size === 0) {
+    clientsByUserId.delete(ws.data.userId);
+  }
+}
+
+function broadcastToAllUsers(event: ServerEvent) {
+  const payload = JSON.stringify(event);
+  for (const sockets of clientsByUserId.values()) {
+    for (const socket of sockets) {
+      socket.send(payload);
+    }
+  }
+}
+
+function broadcastSnapshotsToAllUsers() {
+  for (const userId of Object.keys(persisted.users)) {
+    broadcast(userId, { type: "snapshot", snapshot: snapshotForUser(userId) });
+  }
+}
+
+function broadcastBannersToAllUsers() {
+  for (const [userId, user] of Object.entries(persisted.users)) {
+    broadcast(userId, { type: "banner", banner: user.banner });
+  }
+}
+
+function broadcastThreadToAllUsers(threadId: string) {
+  const thread = threadCache.get(threadId);
+  if (!thread) {
+    return;
+  }
+
+  for (const [userId, user] of Object.entries(persisted.users)) {
+    broadcast(userId, {
+      type: "thread:updated",
+      thread,
+      selectedThreadId: user.selectedThreadId,
+    });
+  }
+}
+
+function clearAllBanners() {
+  for (const user of Object.values(persisted.users)) {
+    user.banner = null;
+  }
+  broadcastBannersToAllUsers();
+}
+
+function publishPresenceToAllUsers() {
+  const connection = buildConnection();
+  for (const userId of Object.keys(persisted.users)) {
+    broadcast(userId, { type: "presence", connection });
+  }
+}
+
+function sendToast(userId: string, tone: "info" | "success" | "error", message: string) {
+  broadcast(userId, { type: "toast", tone, message });
+}
+
+function broadcast(userId: string, event: ServerEvent) {
+  const payload = JSON.stringify(event);
+  for (const socket of clientsByUserId.get(userId) ?? []) {
+    socket.send(payload);
+  }
+}
+
+function sendEvent(ws: ServerWebSocket<SocketData>, event: ServerEvent) {
+  ws.send(JSON.stringify(event));
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+}
+
+function serveStatic(pathname: string) {
+  const safePath = pathname === "/" ? "/index.html" : pathname;
+  const filePath = resolve(distDir, `.${safePath}`);
+  if (filePath.startsWith(distDir) && existsSync(filePath)) {
+    return new Response(Bun.file(filePath));
+  }
+
+  const indexPath = resolve(distDir, "index.html");
+  if (existsSync(indexPath)) {
+    return new Response(Bun.file(indexPath), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+
+  return new Response(
+    "Web bundle not found. Run `bun run build:web` from the project root, then restart the Bun server.",
+    { status: 503 }
+  );
+}
+
+function normalizeEmail(value: unknown) {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function deliverCode(_email: string, _code: string): DeliveryMode {
+  return "local-mailbox";
+}
+
+function safeJson(req: Request) {
+  return req.json().catch(() => ({}));
+}
+
+function otpExpired(expiresAt: string) {
+  return Date.parse(expiresAt) <= Date.now();
+}
+
+function sessionExpired(expiresAt: string) {
+  return Date.parse(expiresAt) <= Date.now();
+}
+
+function schedulePersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+
+  persistTimer = setTimeout(() => {
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(dataFile, JSON.stringify(persisted, null, 2));
+    persistTimer = null;
+  }, 120);
+}
+
+function loadState(): PersistedState {
+  try {
+    if (!existsSync(dataFile)) {
+      return {
+        users: {},
+        sessions: {},
+        otpCodes: {},
+        threadLocal: {},
+      };
+    }
+
+    const parsed = JSON.parse(readFileSync(dataFile, "utf8")) as Partial<PersistedState>;
+    return {
+      users: parsed.users ?? {},
+      sessions: parsed.sessions ?? {},
+      otpCodes: parsed.otpCodes ?? {},
+      threadLocal: parsed.threadLocal ?? {},
+    };
+  } catch {
+    return {
+      users: {},
+      sessions: {},
+      otpCodes: {},
+      threadLocal: {},
+    };
+  }
+}
+
+function ensureLocalTls() {
+  mkdirSync(certDir, { recursive: true });
+  const keyPath = resolve(certDir, "localhost-key.pem");
+  const certPath = resolve(certDir, "localhost-cert.pem");
+
+  if (!existsSync(keyPath) || !existsSync(certPath)) {
+    const result = spawnSync("openssl", [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-sha256",
+      "-nodes",
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath,
+      "-days",
+      "3650",
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost,IP:127.0.0.1",
+    ]);
+
+    if (result.status !== 0) {
+      throw new Error(`Failed to generate local TLS certificate: ${result.stderr?.toString() || "openssl failed"}`);
+    }
+  }
+
+  return {
+    key: readFileSync(keyPath),
+    cert: readFileSync(certPath),
+  };
+}
+
+function resolveCodexBinary() {
+  if (process.env.PHODEX_CODEX_BIN) {
+    return process.env.PHODEX_CODEX_BIN;
+  }
+
+  const home = process.env.HOME ?? "";
+  const candidates = [
+    "/Applications/Codex.app/Contents/Resources/codex",
+    resolve(home, ".bun/install/global/node_modules/@openai/codex/bin/codex.js"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? "";
+}
+
+async function probeCodexReady() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1_500);
+    const response = await fetch(CODEX_READY_URL, { signal: controller.signal });
+    clearTimeout(timer);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForCodexReady(timeoutMs: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await probeCodexReady()) {
+      return true;
+    }
+    await Bun.sleep(250);
+  }
+  return false;
+}
+
+function startManagedCodexProcess() {
+  if (codexProcess || !CODEX_BIN) {
+    return;
+  }
+
+  const args = CODEX_BIN.endsWith(".js")
+    ? [CODEX_BIN, "app-server", "--listen", CODEX_WS_URL]
+    : ["app-server", "--listen", CODEX_WS_URL];
+  const command = CODEX_BIN.endsWith(".js") ? "node" : CODEX_BIN;
+
+  codexProcess = spawn(command, args, {
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  codexProcess.stdout.on("data", (chunk) => {
+    const output = chunk.toString("utf8").trim();
+    if (output) {
+      console.log(`[codex] ${output}`);
+    }
+  });
+
+  codexProcess.stderr.on("data", (chunk) => {
+    const output = chunk.toString("utf8").trim();
+    if (output) {
+      console.error(`[codex] ${output}`);
+    }
+  });
+
+  codexProcess.on("exit", (code, signal) => {
+    console.warn(`[phodex] Codex app-server exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+    codexProcess = null;
+    scheduleCodexReconnect();
+  });
+
+  codexProcess.on("error", (error) => {
+    console.error(`[phodex] Failed to spawn Codex app-server: ${error.message}`);
+    codexProcess = null;
+    scheduleCodexReconnect();
+  });
+}
+
+function shutdownCodexBridge() {
+  clearCodexReconnectTimer();
+  if (codexSocket && (codexSocket.readyState === WebSocket.OPEN || codexSocket.readyState === WebSocket.CONNECTING)) {
+    codexSocket.close();
+  }
+  codexSocket = null;
+  if (codexProcess && !codexProcess.killed) {
+    codexProcess.kill("SIGTERM");
+  }
+}
+
+function scheduleCodexReconnect() {
+  if (codexReconnectTimer) {
+    return;
+  }
+
+  codexReconnectTimer = setTimeout(() => {
+    codexReconnectTimer = null;
+    void ensureCodexBridge();
+  }, 1_500);
+}
+
+function clearCodexReconnectTimer() {
+  if (!codexReconnectTimer) {
+    return;
+  }
+  clearTimeout(codexReconnectTimer);
+  codexReconnectTimer = null;
+}
+
+function setCodexConnectionState(nextState: RelayConnection["state"]) {
+  codexConnectionState = nextState;
+}
+
+function isCodexReady() {
+  return codexConnectionState === "connected" && codexSocket?.readyState === WebSocket.OPEN;
+}
+
+function ensureCodexReady() {
+  if (!isCodexReady()) {
+    throw new Error("Local Codex CLI service is not connected yet.");
+  }
+}
+
+function codexRequest(method: string, params: unknown, options: { allowBeforeReady?: boolean } = {}) {
+  if (!options.allowBeforeReady) {
+    ensureCodexReady();
+  } else if (!codexSocket || codexSocket.readyState !== WebSocket.OPEN) {
+    throw new Error("Codex app-server websocket is not open.");
+  }
+
+  const requestId = `phodex-${++codexRequestSeq}`;
+  const payload = JSON.stringify({
+    jsonrpc: "2.0",
+    id: requestId,
+    method,
+    params,
+  });
+
+  return new Promise<any>((resolvePromise, rejectPromise) => {
+    const timer = setTimeout(() => {
+      codexRequestWaiters.delete(requestId);
+      rejectPromise(new Error(`Codex request timed out: ${method}`));
+    }, 20_000);
+
+    codexRequestWaiters.set(requestId, {
+      method,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+      timer,
+    });
+
+    codexSocket!.send(payload);
+  });
+}
+
+function sendCodexNotification(method: string, params?: unknown) {
+  if (!codexSocket || codexSocket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  codexSocket.send(JSON.stringify({
+    jsonrpc: "2.0",
+    method,
+    ...(params == null ? {} : { params }),
+  }));
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toIsoFromEpoch(value: unknown) {
+  const seconds = readNumber(value);
+  if (seconds == null) {
+    return null;
+  }
+  return new Date(seconds * 1_000).toISOString();
+}
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Request failed";
+}
