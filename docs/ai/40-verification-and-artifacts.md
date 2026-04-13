@@ -34,6 +34,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Commit Discipline
 
 - Commit each independent code change intentionally.
+- Write commit messages primarily in Chinese. Keep commands, paths, code symbols, and proper nouns in English when that is clearer.
 - If you update architecture, commands, or page truth, update the relevant AI docs in the same commit.
 
 ## When To Go Deeper

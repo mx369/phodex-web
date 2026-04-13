@@ -28,6 +28,7 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 - If a task changes architecture, commands, ownership, or acceptance flow, update the relevant AI docs in the same change.
 - Do not bypass existing security or deployment boundaries unless the user explicitly asks.
 - Every code change must be committed as its own intentional commit.
+- Commit messages should be primarily in Chinese. Keep commands, paths, code symbols, and proper nouns in English when that is clearer.
 
 ## Collaboration And Execution
 

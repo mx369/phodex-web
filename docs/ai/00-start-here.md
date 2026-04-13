@@ -36,4 +36,5 @@ Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/p
 - Do not reintroduce fake phone hardware chrome.
 - Prefer the smallest sufficient context load.
 - Every code change must be committed intentionally.
+- Commit messages should be primarily in Chinese. Keep commands, paths, code symbols, and proper nouns in English when that is clearer.
 - Verify real flows when changing UI or state machines.
