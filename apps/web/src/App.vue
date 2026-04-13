@@ -159,6 +159,17 @@ const subscriptionGateFeatures = [
   },
 ] as const;
 
+const paywallFeatures = [
+  "Fast mode",
+  "Git from your phone",
+  "End-to-end encrypted",
+  "Voice mode with speech-to-text",
+  "Subagents",
+  "$skills, /commands & @file mentions",
+  "Hosted relay included",
+  "Support development",
+] as const;
+
 const architectureSteps = [
   ["Remodex iOS", "WebSocket", "Bridge (Mac)"],
   ["Bridge (Mac)", "JSON-RPC", "codex app-server"],
@@ -1702,32 +1713,46 @@ function readShellPageState(): ShellPageState | null {
 
                     <template v-else-if="activePanel === 'paywall'">
                       <section class="paywall-card">
-                        <span class="section-label">Remodex Pro</span>
-                        <h2 class="settings-hero-title">Unlock Remodex Pro</h2>
-                        <p class="settings-copy">
-                          Everything runs on your Mac. Your phone is the remote.
-                        </p>
-                        <div class="gate-plan-scroll">
-                          <article
+                        <div class="paywall-header">
+                          <img :src="remodexAppLogo" alt="" class="paywall-header__logo" />
+                          <span class="section-label">Remodex Pro</span>
+                          <h2 class="settings-hero-title">Unlock Remodex Pro</h2>
+                          <p class="settings-copy">Everything runs on your Mac. Your phone is the remote.</p>
+                        </div>
+
+                        <div class="paywall-feature-list">
+                          <div v-for="feature in paywallFeatures" :key="feature" class="paywall-feature-row">
+                            <span class="paywall-feature-row__dot"></span>
+                            <span>{{ feature }}</span>
+                          </div>
+                        </div>
+
+                        <div class="paywall-plan-list">
+                          <button
                             v-for="plan in gatePlans"
                             :key="`paywall-${plan.id}`"
-                            class="gate-plan-card"
-                            :class="{ 'gate-plan-card--active': selectedPlanId === plan.id }"
+                            class="paywall-plan-row"
+                            :class="{ 'paywall-plan-row--active': selectedPlanId === plan.id }"
                             @click="selectedPlanId = plan.id"
                           >
-                            <div class="gate-plan-card__head">
+                            <div>
                               <strong>{{ plan.title }}</strong>
-                              <span>{{ plan.badge }}</span>
+                              <p>{{ plan.subtitle }}</p>
                             </div>
-                            <div class="gate-plan-card__price">{{ plan.price }}</div>
-                            <p>{{ plan.subtitle }}</p>
-                          </article>
+                            <span>{{ plan.price }}</span>
+                          </button>
                         </div>
+
                         <button class="primary-cta">Unlock Remodex Pro</button>
-                        <button class="ghost-cta">Restore Purchase</button>
-                        <div class="root-auth-screen__links">
-                          <button class="root-auth-screen__link">Privacy</button>
-                          <button class="root-auth-screen__link">Terms</button>
+
+                        <div class="paywall-footer">
+                          <p class="settings-copy">Recurring Billing. Cancel anytime.</p>
+                          <div class="paywall-footer__links">
+                            <button class="root-auth-screen__link">Restore Purchase</button>
+                            <button class="root-auth-screen__link">Manage</button>
+                            <button class="root-auth-screen__link">Privacy</button>
+                            <button class="root-auth-screen__link">Terms</button>
+                          </div>
                         </div>
                       </section>
                     </template>

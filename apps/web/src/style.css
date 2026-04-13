@@ -2170,30 +2170,6 @@ button {
     linear-gradient(180deg, rgba(255, 251, 247, 0.98), rgba(255, 244, 236, 0.94));
 }
 
-.app-sheet--paywall .gate-plan-card {
-  border-color: rgba(18, 18, 18, 0.08);
-  background: rgba(18, 18, 18, 0.04);
-  color: var(--text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
-}
-
-.app-sheet--paywall .gate-plan-card--active {
-  border-color: rgba(92, 109, 255, 0.16);
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.35), transparent 26%),
-    linear-gradient(180deg, rgba(92, 109, 255, 0.18), rgba(255, 255, 255, 0.7));
-  box-shadow: 0 16px 32px rgba(92, 109, 255, 0.14);
-}
-
-.app-sheet--paywall .gate-plan-card p {
-  color: var(--muted-strong);
-}
-
-.app-sheet--paywall .gate-plan-card__head span {
-  background: rgba(18, 18, 18, 0.06);
-  color: var(--muted-strong);
-}
-
 .app-sheet--paywall .root-auth-screen__link {
   border-color: rgba(18, 18, 18, 0.06);
   background: rgba(18, 18, 18, 0.04);
@@ -2221,6 +2197,91 @@ button {
   color: var(--muted-strong);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.paywall-header {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.paywall-header__logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+}
+
+.paywall-feature-list,
+.paywall-plan-list {
+  display: grid;
+  gap: 10px;
+}
+
+.paywall-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.paywall-feature-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text);
+}
+
+.paywall-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 15px 16px;
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.04);
+  color: var(--text);
+  text-align: left;
+}
+
+.paywall-plan-row--active {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 30%),
+    linear-gradient(180deg, rgba(92, 109, 255, 0.14), rgba(255, 255, 255, 0.75));
+  box-shadow: 0 14px 30px rgba(92, 109, 255, 0.12);
+}
+
+.paywall-plan-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.paywall-plan-row strong {
+  font-size: 15px;
+}
+
+.paywall-plan-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.paywall-plan-row > span {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.paywall-footer {
+  display: grid;
+  gap: 10px;
+}
+
+.paywall-footer__links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .about-diagram {
