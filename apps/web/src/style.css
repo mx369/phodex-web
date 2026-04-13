@@ -55,27 +55,14 @@ button {
   cursor: pointer;
 }
 
-.device-page {
+.app-page {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
   background: linear-gradient(180deg, #faf9f5 0%, #f0ede7 100%);
 }
 
-.device-page__reference {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(1220px, 92vw);
-  opacity: 0.2;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  filter: saturate(0.95) blur(0.4px);
-}
-
-.device-stage {
+.app-stage {
   position: relative;
-  z-index: 1;
   display: grid;
   width: 100%;
   min-height: 100vh;
@@ -85,68 +72,17 @@ button {
   overflow-x: hidden;
 }
 
-.device-shell {
-  width: min(100%, 430px);
-  height: min(900px, calc(100dvh - 32px));
-  padding: 10px;
-  border-radius: 46px;
-  background: linear-gradient(180deg, #1a1a1a 0%, #060606 100%);
-  box-shadow: var(--shadow-phone);
-  justify-self: center;
-}
-
-.device-shell__frame {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 36px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 244, 239, 1) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-}
-
-.dynamic-island {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  z-index: 10;
-  width: 122px;
-  height: 30px;
-  border-radius: 999px;
-  background: #060606;
-  transform: translateX(-50%);
-}
-
-.device-screen {
+.app-surface {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  height: 100%;
-  padding-top: 16px;
-  background: linear-gradient(180deg, #fffeff 0%, #f8f6f1 100%);
-}
-
-.ios-statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 34px;
-  padding: 0 22px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.ios-statusbar__icons {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ios-statusbar__battery {
-  font-size: 14px;
-  line-height: 1;
+  width: min(100%, 430px);
+  min-height: min(900px, calc(100dvh - 32px));
+  overflow: hidden;
+  border-radius: 34px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 244, 239, 1) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  box-shadow: var(--shadow-soft);
 }
 
 .section-label {
@@ -2671,36 +2607,22 @@ button {
 }
 
 @media (min-width: 860px) {
-  .device-stage {
+  .app-stage {
     padding: 26px;
   }
 }
 
 @media (max-width: 540px) {
-  .device-page__reference {
-    display: none;
-  }
-
-  .device-stage {
+  .app-stage {
     padding: 0;
   }
 
-  .device-shell {
+  .app-surface {
     width: 100%;
-    height: 100dvh;
-    padding: 0;
+    min-height: 100dvh;
     border-radius: 0;
-    background: #050505;
     box-shadow: none;
-  }
-
-  .device-shell__frame,
-  .device-screen {
-    border-radius: 0;
-  }
-
-  .dynamic-island {
-    top: 10px;
+    border: 0;
   }
 
   .root-auth-screen__card,

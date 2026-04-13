@@ -4,7 +4,6 @@ import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type { ThreadRecord } from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
 import remodexAppLogo from "./assets/remodex-app-logo.png";
-import remodexReference from "./assets/remodex-reference.png";
 import { createAppClient, state } from "./lib/client";
 
 const client = createAppClient();
@@ -45,11 +44,6 @@ const activePanel = computed(() => shellPageStack.value.at(-1) ?? null);
 const panelCanGoBack = computed(() => shellPageStack.value.length > 1);
 const dialogState = ref<AppDialogState | null>(null);
 const dialogInput = ref("");
-const deviceClock = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-}).format(new Date());
 
 const onboardingScreens = [
   {
@@ -835,29 +829,15 @@ function readShellPageState(): ShellPageState | null {
 </script>
 
 <template>
-  <div class="device-page">
-    <img class="device-page__reference" :src="remodexReference" alt="" />
-
-    <div class="device-stage">
-      <div class="device-shell" :class="{ 'device-shell--authenticated': isAuthenticated }">
-        <div class="device-shell__frame">
-          <div class="dynamic-island"></div>
-
-          <div class="device-screen">
-            <div class="ios-statusbar">
-              <span>{{ deviceClock }}</span>
-              <div class="ios-statusbar__icons">
-                <span>5G</span>
-                <span class="ios-statusbar__battery">▰</span>
-              </div>
-            </div>
-
-            <div v-if="state.ui.loadingSession" class="phone-splash">
+  <div class="app-page">
+    <div class="app-stage">
+      <div class="app-surface">
+        <div v-if="state.ui.loadingSession" class="phone-splash">
               <img :src="remodexAppLogo" alt="" class="phone-splash__logo" />
               <p>Hydrating relay session…</p>
-            </div>
+        </div>
 
-            <template v-else-if="!isAuthenticated">
+        <template v-else-if="!isAuthenticated">
               <section
                 v-if="rootFlow === 'onboarding'"
                 class="onboarding-flow"
@@ -1834,9 +1814,7 @@ function readShellPageState(): ShellPageState | null {
                   {{ toast.message }}
                 </div>
               </div>
-            </template>
-          </div>
-        </div>
+        </template>
       </div>
     </div>
   </div>
