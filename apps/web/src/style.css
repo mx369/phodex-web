@@ -1397,11 +1397,13 @@ button {
 
 .home-empty-state {
   display: grid;
-  gap: 16px;
+  gap: 20px;
   place-content: center;
   min-height: 100%;
+  width: min(100%, 280px);
+  margin: 0 auto;
   justify-items: center;
-  padding: 24px 16px 52px;
+  padding: 24px 0 52px;
   text-align: center;
 }
 
@@ -1448,13 +1450,13 @@ button {
 
 .home-empty-state__trusted-card {
   display: grid;
-  gap: 10px;
-  width: min(100%, 290px);
-  padding: 15px 16px;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
   border: 1px solid rgba(18, 18, 18, 0.06);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 34px rgba(18, 18, 18, 0.05);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.035);
+  box-shadow: none;
 }
 
 .home-empty-state__trusted-row {
@@ -1481,21 +1483,29 @@ button {
 }
 
 .home-empty-state__trusted strong {
-  font-size: 18px;
-  letter-spacing: -0.03em;
+  font-size: 15px;
+  letter-spacing: -0.02em;
 }
 
 .home-empty-state__trusted p,
 .home-empty-state__copy {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.55;
-  max-width: 276px;
+  max-width: 100%;
 }
 
 .home-empty-state__primary {
-  min-width: 164px;
+  width: 100%;
+}
+
+.home-empty-state__secondary {
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .phone-composer-dock {

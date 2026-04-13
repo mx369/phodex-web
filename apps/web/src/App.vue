@@ -1390,8 +1390,10 @@ function readShellPageState(): ShellPageState | null {
                         <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>
                         <strong>{{ homeStatusLabel }}</strong>
                       </div>
-                      <div class="home-empty-state__trusted-card">
-                        <span class="section-label">Trusted Mac</span>
+                      <div v-if="state.snapshot?.connection.macLabel" class="home-empty-state__trusted-card">
+                        <span class="section-label">
+                          {{ state.snapshot.connection.state === "connected" ? "Connected To Mac" : "Trusted Mac" }}
+                        </span>
                         <div class="home-empty-state__trusted-row">
                           <span class="home-empty-state__trusted-icon">⌂</span>
                           <div class="home-empty-state__trusted">
@@ -1408,7 +1410,7 @@ function readShellPageState(): ShellPageState | null {
                       >
                         {{ homePrimaryLabel }}
                       </button>
-                      <button class="ghost-cta ghost-cta--compact" @click="handleHomeSecondaryAction">{{ homeSecondaryLabel }}</button>
+                      <button class="home-empty-state__secondary" @click="handleHomeSecondaryAction">{{ homeSecondaryLabel }}</button>
                     </div>
                   </div>
                 </section>
