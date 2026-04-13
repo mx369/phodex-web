@@ -23,6 +23,7 @@ All screenshots in this file were captured from real browser renders through the
 | --- | --- | --- |
 | Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
 | Turn Empty | Same authenticated session, opened a clean chat after trimming the composer to backed controls only | `.artifacts/qa-61-turn-empty-real-controls.png` |
+| Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
 | Settings | Authenticated session reloaded at `/?page=settings` after trimming runtime defaults to backed fields only | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
@@ -36,4 +37,5 @@ All screenshots in this file were captured from real browser renders through the
 - Sidebar and archived evidence now reflect the restore-only delete policy: no destructive delete affordance is shown.
 - Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
+- Turn-view evidence now reflects the summary toolbar plus real Codex execution cards instead of chat-only message rows.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

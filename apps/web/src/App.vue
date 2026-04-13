@@ -362,6 +362,14 @@ const homeStatusCopy = computed(() => {
       return "Reconnect to recover threads, queued drafts, and remote controls.";
   }
 });
+const currentThreadRepoName = computed(() => {
+  const repoLabel = currentThread.value?.repoLabel ?? "";
+  if (!repoLabel) {
+    return "";
+  }
+  const segments = repoLabel.split("/").filter(Boolean);
+  return segments.at(-1) ?? repoLabel;
+});
 const planAccessory = computed(() => {
   if (!currentThread.value) {
     return null;
@@ -484,6 +492,46 @@ function formatRelativeTime(value: string) {
   }
   const days = Math.round(hours / 24);
   return `${days}d`;
+}
+
+function formatMessageRole(role: string) {
+  if (role === "user") {
+    return "You";
+  }
+  if (role === "assistant") {
+    return "Codex";
+  }
+  return "System";
+}
+
+function formatMessageKind(kind: string) {
+  return kind === "status" ? "activity" : kind;
+}
+
+function formatThreadState(stateValue: ThreadRecord["state"]) {
+  switch (stateValue) {
+    case "running":
+      return "Running";
+    case "queued":
+      return "Queued";
+    case "archived":
+      return "Archived";
+    default:
+      return "Ready";
+  }
+}
+
+function threadStateTone(stateValue: ThreadRecord["state"]) {
+  switch (stateValue) {
+    case "running":
+      return "amber";
+    case "queued":
+      return "blue";
+    case "archived":
+      return "slate";
+    default:
+      return "green";
+  }
 }
 
 function splitParagraphs(text: string) {
@@ -1412,6 +1460,26 @@ function readShellPageState(): ShellPageState | null {
                     </div>
                   </transition>
 
+                  <section v-if="currentThread" class="turn-toolbar">
+                    <div class="turn-toolbar__inner">
+                      <div class="turn-toolbar__strip">
+                        <span class="turn-chip" :class="`turn-chip--${threadStateTone(currentThread.state)}`">
+                          {{ formatThreadState(currentThread.state) }}
+                        </span>
+                        <span class="turn-chip">+{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}</span>
+                        <span class="turn-chip">{{ currentThread.branch }}</span>
+                        <span class="turn-chip turn-chip--muted">{{ currentThreadRepoName || currentThread.projectLabel }}</span>
+                      </div>
+                      <div class="turn-toolbar__actions">
+                        <button class="turn-toolbar__action" @click="startLocalChat">New Chat</button>
+                        <button class="turn-toolbar__action" @click="startWorktreeChat">Worktree</button>
+                        <button class="turn-toolbar__action turn-toolbar__action--muted" @click="openSidebar">
+                          {{ state.snapshot?.connection.macLabel }}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
                   <section class="phone-conversation">
                     <div class="phone-conversation__inner">
                       <template v-if="currentThread && currentThread.messages.length">
@@ -1422,13 +1490,46 @@ function readShellPageState(): ShellPageState | null {
                           :class="`phone-message--${message.role}`"
                         >
                           <div class="phone-message__meta">
-                            <span>{{ message.role }}</span>
+                            <span>{{ formatMessageRole(message.role) }}</span>
                             <span>{{ formatRelativeTime(message.createdAt) }}</span>
-                            <span>{{ message.kind }}</span>
+                            <span>{{ formatMessageKind(message.kind) }}</span>
                           </div>
 
                           <div class="phone-message__card">
                             <p v-if="message.emphasis" class="message-emphasis">{{ message.emphasis }}</p>
+
+                            <div v-if="message.cards?.length" class="message-card-stack">
+                              <article
+                                v-for="(card, index) in message.cards"
+                                :key="`${message.id}-card-${index}`"
+                                class="message-card"
+                                :class="[`message-card--${card.type}`, `message-card--${card.tone}`]"
+                              >
+                                <div class="message-card__head">
+                                  <div>
+                                    <span class="section-label">{{ card.title }}</span>
+                                    <strong v-if="card.type === 'command' && card.command">{{ card.command }}</strong>
+                                    <strong v-else-if="card.type === 'tool'">{{ card.toolLabel }}</strong>
+                                    <strong v-else-if="card.type === 'image'">{{ card.detail ?? card.title }}</strong>
+                                  </div>
+                                  <span v-if="'statusLabel' in card" class="message-card__status">{{ card.statusLabel }}</span>
+                                </div>
+
+                                <p v-if="'detail' in card && card.type !== 'image' && card.type !== 'status' && card.detail" class="message-card__detail">
+                                  {{ card.detail }}
+                                </p>
+                                <p v-else-if="card.type === 'status' && card.detail" class="message-card__detail">
+                                  {{ card.detail }}
+                                </p>
+
+                                <div v-if="card.type === 'image'" class="message-card__image-path">
+                                  <span>{{ card.meta ?? card.path }}</span>
+                                </div>
+
+                                <p v-if="'meta' in card && card.meta" class="message-card__meta-line">{{ card.meta }}</p>
+                                <pre v-if="'output' in card && card.output" class="message-card__output"><code>{{ card.output }}</code></pre>
+                              </article>
+                            </div>
 
                             <div v-if="message.runEvents?.length" class="run-event-stack">
                               <div

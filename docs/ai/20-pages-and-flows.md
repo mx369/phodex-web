@@ -12,8 +12,8 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
-| Turn empty | Partial | Real selected thread and composer; the composer now only shows backed controls | Not source-equal visually |
-| Turn with messages | Partial | Real streamed chat bridge | Richer upstream message/tool surfaces still missing |
+| Turn empty | Partial | Real selected thread and composer; the composer now only shows backed controls | Composer work-state band, pinned plan, and queue surfaces are still missing |
+| Turn with messages | Partial | Real streamed chat bridge plus real command/file/tool/system activity cards from Codex item shapes | Composer work-state band, pinned plan, and secondary toolbar/sheet affordances still differ from source |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
 | Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
@@ -31,6 +31,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Stop run | Real | Sends turn interrupt to local Codex |
 | Queue while running | Real | Draft is stored locally and shown in queued list |
 | Resume queued draft | Real | Replays queued text as a new turn |
+| Rich execution activity surfaces | Real | Turn timeline now shows structured command, file-change, tool, image, and subagent cards when the Codex app-server emits those item types |
 | Rename thread | Real | Uses Codex thread name update |
 | Archive thread | Real | Uses Codex archive/unarchive |
 | Delete thread | Unavailable | UI intentionally omits permanent delete because the backend cannot support it |

@@ -25,13 +25,13 @@ Implemented but incomplete:
 
 - Onboarding, bootstrap failure, subscription gate, and paywall pages.
 - Home empty, sidebar, settings, archived, and about pages now render as full-page mobile surfaces, but remain approximate.
-- Model selector, access mode toggle, fast/plan UI toggles, pinned plan surface, and autocomplete UI.
+- Turn composer work-state layers such as pinned plan, queued-draft accessory surfaces, and autocomplete UI.
 
 Not yet source-equal or still shell-level:
 
 - Pixel parity across screens.
 - Real subscription purchase or restore flows; current paywall/gate surfaces are preview-only.
-- Many upstream interaction details such as swipe actions, context menus, richer approval flows, and deeper tool/file surfaces.
+- Many upstream interaction details such as swipe actions, context menus, richer approval flows, and composer/toolbar secondary surfaces.
 
 Explicitly excluded by current product direction:
 
@@ -40,7 +40,8 @@ Explicitly excluded by current product direction:
 
 ## Current Architectural Debt
 
-- Thread rendering still maps only the simpler Codex message shapes and misses richer execution surfaces where available.
+- Thread rendering now covers richer Codex execution items, but the resulting card system is still an approximation of source `TurnView`.
+- Composer-adjacent work-state surfaces are still missing, so queue/plan state remains less visible than upstream.
 
 ## Acceptance Bar
 

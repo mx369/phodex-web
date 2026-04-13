@@ -42,6 +42,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Bootstrap and websocket open send a full snapshot.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
+- Historical thread reads and live item notifications now map richer Codex execution items into structured thread cards.
 - Completion banners are synthesized after run completion.
 
 ## Codex App-Server Methods In Use
@@ -73,8 +74,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 ## Known Interface Limits
 
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
-- The current message mapper only turns `userMessage` and `agentMessage` into thread messages.
-- Richer upstream message types are not fully surfaced yet.
+- The current message mapper now covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the resulting UI is still a simplified card system.
+- Composer work-state surfaces such as pinned plans and queue accessories are still client-only gaps; the richer message mapper does not solve those source-parity issues.
 - `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.
 
 ## Invariants

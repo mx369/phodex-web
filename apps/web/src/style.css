@@ -1019,6 +1019,68 @@ button {
   line-height: 1.5;
 }
 
+.turn-toolbar {
+  padding: 0 18px 6px;
+}
+
+.turn-toolbar__inner {
+  width: min(100%, 428px);
+  margin: 0 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.turn-toolbar__strip,
+.turn-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.turn-chip,
+.turn-toolbar__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 8px 24px rgba(18, 18, 18, 0.04);
+}
+
+.turn-chip--amber {
+  border-color: rgba(239, 142, 85, 0.18);
+  background: rgba(255, 248, 243, 0.92);
+  color: #bc6835;
+}
+
+.turn-chip--blue {
+  border-color: rgba(92, 109, 255, 0.14);
+  background: rgba(242, 245, 255, 0.92);
+  color: #4555c9;
+}
+
+.turn-chip--green {
+  border-color: rgba(38, 162, 105, 0.16);
+  background: rgba(239, 250, 245, 0.92);
+  color: #21714c;
+}
+
+.turn-chip--slate,
+.turn-chip--muted,
+.turn-toolbar__action--muted {
+  color: var(--muted-strong);
+}
+
+.turn-toolbar__action {
+  background: rgba(249, 247, 242, 0.92);
+}
+
 .phone-conversation {
   flex: 1;
   overflow: auto;
@@ -1039,6 +1101,10 @@ button {
   justify-items: end;
   margin-left: auto;
   max-width: 86%;
+}
+
+.phone-message--system {
+  max-width: 100%;
 }
 
 .phone-message__meta {
@@ -1082,6 +1148,118 @@ button {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.message-card-stack {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.message-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 15px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 34px rgba(18, 18, 18, 0.06);
+}
+
+.message-card--amber {
+  background: linear-gradient(180deg, rgba(255, 248, 243, 0.96), rgba(255, 242, 235, 0.94));
+  border-color: rgba(239, 142, 85, 0.14);
+}
+
+.message-card--blue {
+  background: linear-gradient(180deg, rgba(242, 245, 255, 0.96), rgba(236, 241, 255, 0.94));
+  border-color: rgba(92, 109, 255, 0.14);
+}
+
+.message-card--green {
+  background: linear-gradient(180deg, rgba(242, 251, 246, 0.96), rgba(236, 247, 241, 0.94));
+  border-color: rgba(38, 162, 105, 0.15);
+}
+
+.message-card--rose {
+  background: linear-gradient(180deg, rgba(255, 244, 244, 0.96), rgba(255, 238, 238, 0.94));
+  border-color: rgba(210, 74, 74, 0.14);
+}
+
+.message-card--slate {
+  background: linear-gradient(180deg, rgba(250, 249, 246, 0.96), rgba(243, 241, 236, 0.94));
+}
+
+.message-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.message-card__head strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  word-break: break-word;
+}
+
+.message-card__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.08);
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.message-card__detail,
+.message-card__meta-line {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.message-card__meta-line {
+  color: var(--muted);
+}
+
+.message-card__output {
+  overflow: auto;
+  margin: 0;
+  padding: 13px 14px;
+  max-height: 148px;
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.92);
+  color: #f6f6f6;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  overscroll-behavior: contain;
+}
+
+.message-card__image-path {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.05);
+}
+
+.message-card__image-path span {
+  display: block;
+  color: var(--muted-strong);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  word-break: break-word;
 }
 
 .run-event-stack {

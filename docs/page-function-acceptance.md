@@ -14,6 +14,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Removed permanent-delete affordances from the UI and replaced archived-page copy with honest restore-only guidance.
 - Removed composer voice/attachment placeholders and marked purchase shells as preview-only.
 - Removed inert Fast/Plan toggles so composer and settings only expose backed controls.
+- Mapped real Codex execution items into turn activity cards and added a source-closer turn toolbar summary strip.
 
 ## Result Legend
 
@@ -44,7 +45,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
-| Turn View | send real prompt on clean thread | not rerun in this pass | legacy_evidence | `.artifacts/qa-27-turn-response.png` |
+| Turn View | authenticated existing thread after richer-thread-surface pass | turn toolbar chips, real command/file/tool/subagent activity cards, and compact output previews | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
@@ -53,6 +54,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - OTP login: pass in a real browser flow with a local dev mailbox and backdoor code `424242`.
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
+- Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.
 - Existing send / stream / stop / queue coverage was not rerun in this shell-focused pass. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect

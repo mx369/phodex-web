@@ -11,16 +11,18 @@ export interface DiffStats {
 }
 
 export interface FileChangeSummary {
-  action: "Edited" | "Created" | "Deleted";
+  action: "Edited" | "Created" | "Deleted" | "Moved";
   path: string;
   additions: number;
   deletions: number;
 }
 
+export type CardTone = "amber" | "blue" | "green" | "rose" | "slate";
+
 export interface RunEvent {
   label: string;
   detail: string;
-  tone: "amber" | "blue" | "green" | "slate";
+  tone: Exclude<CardTone, "rose">;
   state: "waiting" | "running" | "done";
 }
 
@@ -28,6 +30,51 @@ export interface CodeBlock {
   language: string;
   content: string;
 }
+
+export interface StatusMessageCard {
+  type: "status";
+  title: string;
+  detail?: string;
+  meta?: string;
+  tone: CardTone;
+}
+
+export interface CommandMessageCard {
+  type: "command";
+  title: string;
+  command?: string;
+  statusLabel: string;
+  tone: CardTone;
+  detail?: string;
+  meta?: string;
+  output?: string;
+}
+
+export interface ToolMessageCard {
+  type: "tool";
+  title: string;
+  toolLabel: string;
+  statusLabel: string;
+  tone: CardTone;
+  detail?: string;
+  meta?: string;
+  output?: string;
+}
+
+export interface ImageMessageCard {
+  type: "image";
+  title: string;
+  path: string;
+  detail?: string;
+  meta?: string;
+  tone: CardTone;
+}
+
+export type MessageCard =
+  | StatusMessageCard
+  | CommandMessageCard
+  | ToolMessageCard
+  | ImageMessageCard;
 
 export interface ThreadMessage {
   id: string;
@@ -39,6 +86,7 @@ export interface ThreadMessage {
   codeBlock?: CodeBlock;
   fileChanges?: FileChangeSummary[];
   runEvents?: RunEvent[];
+  cards?: MessageCard[];
   emphasis?: string;
 }
 

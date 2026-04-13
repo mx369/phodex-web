@@ -13,6 +13,7 @@ import type {
   DeliveryMode,
   DevCodeResponse,
   DiffStats,
+  FileChangeSummary,
   QueuedDraft,
   RelayConnection,
   RequestCodeResponse,
@@ -755,31 +756,22 @@ function handleItemStarted(params: any) {
   }
 
   const startedAt = activeTurns.get(threadId)?.startedAt ?? new Date().toISOString();
-  if (item.type === "userMessage") {
-    const message = mapLiveItemToMessage(item, startedAt);
-    if (!message) {
-      return;
-    }
-    appendMessage(threadId, message);
-    broadcastToAllUsers({ type: "message:appended", threadId, message });
-    broadcastThreadToAllUsers(threadId);
+  const message = mapLiveItemToMessage(item, startedAt, "started");
+  if (!message) {
     return;
   }
 
   if (item.type === "agentMessage") {
-    const message = mapLiveItemToMessage(item, startedAt);
-    if (!message) {
-      return;
-    }
     message.isStreaming = true;
     const activeTurn = activeTurns.get(threadId);
     if (activeTurn) {
       activeTurn.assistantMessageId = message.id;
     }
-    appendMessage(threadId, message);
-    broadcastToAllUsers({ type: "message:appended", threadId, message });
-    broadcastThreadToAllUsers(threadId);
   }
+
+  appendMessage(threadId, message);
+  broadcastToAllUsers({ type: "message:appended", threadId, message });
+  broadcastThreadToAllUsers(threadId);
 }
 
 function handleAgentMessageDelta(params: any) {
@@ -820,7 +812,7 @@ function handleItemCompleted(params: any) {
   }
 
   const thread = ensureThreadRecord(threadId);
-  const message = mapLiveItemToMessage(item, activeTurns.get(threadId)?.startedAt ?? new Date().toISOString());
+  const message = mapLiveItemToMessage(item, activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(), "completed");
   if (!message) {
     return;
   }
@@ -1013,7 +1005,7 @@ function mapTurnsToMessages(turns: any[]) {
   for (const turn of turns) {
     const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
     for (const item of Array.isArray(turn?.items) ? turn.items : []) {
-      const message = mapLiveItemToMessage(item, createdAt);
+      const message = mapLiveItemToMessage(item, createdAt, "history");
       if (message) {
         messages.push(message);
       }
@@ -1022,7 +1014,7 @@ function mapTurnsToMessages(turns: any[]) {
   return messages;
 }
 
-function mapLiveItemToMessage(item: any, createdAt: string) {
+function mapLiveItemToMessage(item: any, createdAt: string, stage: "history" | "started" | "completed" = "history") {
   const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
     return {
@@ -1042,6 +1034,65 @@ function mapLiveItemToMessage(item: any, createdAt: string) {
       text: readString(item?.text),
       createdAt,
       isStreaming: false,
+    } satisfies ThreadMessage;
+  }
+
+  if (item?.type === "commandExecution") {
+    return mapCommandExecutionMessage(item, itemId, createdAt, stage);
+  }
+
+  if (item?.type === "fileChange") {
+    return mapFileChangeMessage(item, itemId, createdAt);
+  }
+
+  if (item?.type === "webSearch") {
+    return mapWebSearchMessage(item, itemId, createdAt);
+  }
+
+  if (item?.type === "mcpToolCall") {
+    return mapMcpToolCallMessage(item, itemId, createdAt);
+  }
+
+  if (item?.type === "collabAgentToolCall") {
+    return mapCollabAgentToolCallMessage(item, itemId, createdAt);
+  }
+
+  if (item?.type === "contextCompaction") {
+    return {
+      id: itemId,
+      role: "system",
+      kind: "status",
+      text: "",
+      createdAt,
+      cards: [
+        {
+          type: "status",
+          title: "Context compacted",
+          detail: "Earlier context was compacted so the run could keep going.",
+          tone: "slate",
+        },
+      ],
+    } satisfies ThreadMessage;
+  }
+
+  if (item?.type === "imageView") {
+    const path = readString(item?.path);
+    return {
+      id: itemId,
+      role: "system",
+      kind: "status",
+      text: "",
+      createdAt,
+      cards: [
+        {
+          type: "image",
+          title: "Image artifact",
+          path,
+          detail: path ? basename(path) : "Local image",
+          meta: path || undefined,
+          tone: "blue",
+        },
+      ],
     } satisfies ThreadMessage;
   }
 
@@ -1264,6 +1315,353 @@ function readUserItemText(item: any) {
     .map((entry) => entry.text)
     .join("\n\n")
     .trim();
+}
+
+function mapCommandExecutionMessage(item: any, itemId: string, createdAt: string, stage: "history" | "started" | "completed") {
+  const status = normalizeExecutionStatus(readString(item?.status), stage);
+  const exitCode = readNumber(item?.exitCode);
+  const action = summarizeCommandAction(Array.isArray(item?.commandActions) ? item.commandActions[0] : null);
+  const cwd = readString(item?.cwd);
+  const durationMs = readNumber(item?.durationMs);
+  const output = summarizeCommandOutput(readString(item?.aggregatedOutput), action.type);
+
+  return {
+    id: itemId,
+    role: "system",
+    kind: "status",
+    text: "",
+    createdAt,
+    cards: [
+      {
+        type: "command",
+        title: action.title,
+        command: action.showCommand ? readString(item?.command) : undefined,
+        statusLabel: humanizeExecutionStatus(status, exitCode),
+        tone: executionTone(status, exitCode),
+        detail: action.detail,
+        meta: buildExecutionMeta(cwd, durationMs, exitCode),
+        output: output || undefined,
+      },
+    ],
+  } satisfies ThreadMessage;
+}
+
+function mapFileChangeMessage(item: any, itemId: string, createdAt: string) {
+  const rawChanges = Array.isArray(item?.changes) ? item.changes : [];
+  const fileChanges = rawChanges
+    .map(mapFileChangeSummary)
+    .filter((change): change is FileChangeSummary => Boolean(change));
+  const changeSummary = summarizeFileChanges(fileChanges);
+
+  return {
+    id: itemId,
+    role: "system",
+    kind: "status",
+    text: "",
+    createdAt,
+    cards: [
+      {
+        type: "status",
+        title: changeSummary.title,
+        detail: changeSummary.detail,
+        tone: "blue",
+      },
+    ],
+    fileChanges: fileChanges.length ? fileChanges : undefined,
+  } satisfies ThreadMessage;
+}
+
+function mapWebSearchMessage(item: any, itemId: string, createdAt: string) {
+  const query = readString(item?.query) || readString(item?.action?.query);
+  const queries = Array.isArray(item?.action?.queries)
+    ? item.action.queries.map((entry: unknown) => readString(entry)).filter(Boolean)
+    : [];
+  const output = truncateText(queries.join("\n"), 6, 600);
+
+  return {
+    id: itemId,
+    role: "system",
+    kind: "status",
+    text: "",
+    createdAt,
+    cards: [
+      {
+        type: "tool",
+        title: "Web search",
+        toolLabel: "search",
+        statusLabel: "Completed",
+        tone: "blue",
+        detail: query || "Search query prepared",
+        meta: queries.length ? `${queries.length} queries` : undefined,
+        output: output || undefined,
+      },
+    ],
+  } satisfies ThreadMessage;
+}
+
+function mapMcpToolCallMessage(item: any, itemId: string, createdAt: string) {
+  const server = readString(item?.server);
+  const tool = readString(item?.tool);
+  const status = normalizeExecutionStatus(readString(item?.status), "history");
+  const durationMs = readNumber(item?.durationMs);
+  const output = truncateText(readToolResultText(item?.result), 8, 900);
+  const argumentPreview = stringifyPreview(item?.arguments);
+
+  return {
+    id: itemId,
+    role: "system",
+    kind: "status",
+    text: "",
+    createdAt,
+    cards: [
+      {
+        type: "tool",
+        title: server ? `MCP · ${server}` : "MCP tool",
+        toolLabel: tool || "tool",
+        statusLabel: humanizeExecutionStatus(status, null),
+        tone: executionTone(status, item?.error ? 1 : 0),
+        detail: argumentPreview || undefined,
+        meta: durationMs != null ? `${durationMs}ms` : undefined,
+        output: output || undefined,
+      },
+    ],
+  } satisfies ThreadMessage;
+}
+
+function mapCollabAgentToolCallMessage(item: any, itemId: string, createdAt: string) {
+  const tool = readString(item?.tool) || "spawnAgent";
+  const receiverThreadIds = Array.isArray(item?.receiverThreadIds) ? item.receiverThreadIds.filter(Boolean) : [];
+  const prompt = truncateText(readString(item?.prompt), 5, 420);
+  const meta = [readString(item?.model), readString(item?.reasoningEffort)].filter(Boolean).join(" · ");
+  const status = normalizeExecutionStatus(readString(item?.status), "history");
+  const agentStatuses = summarizeAgentStatuses(item?.agentsStates);
+
+  return {
+    id: itemId,
+    role: "system",
+    kind: "status",
+    text: "",
+    createdAt,
+    cards: [
+      {
+        type: "tool",
+        title: receiverThreadIds.length > 1 ? `Spawned ${receiverThreadIds.length} subagents` : "Spawned subagent",
+        toolLabel: tool,
+        statusLabel: humanizeExecutionStatus(status, null),
+        tone: executionTone(status, null),
+        detail: prompt || "Delegated work to a background agent.",
+        meta: [meta, agentStatuses].filter(Boolean).join(" · ") || undefined,
+      },
+    ],
+  } satisfies ThreadMessage;
+}
+
+function mapFileChangeSummary(change: any) {
+  const originalPath = readString(change?.path);
+  if (!originalPath) {
+    return null;
+  }
+
+  const movePath = readString(change?.kind?.move_path);
+  const diff = readString(change?.diff);
+  const stats = diff ? parseUnifiedDiffStats(diff) : { additions: 0, deletions: 0 };
+  const kind = readString(change?.kind?.type);
+
+  return {
+    action: movePath ? "Moved" : kind === "add" ? "Created" : kind === "delete" ? "Deleted" : "Edited",
+    path: movePath ? `${originalPath} -> ${movePath}` : originalPath,
+    additions: stats.additions,
+    deletions: stats.deletions,
+  } satisfies FileChangeSummary;
+}
+
+function summarizeFileChanges(changes: FileChangeSummary[]) {
+  if (!changes.length) {
+    return {
+      title: "Workspace updated",
+      detail: "Codex applied file changes in this thread.",
+    };
+  }
+
+  const totalAdditions = changes.reduce((sum, change) => sum + change.additions, 0);
+  const totalDeletions = changes.reduce((sum, change) => sum + change.deletions, 0);
+  return {
+    title: changes.length === 1 ? changes[0].action : `Updated ${changes.length} files`,
+    detail: `+${totalAdditions} -${totalDeletions}`,
+  };
+}
+
+function parseUnifiedDiffStats(diff: string) {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ ") || line.startsWith("--- ") || line.startsWith("@@")) {
+      continue;
+    }
+    if (line.startsWith("+")) {
+      additions += 1;
+      continue;
+    }
+    if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+  return { additions, deletions };
+}
+
+function summarizeCommandAction(action: any) {
+  const type = readString(action?.type);
+  const name = readString(action?.name);
+  const path = readString(action?.path);
+  const query = readString(action?.query);
+
+  if (type === "read") {
+    return {
+      type,
+      title: name ? `Read ${name}` : "Read file",
+      detail: path || undefined,
+      showCommand: false,
+    };
+  }
+
+  if (type === "search") {
+    return {
+      type,
+      title: "Search project",
+      detail: query || path || undefined,
+      showCommand: false,
+    };
+  }
+
+  if (type === "list_files") {
+    return {
+      type,
+      title: "List files",
+      detail: path || undefined,
+      showCommand: false,
+    };
+  }
+
+  return {
+    type: type || "command",
+    title: "Executed command",
+    detail: path || undefined,
+    showCommand: true,
+  };
+}
+
+function normalizeExecutionStatus(status: string, stage: "history" | "started" | "completed") {
+  if (status === "completed" || status === "failed" || status === "running") {
+    return status;
+  }
+  if (status === "inProgress" || status === "pending") {
+    return "running";
+  }
+  if (stage === "started") {
+    return "running";
+  }
+  return "completed";
+}
+
+function humanizeExecutionStatus(status: string, exitCode: number | null) {
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "failed" || exitCode != null && exitCode !== 0) {
+    return "Failed";
+  }
+  return "Completed";
+}
+
+function executionTone(status: string, exitCode: number | null): "amber" | "blue" | "green" | "rose" | "slate" {
+  if (status === "running") {
+    return "amber";
+  }
+  if (status === "failed" || exitCode != null && exitCode !== 0) {
+    return "rose";
+  }
+  return "green";
+}
+
+function buildExecutionMeta(cwd: string, durationMs: number | null, exitCode: number | null) {
+  const parts = [];
+  if (cwd) {
+    parts.push(basename(cwd) || cwd);
+  }
+  if (durationMs != null) {
+    parts.push(`${durationMs}ms`);
+  }
+  if (exitCode != null) {
+    parts.push(`exit ${exitCode}`);
+  }
+  return parts.join(" · ") || undefined;
+}
+
+function truncateText(value: string, maxLines: number, maxChars: number) {
+  if (!value) {
+    return "";
+  }
+
+  const lines = value.trim().split("\n");
+  const clippedLines = lines.slice(0, maxLines).join("\n");
+  if (clippedLines.length <= maxChars && lines.length <= maxLines) {
+    return clippedLines;
+  }
+  return `${clippedLines.slice(0, maxChars).trimEnd()}\n…`;
+}
+
+function summarizeCommandOutput(output: string, actionType: string) {
+  if (!output) {
+    return "";
+  }
+  if (actionType === "read") {
+    return "";
+  }
+  if (actionType === "search") {
+    return truncateText(output, 4, 360);
+  }
+  if (actionType === "list_files") {
+    return truncateText(output, 4, 280);
+  }
+  return truncateText(output, 6, 520);
+}
+
+function readToolResultText(result: any) {
+  const content = Array.isArray(result?.content) ? result.content : [];
+  return content
+    .map((entry) => entry?.type === "text" && typeof entry.text === "string" ? entry.text : "")
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function stringifyPreview(value: unknown) {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return truncateText(value, 3, 240);
+  }
+  try {
+    const json = JSON.stringify(value);
+    return json === "{}" ? "" : truncateText(json, 3, 240);
+  } catch {
+    return "";
+  }
+}
+
+function summarizeAgentStatuses(agentsStates: any) {
+  if (!agentsStates || typeof agentsStates !== "object") {
+    return "";
+  }
+  const values = Object.values(agentsStates as Record<string, any>)
+    .map((entry) => readString(entry?.status))
+    .filter(Boolean);
+  if (!values.length) {
+    return "";
+  }
+  const unique = [...new Set(values)];
+  return unique.join(", ");
 }
 
 function normalizeModel(model: string) {

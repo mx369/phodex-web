@@ -34,25 +34,26 @@ Done when:
 - Each page has a current screenshot and a short acceptance note.
 - Remaining visual gaps are small and explicitly tracked.
 
-### P1. Improve message mapping from Codex app-server into richer thread surfaces
+### P1. Bring Turn composer work-state closer to source parity
 
 Status: open
 
 Why:
-- The server currently maps only `userMessage` and `agentMessage` into chat messages. Richer source-app-style execution surfaces are still missing.
+- Turn timelines now show richer execution cards, but the composer area still misses the source app's visible work-state layer.
 
 Main work:
-- Inspect Codex app-server items and notifications more deeply.
-- Map real tool/run/file/diff-related items where available.
-- Reflect them in thread rendering without inventing fake data.
+- Add a composer accessory band above the input when plan or queue state exists.
+- Surface queued drafts as a visible resume/remove list instead of leaving queue state implicit.
+- Add a source-informed pinned-plan summary surface without reintroducing inert Fast/Plan toggles.
 
 Likely files:
-- `apps/server/src/index.ts`
-- `packages/shared/src/index.ts`
 - `apps/web/src/App.vue`
+- `apps/web/src/style.css`
 
 Done when:
-- Thread surfaces show real structured execution data where Codex provides it.
+- The accessory appears only when plan or queued drafts exist.
+- Queue state is visible and actionable in the authenticated turn view.
+- The change is verified in a real browser flow and documented with fresh evidence.
 
 ## Blockers And Caveats
 
