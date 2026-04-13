@@ -21,9 +21,9 @@ All screenshots in this file were captured from real browser renders through the
 
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
-| Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the shell refactor | `.artifacts/qa-46-home-shell-mobile-page.png` |
+| Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
 | Turn Empty | Same authenticated session, tapped `Open chats`, then `New Chat` | `.artifacts/qa-43-turn-empty-email-only.png` |
-| Sidebar Open | Same authenticated session, opened the drawer from the full-page shell | `.artifacts/qa-47-sidebar-shell-mobile-page.png` |
+| Sidebar Open | Same authenticated session, opened the drawer after the latest page-parity pass | `.artifacts/qa-53-sidebar-page-parity.png` |
 | Settings | Authenticated session reloaded at `/?page=settings` after the shell refactor | `.artifacts/qa-48-settings-mobile-page.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the shell refactor | `.artifacts/qa-50-paywall-mobile-page.png` |

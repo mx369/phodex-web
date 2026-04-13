@@ -647,6 +647,11 @@ function startLocalChat() {
   client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "local");
 }
 
+function startWorktreeChat() {
+  client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "worktree");
+  closeSidebar();
+}
+
 function openPanel(panel: ShellPageState, replace = false) {
   if (panel === "settings") {
     shellPageStack.value = ["settings"];
@@ -1294,9 +1299,12 @@ function readShellPageState(): ShellPageState | null {
                       <div class="phone-drawer__head">
                         <div class="drawer-brand">
                           <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
-                          <strong class="drawer-brand__title">Remodex</strong>
+                          <div class="drawer-brand__copy">
+                            <span class="section-label">{{ homeStatusLabel }}</span>
+                            <strong class="drawer-brand__title">Remodex</strong>
+                          </div>
                         </div>
-                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">☰</button>
+                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">×</button>
                       </div>
 
                       <input
@@ -1313,6 +1321,18 @@ function readShellPageState(): ShellPageState | null {
                           <p>Start from the active local checkout.</p>
                         </div>
                       </button>
+
+                      <div class="drawer-shortcuts">
+                        <button
+                          class="drawer-shortcut"
+                          :class="{ 'drawer-shortcut--active': !currentThread }"
+                          @click="client.clearThreadSelection()"
+                        >
+                          Home
+                        </button>
+                        <button class="drawer-shortcut" @click="startWorktreeChat">New Worktree</button>
+                        <button class="drawer-shortcut" @click="openPanel('about')">About</button>
+                      </div>
 
                       <div class="drawer-groups">
                         <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
@@ -1378,12 +1398,26 @@ function readShellPageState(): ShellPageState | null {
                       </div>
 
                       <div class="phone-drawer__foot">
-                        <button class="drawer-settings-fab" aria-label="Settings" @click="openPanel('settings')">⚙</button>
-                        <div class="drawer-status">
+                        <div class="phone-drawer__footer-card">
                           <span class="drawer-status__label">
-                            {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Saved Mac" }}
+                            {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Trusted Mac" }}
                           </span>
-                          <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                          <div class="drawer-status__row">
+                            <div class="drawer-status">
+                              <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                              <span class="drawer-status__relay">{{ state.snapshot?.connection.relayLabel }}</span>
+                            </div>
+                            <strong v-if="state.snapshot?.connection.state === 'connected'" class="drawer-status__latency">
+                              {{ state.snapshot?.connection.latencyMs }}ms
+                            </strong>
+                          </div>
+                        </div>
+
+                        <button class="drawer-settings-bar" @click="openPanel('settings')">Settings</button>
+
+                        <div class="drawer-footer-actions">
+                          <button class="drawer-footer-pill" @click="openPanel('archived')">Archived</button>
+                          <button class="drawer-footer-pill" @click="client.logout()">Disconnect</button>
                         </div>
                       </div>
                     </aside>
@@ -1396,12 +1430,13 @@ function readShellPageState(): ShellPageState | null {
                   <header class="phone-topbar">
                     <button class="icon-button" @click="openSidebar">☰</button>
 
-                    <div class="phone-topbar__title">
-                      <span v-if="currentThread?.projectLabel" class="section-label">{{ currentThread.projectLabel }}</span>
-                      <strong>{{ currentThread?.title ?? "Remodex" }}</strong>
+                    <div class="phone-topbar__title" :class="{ 'phone-topbar__title--home': !currentThread }">
+                      <span class="section-label">{{ currentThread?.projectLabel ?? "Remodex" }}</span>
+                      <strong>{{ currentThread?.title ?? "Home" }}</strong>
                     </div>
 
-                    <span class="phone-topbar__spacer" aria-hidden="true"></span>
+                    <button v-if="!currentThread" class="icon-button phone-topbar__action" aria-label="Settings" @click="openPanel('settings')">⚙</button>
+                    <span v-else class="phone-topbar__spacer" aria-hidden="true"></span>
                   </header>
 
                   <transition name="banner">
@@ -1477,6 +1512,13 @@ function readShellPageState(): ShellPageState | null {
                       </div>
 
                       <div v-else class="home-empty-state">
+                        <div class="home-empty-state__tabs">
+                          <span class="home-empty-state__tab home-empty-state__tab--active">Home</span>
+                          <span class="home-empty-state__tab">
+                            <span :class="`home-empty-state__tab-dot home-empty-state__tab-dot--${homeStatusTone}`"></span>
+                            {{ homeStatusLabel }}
+                          </span>
+                        </div>
                         <img :src="remodexAppLogo" alt="" class="home-empty-state__logo" />
                         <div class="home-status-badge">
                           <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>

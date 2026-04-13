@@ -10,8 +10,8 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Bootstrap failure | Shell | Rendered and navigable | Subscription restore is not real |
 | Subscription gate | Shell | Plan selection UI and navigation exist | No real purchase or restore flow |
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
-| Home empty | Partial | Real connection state drives content inside the full-page mobile shell | Visual parity still differs from upstream |
-| Sidebar | Partial | Real threads render; select, rename, archive, create work from the shell drawer | Layout and interaction details still diverge |
+| Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
+| Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
 | Turn empty | Partial | Real selected thread and composer | Not source-equal visually |
 | Turn with messages | Partial | Real streamed chat bridge | Richer upstream message/tool surfaces still missing |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |

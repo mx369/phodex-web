@@ -18,9 +18,9 @@ Read this file before editing anything under `apps/web`.
 
 ## Current Truth
 
-- The UI still uses a fixed-width web surface and overlay sheets. Treat that as current debt, not as the desired end state.
+- The UI now uses a full-page mobile shell with dedicated mobile-page routes for settings/about/paywall/archived.
 - `Email OTP`, `new chat`, `send`, `stream`, `stop`, `queue`, `resume draft`, `rename`, and `archive` are wired.
-- `voice`, `purchase`, and parts of `settings/about/paywall` remain partial or shell-level.
+- `voice`, `purchase`, and richer turn/tool surfaces remain partial or shell-level.
 
 ## Required Reads By Task
 

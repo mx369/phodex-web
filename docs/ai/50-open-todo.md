@@ -19,8 +19,6 @@ Pages to finish:
 - Bootstrap failure
 - Subscription gate
 - Email OTP
-- Home empty
-- Sidebar
 - Turn empty
 - Turn with messages
 - Settings

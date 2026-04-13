@@ -36,11 +36,11 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 | Page | Entry path | Function points checked in this pass | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| Home Empty | fresh OTP login after shell pass | connected state, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-46-home-shell-mobile-page.png` |
+| Home Empty | fresh OTP login after source-parity pass | connected state, source-closer header chips, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-52-home-page-parity.png` |
 | Turn Empty | `Home Empty -> Open chats -> New Chat` | not isolated again after the shell pass | legacy_evidence | `.artifacts/qa-43-turn-empty-email-only.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after shell pass | full-page mobile page render, updated feature copy | pass | `.artifacts/qa-50-paywall-mobile-page.png` |
-| Sidebar Drawer | menu button from authenticated state after shell pass | drawer render, thread list, shell navigation | pass | `.artifacts/qa-47-sidebar-shell-mobile-page.png` |
+| Sidebar Drawer | menu button from authenticated state after source-parity pass | drawer render, local/worktree/about shortcuts, thread list, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-53-sidebar-page-parity.png` |
 | Turn View | send real prompt on clean thread | not rerun in this pass | legacy_evidence | `.artifacts/qa-27-turn-response.png` |
 | Settings | authenticated `?page=settings` after shell pass | dedicated mobile page render, settings cards, archive/about/paywall navigation | pass | `.artifacts/qa-48-settings-mobile-page.png` |
 | Archived | authenticated `?page=archived` after shell pass | dedicated mobile page render, archived list shell, restore/delete actions present | pass | `.artifacts/qa-51-archived-mobile-page.png` |
@@ -48,7 +48,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 ## Interaction Flows
 
 - OTP login: pass in a real browser flow with a local dev mailbox and backdoor code `424242`.
-- Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor.
+- Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
 - Existing send / stream / stop / queue coverage was not rerun in this shell-focused pass. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect
