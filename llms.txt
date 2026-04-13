@@ -1,0 +1,37 @@
+# phodex-web
+
+> Bun + Vite + Vue recreation of the `remodex` mobile app. Current truth: local email OTP, HTTPS/WSS relay, and Codex app-server chat bridge are real; UI parity and many source-app flows are still incomplete. Read linked files progressively instead of loading the full repo context at once.
+
+Important notes:
+
+- The goal is source-driven mobile-app reconstruction, not a browser page wrapped in fake phone hardware.
+- Do not assume pixel parity has been reached.
+- Every code change in this repo should be committed intentionally.
+
+## Start Here
+
+- [Root agent guide](./AGENTS.md): Global rules and the default reading order.
+- [Start here](./docs/ai/00-start-here.md): Minimal project truth for first-pass context.
+- [Context manifest](./docs/ai/context-manifest.yaml): Machine-readable disclosure map and task router.
+
+## Web
+
+- [Web agent guide](./apps/web/AGENTS.md): Read before editing Vue or CSS.
+- [Pages and flows](./docs/ai/20-pages-and-flows.md): Page inventory, functional status, and biggest UI gaps.
+
+## Server
+
+- [Server agent guide](./apps/server/AGENTS.md): Read before editing relay, auth, or Codex bridge logic.
+- [Architecture and interfaces](./docs/ai/30-architecture-and-interfaces.md): Endpoints, websocket events, and Codex app-server integration.
+
+## Verification
+
+- [Verification and artifacts](./docs/ai/40-verification-and-artifacts.md): Build commands, artifact paths, and acceptance references.
+- [CDP acceptance runbook](./docs/cdp-acceptance-runbook.md): Existing browser verification steps.
+
+## Optional
+
+- [Current state](./docs/ai/10-current-state.md): Expanded status summary and known blockers.
+- [Standards and rationale](./docs/ai/90-standards-and-rationale.md): Why this repo uses layered AI docs and how to consume them.
+- [Source audit](./docs/remodex-source-audit.md): Reverse-engineered source notes.
+- [Remodex page matrix](./docs/remodex-page-matrix.md): Detailed page mapping from the upstream app.

@@ -1,0 +1,126 @@
+version: 1
+updated_at: 2026-04-13
+intent: >
+  Progressive-disclosure context map for AI agents working on phodex-web.
+  Read the smallest sufficient layer first, then descend only into the task-relevant layer.
+
+entrypoints:
+  llm_index: /Users/young/mx/tmp/phodex-web/llms.txt
+  root_agent_guide: /Users/young/mx/tmp/phodex-web/AGENTS.md
+
+defaults:
+  strategy:
+    - Read level 0 first.
+    - Stop if level 0 plus the nearest package guide is sufficient.
+    - Pull in reference docs only for the active work surface.
+    - Treat historical docs as supporting material, not truth, unless code confirms them.
+  constraints:
+    - Do not load all files into context by default.
+    - Prefer package-local guidance over repo-wide guidance when editing inside one package.
+    - Keep source-driven mobile-app restoration as the primary goal.
+
+routers:
+  ui_surface:
+    read:
+      - /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md
+  relay_auth_bridge:
+    read:
+      - /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md
+  project_status_or_handoff:
+    read:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+
+resources:
+  - id: start
+    level: 0
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/00-start-here.md
+    approx_tokens: 350
+    read_when: Always.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md
+
+  - id: current_state
+    level: 1
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md
+    approx_tokens: 700
+    read_when: >
+      You need a broad status summary, a handoff, or a gap list before planning work.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+
+  - id: web_scope
+    level: 1
+    path: /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
+    approx_tokens: 450
+    read_when: You will edit files under apps/web.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+
+  - id: server_scope
+    level: 1
+    path: /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
+    approx_tokens: 450
+    read_when: You will edit files under apps/server.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+
+  - id: pages_and_flows
+    level: 2
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+    approx_tokens: 1100
+    read_when: >
+      You need the page inventory, status per screen, or flow-level acceptance details.
+    stop_if_sufficient: false
+
+  - id: architecture_and_interfaces
+    level: 2
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
+    approx_tokens: 1000
+    read_when: >
+      You need endpoints, event flows, workspace structure, or Codex bridge behavior.
+    stop_if_sufficient: false
+
+  - id: verification
+    level: 2
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md
+    approx_tokens: 650
+    read_when: >
+      You need build commands, CDP evidence paths, or final acceptance procedure.
+    stop_if_sufficient: false
+
+  - id: historical_source_audit
+    level: 3
+    path: /Users/young/mx/tmp/phodex-web/docs/remodex-source-audit.md
+    approx_tokens: 2000
+    read_when: >
+      You are reconstructing an upstream screen or behavior and need the prior reverse-engineering notes.
+    optional: true
+
+  - id: historical_page_matrix
+    level: 3
+    path: /Users/young/mx/tmp/phodex-web/docs/remodex-page-matrix.md
+    approx_tokens: 1400
+    read_when: >
+      You need the detailed upstream page map after level 2 is no longer sufficient.
+    optional: true
+
+  - id: standards_and_rationale
+    level: 3
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/90-standards-and-rationale.md
+    approx_tokens: 700
+    read_when: >
+      You need to understand why the AI docs are layered this way or want to extend the system without breaking progressive disclosure.
+    optional: true
