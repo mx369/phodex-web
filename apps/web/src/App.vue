@@ -160,56 +160,51 @@ const subscriptionGateFeatures = [
 ] as const;
 
 const architectureSteps = [
-  ["Phone Shell", "WSS", "Bun Relay"],
-  ["Bun Relay", "HTTPS + WS", "Codex Runtime"],
-  ["Codex Runtime", "JSONL", "~/.codex/sessions"],
+  ["Remodex iOS", "WebSocket", "Bridge (Mac)"],
+  ["Bridge (Mac)", "JSON-RPC", "codex app-server"],
+  ["codex app-server", "JSONL rollout", "~/.codex/sessions"],
 ] as const;
 
 const aboutSections = [
   {
     title: "How It Works",
     body:
-      "Your Mac runs Codex locally. The phone shell sends prompts through the Bun relay, and replies stream back over WSS in real time.",
-  },
-  {
-    title: "Architecture",
-    body:
-      "Phone shell -> Bun relay -> Codex runtime. The remake preserves the narrow mobile control surface and keeps execution on the desktop side.",
+      "Your Mac runs a lightweight bridge that connects to a relay server over WebSocket, and replies stream back to the iPhone in real time.",
   },
   {
     title: "Relay",
     body:
-      "The relay is intentionally thin. It owns transport, session restoration, and message fan-out, but code execution remains on the desktop side.",
+      "A lightweight WebSocket relay routes messages between your iPhone and your Mac and only needs connection metadata to do that job.",
   },
   {
     title: "Codex App-Server",
     body:
-      "The source app forwards work into codex app-server. This remake mirrors that thin-remote shape and keeps rollout, files, and git state on the Mac side.",
+      "The bridge spawns codex app-server, so phone conversations stay first-class Codex sessions and produce JSONL rollout files under ~/.codex/sessions.",
   },
   {
-    title: "Pairing",
+    title: "Pairing & Security",
     body:
-      "The original app uses QR-based pairing and end-to-end encryption. This remake intentionally swaps that part for email OTP plus local self-check backdoors.",
+      "On first connect, the bridge prints a QR code containing the relay URL, the session ID, and the bridge identity public key.",
   },
   {
-    title: "Encryption",
+    title: "End-to-End Encryption",
     body:
-      "The original handshake is end-to-end encrypted. This remake skips that protocol and instead uses local HTTPS and WSS, which is simpler but intentionally not protocol-equivalent.",
+      "After pairing, every message is wrapped in encrypted envelopes with X25519 key exchange, Ed25519 identity signatures, AES-256-GCM, and monotonic counters.",
   },
   {
     title: "Git & Workspace",
     body:
-      "The shell still exposes branch, diff, queue, plan, and run controls so the phone behaves like a thin remote for local coding work.",
+      "The bridge handles git commands from your phone locally on the Mac, including status, commit, push, pull, branch switching, and workspace revert flows.",
   },
   {
     title: "Resilience",
     body:
-      "The relay restores snapshots on reconnect, preserves queued drafts, and continues to stream thread state into the mobile shell after transient disconnects.",
+      "Trusted pairs auto-reconnect on later launches, and the QR code remains available as a recovery path when trust changes or the session cannot be resolved.",
   },
   {
-    title: "Desktop",
+    title: "Desktop Integration",
     body:
-      "The desktop keeps ownership of runtime, files, and credentials. The phone is a focused control surface, not a second IDE.",
+      "All execution happens on your Mac, so code generation, tool use, file edits, and credentials stay on the desktop side while the phone acts as a focused remote.",
   },
 ] as const;
 
@@ -925,7 +920,7 @@ function readShellPageState(): ShellPageState | null {
                     <div class="alert-card">
                       <span class="section-label section-label--light">Before you continue</span>
                       <h3>Install Codex CLI first.</h3>
-                      <p>The source app warns before leaving the setup step. This remake keeps that guard so the flow does not jump ahead silently.</p>
+                      <p>Copy and paste the install command on your Mac before moving on. Remodex will not work until Codex CLI is available in your PATH.</p>
                       <div class="alert-card__actions">
                         <button class="ghost-cta ghost-cta--dark ghost-cta--compact" @click="onboardingInstallWarningVisible = false">
                           Not yet
@@ -1408,7 +1403,7 @@ function readShellPageState(): ShellPageState | null {
                       <img :src="remodexAppLogo" alt="" class="phone-empty-state__logo" />
                       <span class="section-label">Conversation</span>
                       <h2>Hi! How can I help you?</h2>
-                      <p>The source app keeps the thread viewport quiet until the first turn lands. Use the composer below to start the run.</p>
+                      <p>Chats are end-to-end encrypted.</p>
                     </div>
 
                     <div v-else class="home-empty-state">
@@ -1608,18 +1603,18 @@ function readShellPageState(): ShellPageState | null {
                       </section>
 
                       <section class="settings-card">
-                        <span class="section-label">ChatGPT</span>
+                        <span class="section-label">GPT Account</span>
                         <div class="settings-metric-row">
                           <span>Status</span>
                           <strong>{{ state.snapshot.connection.state === "connected" ? "Bridge connected" : "Awaiting bridge" }}</strong>
                         </div>
-                        <p class="settings-copy">Voice and account status are modeled after the source app and will be wired to the bridge next.</p>
+                        <p class="settings-copy">Connect a ChatGPT account on iPhone to unlock voice and account-aware features.</p>
                       </section>
 
                       <section class="settings-card">
                         <span class="section-label">Remodex Pro</span>
-                        <p class="settings-copy">The source app has a RevenueCat paywall. This remake keeps the UI shell and defers billing behavior.</p>
-                        <button class="primary-cta primary-cta--compact" @click="openPanel('paywall')">View Pro</button>
+                        <p class="settings-copy">Open the Pro paywall to choose a monthly or yearly plan.</p>
+                        <button class="primary-cta primary-cta--compact" @click="openPanel('paywall')">Upgrade to Pro</button>
                       </section>
 
                       <section class="settings-card">
@@ -1653,7 +1648,7 @@ function readShellPageState(): ShellPageState | null {
                       <section class="settings-card">
                         <span class="section-label">About</span>
                         <button class="settings-row-button" @click="openPanel('about')">
-                          <span>How Remodex Works</span>
+                          <span>About Remodex</span>
                           <strong>Open</strong>
                         </button>
                       </section>
@@ -1707,7 +1702,7 @@ function readShellPageState(): ShellPageState | null {
                         <div v-else class="archived-empty">
                           <span class="archived-empty__icon">▣</span>
                           <strong>No archived chats</strong>
-                          <p class="settings-copy">Archived conversations will appear here once you move a chat out of the live sidebar.</p>
+                          <p class="settings-copy">Archived conversations will appear here after you move a chat out of the main thread list.</p>
                         </div>
                       </section>
                     </template>
@@ -1717,7 +1712,7 @@ function readShellPageState(): ShellPageState | null {
                         <span class="section-label">Remodex</span>
                         <h2 class="settings-hero-title">Control Codex from your iPhone.</h2>
                         <p class="settings-copy">
-                          This remake is using the source app as the UI and interaction baseline while swapping the original QR pairing for email OTP.
+                          The Codex runtime stays on your Mac. Your phone is a secure remote control connected through a relay.
                         </p>
                       </section>
 
@@ -1741,9 +1736,9 @@ function readShellPageState(): ShellPageState | null {
                     <template v-else-if="activePanel === 'paywall'">
                       <section class="paywall-card">
                         <span class="section-label">Remodex Pro</span>
-                        <h2 class="settings-hero-title">Source-shaped paywall shell.</h2>
+                        <h2 class="settings-hero-title">Unlock Remodex Pro</h2>
                         <p class="settings-copy">
-                          The native app uses RevenueCat. This remake keeps the marketing page and defers real purchase wiring.
+                          Everything runs on your Mac. Your phone is the remote.
                         </p>
                         <div class="gate-plan-scroll">
                           <article
@@ -1761,8 +1756,8 @@ function readShellPageState(): ShellPageState | null {
                             <p>{{ plan.subtitle }}</p>
                           </article>
                         </div>
-                        <button class="primary-cta">Upgrade to Pro</button>
-                        <button class="ghost-cta">Restore Purchases</button>
+                        <button class="primary-cta">Unlock Remodex Pro</button>
+                        <button class="ghost-cta">Restore Purchase</button>
                         <div class="root-auth-screen__links">
                           <button class="root-auth-screen__link">Privacy</button>
                           <button class="root-auth-screen__link">Terms</button>
