@@ -1687,7 +1687,7 @@ function readShellPageState(): ShellPageState | null {
                     </template>
 
                     <template v-else-if="activePanel === 'about'">
-                      <section class="settings-card settings-card--article">
+                      <section class="about-header">
                         <span class="section-label">Remodex</span>
                         <h2 class="settings-hero-title">Control Codex from your iPhone.</h2>
                         <p class="settings-copy">
@@ -1695,7 +1695,9 @@ function readShellPageState(): ShellPageState | null {
                         </p>
                       </section>
 
-                      <section class="settings-card settings-card--article">
+                      <div class="about-divider"></div>
+
+                      <section class="about-section">
                         <span class="section-label">Architecture</span>
                         <div class="about-diagram">
                           <div v-for="step in architectureSteps" :key="step[0]" class="about-diagram__row">
@@ -1706,10 +1708,13 @@ function readShellPageState(): ShellPageState | null {
                         </div>
                       </section>
 
-                      <section v-for="section in aboutSections" :key="section.title" class="settings-card settings-card--article">
-                        <span class="section-label">{{ section.title }}</span>
-                        <p class="settings-copy">{{ section.body }}</p>
-                      </section>
+                      <template v-for="section in aboutSections" :key="section.title">
+                        <div class="about-divider"></div>
+                        <section class="about-section">
+                          <span class="section-label">{{ section.title }}</span>
+                          <p class="settings-copy">{{ section.body }}</p>
+                        </section>
+                      </template>
                     </template>
 
                     <template v-else-if="activePanel === 'paywall'">

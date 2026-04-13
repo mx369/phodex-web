@@ -2195,6 +2195,17 @@ button {
   gap: 10px;
 }
 
+.about-header,
+.about-section {
+  display: grid;
+  gap: 12px;
+}
+
+.about-divider {
+  height: 1px;
+  background: rgba(18, 18, 18, 0.08);
+}
+
 .settings-hero-title {
   margin: 0;
   font-size: 28px;
