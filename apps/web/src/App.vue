@@ -1314,11 +1314,11 @@ function readShellPageState(): ShellPageState | null {
                   <button class="icon-button" @click="openSidebar">☰</button>
 
                   <div class="phone-topbar__title">
-                    <span class="section-label">{{ currentThread?.projectLabel ?? "Remodex" }}</span>
-                    <strong>{{ currentThread?.title ?? "Home" }}</strong>
+                    <span v-if="currentThread?.projectLabel" class="section-label">{{ currentThread.projectLabel }}</span>
+                    <strong>{{ currentThread?.title ?? "Remodex" }}</strong>
                   </div>
 
-                  <button class="icon-button" @click="openPanel('settings')">⌾</button>
+                  <span class="phone-topbar__spacer" aria-hidden="true"></span>
                 </header>
 
                 <transition name="banner">
@@ -1331,19 +1331,6 @@ function readShellPageState(): ShellPageState | null {
                     <button class="icon-button icon-button--tiny" @click="dismissBanner">×</button>
                   </div>
                 </transition>
-
-                <div class="phone-toolbar-strip">
-                  <button class="toolbar-chip" @click="showHome">Home</button>
-                  <span v-if="currentThread" class="toolbar-chip toolbar-chip--static">
-                    +{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}
-                  </span>
-                  <span v-if="currentThread" class="toolbar-chip toolbar-chip--static">{{ currentThread.branch }}</span>
-                  <button v-if="currentThread" class="toolbar-chip" @click="startWorktreeChat">
-                    {{ currentThread.isWorktree ? "New Local" : "To Worktree" }}
-                  </button>
-                  <button v-if="currentThread" class="toolbar-chip" @click="startLocalChat">Sibling</button>
-                  <button class="toolbar-chip" @click="openPanel('about')">{{ connectionStatusLabel }}</button>
-                </div>
 
                 <section class="phone-conversation">
                   <div class="phone-conversation__inner">
