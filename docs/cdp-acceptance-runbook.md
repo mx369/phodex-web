@@ -120,6 +120,9 @@ After login, wait for the shell to render a stable home state before taking scre
 - Use `evaluate` when a control is easier to reach by selector than by ref.
 - If a click triggers a rerender, throw away old refs and snapshot again.
 - If a modal appears, capture it before dismissing it.
+- For sheets or dialogs with long lists, do not stop at the first visible state.
+  Scroll the sheet's real internal scroller, then confirm the input field and footer CTA still remain reachable in the viewport.
+- When an element is offscreen inside a nested scroller, scroll that container rather than the page root and re-check the element rects before taking the screenshot.
 
 ## Minimum Page Matrix
 
@@ -142,6 +145,8 @@ Capture at least these states in one acceptance pass:
 - If login fails, verify the code is `424242` and the session was reset first.
 - If a page opens but shows the wrong state, re-open it with the correct `flow=` or `page=` query param.
 - If a screenshot is blurry or clipped, re-run after checking the hidden session is still on `https://localhost:3443`.
+- If a long sheet hides its input or footer actions, treat it as a real regression even if the controls exist in the DOM.
+  Reproduce with the nested scroller filled, then capture both the broken and fixed state only after the real viewport path passes.
 - If the app state looks stale, clear local storage again and reload.
 
 ## Recommended Output Folder

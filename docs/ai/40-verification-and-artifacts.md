@@ -20,6 +20,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Verification Expectations
 
 - UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
+- Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
+  Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - State-machine fixes: test the full path, not just the isolated component.
 

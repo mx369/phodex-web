@@ -27,7 +27,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Email OTP login | Real | Uses `/api/auth/request-code`, `/api/auth/verify-code`, and optional `/api/auth/dev-code`; request-code now prefers live Resend delivery and falls back to the local mailbox only when mail config is unavailable |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | `New Chat` now swaps immediately into a local pending thread state while the bridge asks Codex to create the real thread; first send still creates the real thread and flushes the composer once it lands |
-| Drawer create sheet | Real | Drawer `New Chat`, `New Worktree`, and project-group `+` now open a shared project-picker sheet so creation mode and target project are explicit before `thread:create` is sent |
+| Drawer create sheet | Real | Drawer `New Chat`, `New Worktree`, and project-group `+` now open a shared project-picker sheet so creation mode and target project are explicit before `thread:create` is sent; the custom-path affordance now stays above the project list, long project lists scroll inside the sheet, and the footer actions remain in view |
 | Drawer worktree create | Real | Worktree creation now makes a real git worktree under `~/.codex/worktrees/<repo>/...` before starting the new Codex thread |
 | Drawer custom project create | Real | The create sheet now accepts either a folder name or a full path: folder names create a fresh project under `~/.phodex-web/projects`, while absolute paths are used directly as the new local chat cwd |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |
