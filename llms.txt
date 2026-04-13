@@ -12,6 +12,7 @@ Important notes:
 
 - [Root agent guide](./AGENTS.md): Global rules and the default reading order.
 - [Start here](./docs/ai/00-start-here.md): Minimal project truth for first-pass context.
+- [Product decisions](./docs/ai/05-product-decisions.md): High-priority scope rules. No QR login. No end-to-end encryption.
 - [Context manifest](./docs/ai/context-manifest.yaml): Machine-readable disclosure map and task router.
 
 ## Web

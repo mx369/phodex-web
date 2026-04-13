@@ -2,11 +2,14 @@
 
 Use this file as the first read. Stop here unless the task clearly needs more.
 
+Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md`.
+
 ## What This Repo Is
 
 - Workspace: Bun monorepo with `apps/web`, `apps/server`, and `packages/shared`.
 - Goal: recreate the `remodex` mobile app experience and behavior using Bun, Vite, Vue 3, and TypeScript.
 - Constraint: reconstruction must be driven by the upstream app source and real behavior, not by marketing screenshots or fake device framing.
+- Product overrides: no QR login, no camera pairing, no end-to-end encryption.
 
 ## What Is Real Today
 

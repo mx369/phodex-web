@@ -9,10 +9,6 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists | Not pixel-perfect; copy/layout still approximate |
 | Bootstrap failure | Shell | Rendered and navigable | Subscription restore is not real |
 | Subscription gate | Shell | Plan selection UI and navigation exist | No real purchase or restore flow |
-| Camera permission | Shell | Rendered and routed | No real platform permission bridge |
-| QR scanner | Shell | Rendered and routed | No real camera or QR decode |
-| Scan error | Shell | Rendered and routed | Driven by simulated error paths |
-| Bridge recovery | Shell | Rendered and routed | Copy command is local UI, not full upstream recovery flow |
 | Email OTP | Real | Request code, verify code, dev bypass all work | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content | Layout still differs from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create work | Layout and interaction details still diverge |
@@ -38,12 +34,18 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Archive thread | Real | Uses Codex archive/unarchive |
 | Delete thread | Not real | UI exists but server returns archive-only guidance |
 | Purchase / restore purchase | Not real | UI shells only |
-| QR pair from camera | Not real | Simulated pages only |
+
+## Excluded Scope
+
+- QR-code login and camera pairing are out of scope.
+- End-to-end encryption is out of scope.
+- If old source-audit docs mention QR login or E2EE, treat them as upstream reference only, not as implementation targets.
 
 ## UI-Specific Warnings
 
 - Do not copy the App Store or marketing device frame. Rebuild the app content inside the screenshots, not the screenshot chrome.
 - Do not add fake status bars or dynamic islands.
+- Do not reintroduce QR-pairing screens or encryption marketing because of the original app.
 - If changing page structure, update this file and the screenshot evidence when the behavior changes.
 
 ## Deep References

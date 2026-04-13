@@ -5,17 +5,20 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 ## Read Order
 
 1. Read `/Users/young/mx/tmp/phodex-web/docs/ai/00-start-here.md`.
-2. Read `/Users/young/mx/tmp/phodex-web/docs/ai/context-manifest.yaml` only if you need task routing or deeper context.
-3. Read the nearest subproject guide before editing code:
+2. Read `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md`.
+3. Read `/Users/young/mx/tmp/phodex-web/docs/ai/context-manifest.yaml` only if you need task routing or deeper context.
+4. Read the nearest subproject guide before editing code:
    - `/Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md`
    - `/Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md`
-4. Pull in deeper docs only when required by the task.
+5. Pull in deeper docs only when required by the task.
 
 ## Current Mission
 
 - The target is a source-driven recreation of the `remodex` mobile app behavior and UI, not a desktop web app with fake phone hardware chrome.
 - Prefer code- and source-audit-driven reconstruction over copying marketing screenshots or device frames.
 - The current build is partial. Real OTP auth, relay transport, and local Codex chat bridging work. Pixel parity and many app flows do not.
+- Product override: do not implement QR-code login.
+- Product override: do not implement end-to-end encryption. HTTPS/WSS transport is sufficient.
 
 ## Global Rules
 
@@ -39,6 +42,7 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 - Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
 - Prioritize work surfaces and interactions over decorative marketing composition.
 - Empty states should explain the next action, not act like landing pages.
+- Do not preserve upstream QR login or encryption UX just because they existed in `remodex`; those features are explicitly out of scope here.
 
 ## Verification
 
@@ -49,6 +53,7 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 ## Deep Reads
 
 - `/Users/young/mx/tmp/phodex-web/llms.txt`: cross-tool LLM index.
+- `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md`: high-priority durable product overrides.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md`: broader state and known gaps.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`: page matrix and feature status.
 - `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`: technical interfaces and bridge behavior.

@@ -23,17 +23,21 @@ Implemented and real:
 
 Implemented but incomplete:
 
-- Onboarding, bootstrap failure, subscription gate, camera permission, scanner, scanner error, bridge recovery, and paywall pages.
+- Onboarding, bootstrap failure, subscription gate, and paywall pages.
 - Home empty, sidebar, settings, archived, and about pages.
 - Model selector, access mode toggle, fast/plan UI toggles, pinned plan surface, and autocomplete UI.
 
 Not yet source-equal or still shell-level:
 
 - Pixel parity across screens.
-- Real QR camera scanning.
 - Real subscription purchase or restore flows.
 - Voice and attachments.
 - Many upstream interaction details such as swipe actions, context menus, richer approval flows, and deeper tool/file surfaces.
+
+Explicitly excluded by current product direction:
+
+- QR-code login and camera pairing.
+- End-to-end encryption and upstream encrypted-envelope flows.
 
 ## Current Architectural Debt
 

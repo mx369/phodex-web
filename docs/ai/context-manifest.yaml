@@ -11,7 +11,8 @@ entrypoints:
 defaults:
   strategy:
     - Read level 0 first.
-    - Stop if level 0 plus the nearest package guide is sufficient.
+    - Read the durable product decisions before descending into package or reference docs.
+    - Stop if level 0 plus product decisions plus the nearest package guide is sufficient.
     - Pull in reference docs only for the active work surface.
     - Treat historical docs as supporting material, not truth, unless code confirms them.
   constraints:
@@ -44,9 +45,23 @@ resources:
     read_when: Always.
     stop_if_sufficient: true
     next:
+      - /Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md
       - /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
       - /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
       - /Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md
+
+  - id: product_decisions
+    level: 0
+    path: /Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md
+    approx_tokens: 220
+    read_when: >
+      Always read before planning or implementing auth, security, onboarding, or source-app restoration.
+    stop_if_sufficient: true
+    next:
+      - /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md
+      - /Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md
 
   - id: current_state
     level: 1

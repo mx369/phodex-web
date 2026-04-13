@@ -18,6 +18,11 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `GET /api/auth/dev-code`: read current OTP/static bypass when dev bypass is enabled.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 
+## Product Scope Constraints
+
+- Auth must stay email-OTP-first. Do not add QR login or camera pairing flows.
+- Transport security is HTTPS/WSS only. Do not add end-to-end encryption protocols or key exchange layers.
+
 ## Client -> Server Events
 
 - `thread:create`

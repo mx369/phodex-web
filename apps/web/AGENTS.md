@@ -13,12 +13,14 @@ Read this file before editing anything under `apps/web`.
 - Do not add simulated iPhone chrome, status bars, or marketing device framing.
 - Prefer source-driven page reconstruction over screenshot imitation.
 - Keep real flows wired to the live client state. Do not fake success states if the server does not support them.
+- Do not implement QR-code login or camera pairing.
+- Do not implement end-to-end encryption or encryption-themed UX copy.
 
 ## Current Truth
 
 - The UI still uses a fixed-width web surface and overlay sheets. Treat that as current debt, not as the desired end state.
 - `Email OTP`, `new chat`, `send`, `stream`, `stop`, `queue`, `resume draft`, `rename`, and `archive` are wired.
-- `QR scanner`, `voice`, `purchase`, and parts of `settings/about/paywall` remain partial or shell-level.
+- `voice`, `purchase`, and parts of `settings/about/paywall` remain partial or shell-level.
 
 ## Required Reads By Task
 
