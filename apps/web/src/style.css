@@ -120,8 +120,7 @@ button {
   color: rgba(255, 255, 255, 0.52);
 }
 
-.onboarding-flow,
-.pairing-screen {
+.onboarding-flow {
   position: relative;
   display: flex;
   flex: 1;
@@ -172,7 +171,6 @@ button {
 
 .onboarding-flow__welcome-copy h1,
 .onboarding-flow__content h2,
-.pairing-screen__head h2,
 .root-auth-screen__head h2 {
   margin: 0;
   font-size: 31px;
@@ -182,7 +180,6 @@ button {
 
 .onboarding-flow__welcome-copy p,
 .onboarding-flow__content p,
-.pairing-screen__head p,
 .root-auth-screen__head p {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.56);
@@ -409,16 +406,7 @@ button {
   margin-top: 2px;
 }
 
-.pairing-screen__backdrop {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at top, rgba(92, 109, 255, 0.16), transparent 34%),
-    radial-gradient(circle at bottom, rgba(239, 142, 85, 0.14), transparent 30%),
-    #050505;
-}
-
-.pairing-screen__topbar {
+.root-auth-screen__topbar {
   position: relative;
   z-index: 1;
   display: grid;
@@ -428,55 +416,22 @@ button {
   padding: 6px 18px 0;
 }
 
-.pairing-screen__topbar span {
+.root-auth-screen__topbar span {
   text-align: center;
   color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
   font-weight: 600;
 }
 
-.pairing-screen__topbar-spacer {
+.root-auth-screen__topbar-spacer {
   width: 38px;
   height: 38px;
-}
-
-.pairing-screen__card {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 12px;
-  width: calc(100% - 36px);
-  max-height: calc(100% - 104px);
-  margin: 74px 18px 18px;
-  padding: 20px 18px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  background: rgba(18, 18, 18, 0.76);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.26);
-  overflow: auto;
-  scrollbar-width: none;
-}
-
-.pairing-screen__card::-webkit-scrollbar {
-  display: none;
 }
 
 .icon-button--dark {
   background: rgba(255, 255, 255, 0.08);
   color: white;
   box-shadow: none;
-}
-
-.pairing-screen__head {
-  display: grid;
-  gap: 10px;
-}
-
-.pairing-screen__logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
 }
 
 .input-label--dark {
@@ -504,48 +459,7 @@ button {
   color: white;
 }
 
-.pairing-screen__status {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.66);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.pairing-screen__backdoor {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.pairing-screen__backdoor-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 12px;
-}
-
-.pairing-screen__backdoor-row strong {
-  color: white;
-  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
-  font-size: 13px;
-}
-
-.pairing-screen__link {
-  justify-self: center;
-  margin-top: 4px;
-  padding: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-}
-
-.root-auth-screen,
-.pairing-screen--scanner {
+.root-auth-screen {
   position: relative;
   display: flex;
   flex: 1;
@@ -557,8 +471,7 @@ button {
   scrollbar-width: none;
 }
 
-.root-auth-screen::-webkit-scrollbar,
-.pairing-screen--scanner::-webkit-scrollbar {
+.root-auth-screen::-webkit-scrollbar {
   display: none;
 }
 
@@ -606,9 +519,20 @@ button {
   padding-bottom: 16px;
 }
 
+.root-auth-screen__card--email {
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
 .root-auth-screen__head {
   display: grid;
   gap: 10px;
+}
+
+.root-auth-screen__logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
 }
 
 .root-auth-screen__hero-icon {
@@ -675,6 +599,51 @@ button {
   color: rgba(255, 255, 255, 0.82);
   font-size: 12px;
   font-weight: 600;
+}
+
+.root-auth-screen__status {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.root-auth-screen__backdoor {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.root-auth-screen__backdoor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+}
+
+.root-auth-screen__backdoor-row strong {
+  color: white;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.root-auth-screen__card .primary-cta,
+.root-auth-screen__card .ghost-cta {
+  margin-top: 0;
+}
+
+.root-auth-screen__text-link {
+  justify-self: center;
+  margin-top: 4px;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
 }
 
 .gate-plan-scroll {
@@ -755,121 +724,6 @@ button {
   color: rgba(255, 255, 255, 0.64);
   font-size: 12px;
   line-height: 1.45;
-}
-
-.pairing-screen--scanner {
-  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-}
-
-.pairing-screen--scanner .pairing-screen__card {
-  gap: 14px;
-  padding-bottom: 18px;
-}
-
-.pairing-screen--scanner .primary-cta,
-.pairing-screen--scanner .ghost-cta,
-.root-auth-screen .primary-cta,
-.root-auth-screen .ghost-cta {
-  margin-top: 0;
-}
-
-.pairing-screen--scanner .primary-cta,
-.pairing-screen--scanner .ghost-cta {
-  width: 100%;
-}
-
-.scanner-preview {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 226px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.14), transparent 24%),
-    radial-gradient(circle at 50% 50%, rgba(92, 109, 255, 0.18), transparent 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.scanner-preview__corner {
-  position: absolute;
-  width: 28px;
-  height: 28px;
-  border-color: rgba(255, 255, 255, 0.9);
-  border-style: solid;
-  opacity: 0.96;
-}
-
-.scanner-preview__corner--tl {
-  top: 16px;
-  left: 16px;
-  border-width: 2px 0 0 2px;
-  border-top-left-radius: 10px;
-}
-
-.scanner-preview__corner--tr {
-  top: 16px;
-  right: 16px;
-  border-width: 2px 2px 0 0;
-  border-top-right-radius: 10px;
-}
-
-.scanner-preview__corner--bl {
-  bottom: 16px;
-  left: 16px;
-  border-width: 0 0 2px 2px;
-  border-bottom-left-radius: 10px;
-}
-
-.scanner-preview__corner--br {
-  right: 16px;
-  bottom: 16px;
-  border-width: 0 2px 2px 0;
-  border-bottom-right-radius: 10px;
-}
-
-.scanner-preview__reticle {
-  width: 142px;
-  height: 142px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 60%),
-    rgba(255, 255, 255, 0.03);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 0 0 18px rgba(255, 255, 255, 0.015);
-}
-
-.scanner-preview__hint {
-  position: absolute;
-  right: 18px;
-  bottom: 16px;
-  left: 18px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
-}
-
-.scanner-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.scanner-actions .primary-cta,
-.scanner-actions .ghost-cta {
-  width: 100%;
-  min-height: 44px;
-}
-
-.scanner-actions .primary-cta {
-  margin-top: 0;
 }
 
 .auth-mobile {
@@ -2674,8 +2528,7 @@ button {
     border: 0;
   }
 
-  .root-auth-screen__card,
-  .pairing-screen__card {
+  .root-auth-screen__card {
     width: calc(100% - 28px);
     margin-right: 14px;
     margin-left: 14px;
@@ -2691,10 +2544,6 @@ button {
 
   .gate-plan-scroll {
     grid-auto-columns: 158px;
-  }
-
-  .scanner-preview {
-    min-height: 208px;
   }
 
   .app-sheet__body {

@@ -11,10 +11,6 @@ type RootFlowState =
   | "onboarding"
   | "bootstrap-failure"
   | "subscription-gate"
-  | "camera-permission"
-  | "scanner"
-  | "scanner-error"
-  | "bridge-update"
   | "email-otp"
   | "auto";
 
@@ -34,10 +30,6 @@ const onboardingPage = ref(0);
 const onboardingSeen = ref(readOnboardingSeen());
 const onboardingInstallWarningVisible = ref(false);
 const onboardingTouchStartX = ref(0);
-const pairingStage = ref<Exclude<RootFlowState, "onboarding" | "bootstrap-failure" | "subscription-gate" | "auto">>(
-  "camera-permission"
-);
-const scannerErrorMessage = ref("The QR code could not be read.");
 const selectedPlanId = ref("annual");
 const shellPageStack = ref<ShellPageState[]>([]);
 const activePanel = computed(() => shellPageStack.value.at(-1) ?? null);
@@ -50,7 +42,7 @@ const onboardingScreens = [
     kind: "welcome",
     title: "Remodex",
     subtitle: "Control Codex from your iPhone.",
-    badge: "End-to-end encrypted",
+    badge: "Runs on your Mac",
   },
   {
     kind: "features",
@@ -72,20 +64,20 @@ const onboardingScreens = [
       {
         icon: "⌁",
         tone: "cyan",
-        title: "End-to-end encrypted",
-        subtitle: "The relay never sees your prompts or code",
+        title: "Live relay sync",
+        subtitle: "Replies stream from the desktop session in real time",
       },
       {
-        icon: "◉",
+        icon: "✎",
         tone: "purple",
-        title: "Voice mode",
-        subtitle: "Talk to Codex with speech-to-text",
+        title: "Queued drafts",
+        subtitle: "Write the next prompt while the current run is still streaming",
       },
       {
         icon: "△",
         tone: "orange",
-        title: "Subagents, skills and /commands",
-        subtitle: "Parallel agent monitoring from the phone shell",
+        title: "Plans, skills and /commands",
+        subtitle: "Use plan mode, slash commands, and file mentions from the mobile shell",
       },
     ],
   },
@@ -102,15 +94,15 @@ const onboardingScreens = [
     step: "Step 2",
     icon: "↔",
     title: "Install the Bridge",
-    subtitle: "A lightweight relay that securely connects your Mac to your iPhone.",
+    subtitle: "A lightweight relay that connects your Mac to your iPhone.",
     command: "npm install -g remodex@latest",
   },
   {
     kind: "step",
     step: "Step 3",
     icon: "@",
-    title: "Start Pairing",
-    subtitle: "Run this on your Mac. A QR code will appear in your terminal — scan it next.",
+    title: "Start Remodex",
+    subtitle: "Run this on your Mac, then continue here with email verification.",
     command: "remodex up",
   },
 ] as const;
@@ -142,8 +134,8 @@ const subscriptionGateFeatures = [
     subtitle: "Commit, push, pull, and switch branches",
   },
   {
-    title: "End-to-end encrypted",
-    subtitle: "The relay never sees your prompts or code",
+    title: "Live relay sync",
+    subtitle: "Replies stream from the desktop session in real time",
   },
   {
     title: "Voice mode",
@@ -162,7 +154,7 @@ const subscriptionGateFeatures = [
 const paywallFeatures = [
   "Fast mode",
   "Git from your phone",
-  "End-to-end encrypted",
+  "Live relay sync",
   "Voice mode with speech-to-text",
   "Subagents",
   "$skills, /commands & @file mentions",
@@ -171,9 +163,9 @@ const paywallFeatures = [
 ] as const;
 
 const architectureSteps = [
-  ["Remodex iOS", "WebSocket", "Bridge (Mac)"],
-  ["Bridge (Mac)", "JSON-RPC", "codex app-server"],
-  ["codex app-server", "JSONL rollout", "~/.codex/sessions"],
+  ["Remodex mobile UI", "HTTPS + WSS", "Phodex relay"],
+  ["Phodex relay", "JSON-RPC", "Bridge (Mac)"],
+  ["Bridge (Mac)", "JSONL rollout", "codex app-server"],
 ] as const;
 
 const aboutSections = [
@@ -188,29 +180,24 @@ const aboutSections = [
       "A lightweight WebSocket relay routes messages between your iPhone and your Mac and only needs connection metadata to do that job.",
   },
   {
+    title: "Sign In",
+    body:
+      "Use a one-time email code to connect this phone to the relay session running from your Mac.",
+  },
+  {
     title: "Codex App-Server",
     body:
       "The bridge spawns codex app-server, so phone conversations stay first-class Codex sessions and produce JSONL rollout files under ~/.codex/sessions.",
   },
   {
-    title: "Pairing & Security",
+    title: "Session Recovery",
     body:
-      "On first connect, the bridge prints a QR code containing the relay URL, the session ID, and the bridge identity public key.",
-  },
-  {
-    title: "End-to-End Encryption",
-    body:
-      "After pairing, every message is wrapped in encrypted envelopes with X25519 key exchange, Ed25519 identity signatures, AES-256-GCM, and monotonic counters.",
+      "If the phone disconnects, sign in again, reload the relay snapshot, and continue the same Codex threads from your Mac.",
   },
   {
     title: "Git & Workspace",
     body:
       "The bridge handles git commands from your phone locally on the Mac, including status, commit, push, pull, branch switching, and workspace revert flows.",
-  },
-  {
-    title: "Resilience",
-    body:
-      "Trusted pairs auto-reconnect on later launches, and the QR code remains available as a recovery path when trust changes or the session cannot be resolved.",
   },
   {
     title: "Desktop Integration",
@@ -263,13 +250,13 @@ const rootFlow = computed<RootFlowState>(() => {
     return "email-otp";
   }
 
-  return pairingStage.value;
+  return "email-otp";
 });
 const currentOnboardingScreen = computed(() => onboardingScreens[onboardingPage.value]);
 const onboardingCtaLabel = computed(() => {
   if (onboardingPage.value === 0) return "Get Started";
   if (onboardingPage.value === 1) return "Set Up";
-  if (onboardingPage.value === onboardingScreens.length - 1) return "Open Scanner";
+  if (onboardingPage.value === onboardingScreens.length - 1) return "Continue with Email";
   return "Continue";
 });
 const currentThread = computed(() => {
@@ -376,7 +363,7 @@ const homeStatusCopy = computed(() => {
     case "connecting":
       return "The relay is still rehydrating thread state from the desktop side.";
     case "disconnected":
-      return "The mobile shell needs to pair again before it can stream turns from the Mac.";
+      return "Sign in again with email to reconnect this mobile shell to your Mac.";
     default:
       return "Reconnect to recover threads, queued drafts, and remote controls.";
   }
@@ -564,7 +551,7 @@ function setOnboardingPage(nextPage: number, skipInstallWarning = false) {
 function completeOnboarding() {
   onboardingSeen.value = true;
   window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
-  pairingStage.value = "camera-permission";
+  rootFlowState.value = "email-otp";
 }
 
 function advanceOnboarding(skipInstallWarning = false) {
@@ -603,14 +590,13 @@ function restartOnboarding() {
   onboardingPage.value = 0;
   onboardingSeen.value = false;
   onboardingInstallWarningVisible.value = false;
-  pairingStage.value = "camera-permission";
+  rootFlowState.value = "onboarding";
   window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
   shellPageStack.value = [];
 }
 
 async function handleRequestCode() {
   await client.requestCode();
-  pairingStage.value = "email-otp";
 }
 
 async function handleVerifyCode() {
@@ -755,40 +741,14 @@ function switchRootFlow(nextFlow: RootFlowState) {
     return;
   }
 
-  if (nextFlow === "camera-permission" || nextFlow === "scanner" || nextFlow === "scanner-error" || nextFlow === "bridge-update" || nextFlow === "email-otp") {
-    pairingStage.value = nextFlow;
+  if (nextFlow === "onboarding") {
+    onboardingSeen.value = false;
     return;
   }
 
-  if (nextFlow === "bootstrap-failure" || nextFlow === "subscription-gate") {
+  if (nextFlow === "bootstrap-failure" || nextFlow === "subscription-gate" || nextFlow === "email-otp") {
     onboardingSeen.value = true;
-    pairingStage.value = "camera-permission";
   }
-}
-
-function continueFromCameraPermission() {
-  pairingStage.value = "scanner";
-}
-
-function showScannerError(message = "The QR code could not be read.") {
-  scannerErrorMessage.value = message;
-  pairingStage.value = "scanner-error";
-}
-
-function showBridgeUpdateRecovery() {
-  pairingStage.value = "bridge-update";
-}
-
-function resumeScannerFlow() {
-  pairingStage.value = "scanner";
-}
-
-function openEmailOtpFallback() {
-  pairingStage.value = "email-otp";
-}
-
-function copyBridgeUpdateCommand(command: string) {
-  void navigator.clipboard.writeText(command);
 }
 
 function openExternal(url: string) {
@@ -809,13 +769,13 @@ function readRootFlowState(): RootFlowState {
     if (
       value === "bootstrap-failure" ||
       value === "subscription-gate" ||
-      value === "camera-permission" ||
-      value === "scanner" ||
-      value === "scanner-error" ||
-      value === "bridge-update" ||
       value === "email-otp"
     ) {
       return value;
+    }
+
+    if (value === "camera-permission" || value === "scanner" || value === "scanner-error" || value === "bridge-update") {
+      return "email-otp";
     }
   } catch {
     return "auto";
@@ -939,10 +899,10 @@ function readShellPageState(): ShellPageState | null {
 
               <section v-else-if="rootFlow === 'bootstrap-failure'" class="root-auth-screen">
                 <div class="root-auth-screen__backdrop root-auth-screen__backdrop--failure"></div>
-                <header class="pairing-screen__topbar">
+                <header class="root-auth-screen__topbar">
                   <button class="icon-button icon-button--dark" @click="switchRootFlow('onboarding')">‹</button>
                   <span>Subscription</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
+                  <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
                 <div class="root-auth-screen__card">
                   <div class="root-auth-screen__head">
@@ -953,7 +913,7 @@ function readShellPageState(): ShellPageState | null {
                   </div>
 
                   <button class="primary-cta primary-cta--dark" @click="switchRootFlow('subscription-gate')">Retry</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="switchRootFlow('camera-permission')">Restore Purchases</button>
+                  <button class="ghost-cta ghost-cta--dark" @click="switchRootFlow('email-otp')">Continue with Email</button>
 
                   <div class="root-auth-screen__links">
                     <button class="root-auth-screen__link" @click="openExternal('https://example.com/privacy')">Privacy</button>
@@ -964,14 +924,14 @@ function readShellPageState(): ShellPageState | null {
 
               <section v-else-if="rootFlow === 'subscription-gate'" class="root-auth-screen">
                 <div class="root-auth-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
+                <header class="root-auth-screen__topbar">
                   <button class="icon-button icon-button--dark" @click="switchRootFlow('bootstrap-failure')">‹</button>
                   <span>Remodex Pro</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
+                  <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
                 <div class="root-auth-screen__card root-auth-screen__card--gate">
                   <div class="root-auth-screen__head">
-                    <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
+                    <img :src="remodexAppLogo" alt="" class="root-auth-screen__logo" />
                     <span class="section-label section-label--light">Subscription Gate</span>
                     <h2>Unlock the app to connect your iPhone to Codex running on your Mac.</h2>
                     <p>Remodex is subscription-only. Unlock the app to connect your iPhone to Codex running on your Mac.</p>
@@ -1001,7 +961,7 @@ function readShellPageState(): ShellPageState | null {
                     </article>
                   </div>
 
-                  <button class="primary-cta primary-cta--dark" @click="switchRootFlow('camera-permission')">Continue</button>
+                  <button class="primary-cta primary-cta--dark" @click="switchRootFlow('email-otp')">Continue with Email</button>
                   <div class="root-auth-screen__links">
                     <button class="root-auth-screen__link" @click="switchRootFlow('email-otp')">Use Email OTP</button>
                     <button class="root-auth-screen__link" @click="switchRootFlow('bootstrap-failure')">Restore Purchases</button>
@@ -1011,128 +971,19 @@ function readShellPageState(): ShellPageState | null {
                 </div>
               </section>
 
-              <section v-else-if="rootFlow === 'camera-permission'" class="pairing-screen pairing-screen--scanner">
-                <div class="pairing-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('subscription-gate')">‹</button>
-                  <span>Camera Access</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
-                </header>
-                <div class="pairing-screen__card">
-                  <div class="pairing-screen__head">
-                    <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
-                    <span class="section-label section-label--light">Camera Permission</span>
-                    <h2>Camera access needed</h2>
-                    <p>Open Settings and allow camera access to scan the pairing QR code.</p>
-                  </div>
-
-                  <button class="primary-cta primary-cta--dark" @click="continueFromCameraPermission">Allow Camera</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="openEmailOtpFallback">Use Email OTP Instead</button>
-                  <button class="pairing-screen__link" @click="showScannerError('Camera permission was denied on this device.')">Simulate Permission Error</button>
-                </div>
-              </section>
-
-              <section v-else-if="rootFlow === 'scanner'" class="pairing-screen pairing-screen--scanner">
-                <div class="pairing-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('camera-permission')">‹</button>
-                  <span>QR Scanner</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
-                </header>
-                <div class="pairing-screen__card pairing-screen__card--scanner">
-                  <div class="pairing-screen__head">
-                    <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
-                    <span class="section-label section-label--light">QR Scanner</span>
-                    <h2>Scan the QR code from Remodex CLI.</h2>
-                    <p>If the bridge version does not match, update Remodex on your Mac and scan a fresh QR code.</p>
-                  </div>
-
-                  <div class="scanner-preview">
-                    <div class="scanner-preview__corner scanner-preview__corner--tl"></div>
-                    <div class="scanner-preview__corner scanner-preview__corner--tr"></div>
-                    <div class="scanner-preview__corner scanner-preview__corner--bl"></div>
-                    <div class="scanner-preview__corner scanner-preview__corner--br"></div>
-                    <div class="scanner-preview__reticle"></div>
-                    <span class="scanner-preview__hint">Point the camera at the QR code in the terminal</span>
-                  </div>
-
-                  <div class="scanner-actions">
-                    <button class="primary-cta primary-cta--dark" @click="showBridgeUpdateRecovery">Bridge Mismatch</button>
-                    <button class="ghost-cta ghost-cta--dark" @click="showScannerError()">Scan Error</button>
-                  </div>
-                  <button class="ghost-cta ghost-cta--dark" @click="openEmailOtpFallback">Use Email OTP Instead</button>
-                </div>
-              </section>
-
-              <section v-else-if="rootFlow === 'scanner-error'" class="pairing-screen pairing-screen--scanner">
-                <div class="pairing-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="resumeScannerFlow">‹</button>
-                  <span>Scan Error</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
-                </header>
-                <div class="pairing-screen__card">
-                  <div class="pairing-screen__head">
-                    <div class="root-auth-screen__hero-icon root-auth-screen__hero-icon--warn">!</div>
-                    <span class="section-label section-label--light">Scan Error</span>
-                    <h2>{{ scannerErrorMessage }}</h2>
-                    <p>The camera couldn’t decode the code. Retry scanning, update the bridge, or use the local email fallback.</p>
-                  </div>
-                  <button class="primary-cta primary-cta--dark" @click="resumeScannerFlow">Try Again</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="showBridgeUpdateRecovery">Bridge Recovery</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="openEmailOtpFallback">Email OTP</button>
-                </div>
-              </section>
-
-              <section v-else-if="rootFlow === 'bridge-update'" class="pairing-screen pairing-screen--scanner">
-                <div class="pairing-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="resumeScannerFlow">‹</button>
-                  <span>Bridge Recovery</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
-                </header>
-                <div class="pairing-screen__card pairing-screen__card--scanner">
-                  <div class="pairing-screen__head">
-                    <div class="root-auth-screen__hero-icon">↻</div>
-                    <span class="section-label section-label--light">Bridge Update</span>
-                    <h2>Update Remodex on your Mac before scanning again.</h2>
-                    <p>The QR code belongs to a different bridge build. Copy the command, update the Mac package, then come back here.</p>
-                  </div>
-
-                  <div class="root-auth-screen__feature-list">
-                    <article class="root-auth-screen__feature-row">
-                      <strong>1. Update Remodex</strong>
-                      <p>npm install -g remodex@latest</p>
-                    </article>
-                    <article class="root-auth-screen__feature-row">
-                      <strong>2. Restart the bridge</strong>
-                      <p>Run remodex up again after the install finishes.</p>
-                    </article>
-                    <article class="root-auth-screen__feature-row">
-                      <strong>3. Scan a new QR code</strong>
-                      <p>The terminal will print a fresh QR code once the bridge is ready.</p>
-                    </article>
-                  </div>
-
-                  <button class="primary-cta primary-cta--dark" @click="copyBridgeUpdateCommand('npm install -g remodex@latest')">Copy Command</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="resumeScannerFlow">I Updated It</button>
-                  <button class="ghost-cta ghost-cta--dark" @click="openEmailOtpFallback">Use Email OTP Instead</button>
-                </div>
-              </section>
-
-              <section v-else class="pairing-screen pairing-screen--scanner">
-                <div class="pairing-screen__backdrop"></div>
-                <header class="pairing-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('camera-permission')">‹</button>
+              <section v-else class="root-auth-screen">
+                <div class="root-auth-screen__backdrop"></div>
+                <header class="root-auth-screen__topbar">
+                  <button class="icon-button icon-button--dark" @click="switchRootFlow('onboarding')">‹</button>
                   <span>Email OTP</span>
-                  <span class="pairing-screen__topbar-spacer"></span>
+                  <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
-                <div class="pairing-screen__card">
-                  <div class="pairing-screen__head">
-                    <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
+                <div class="root-auth-screen__card root-auth-screen__card--email">
+                  <div class="root-auth-screen__head">
+                    <img :src="remodexAppLogo" alt="" class="root-auth-screen__logo" />
                     <span class="section-label section-label--light">Email OTP</span>
                     <h2>Continue with email verification.</h2>
-                    <p>Use a local verification code when QR pairing is unavailable on this device.</p>
+                    <p>Use a one-time verification code to connect this phone to the relay session running on your Mac.</p>
                   </div>
 
                   <label class="input-label input-label--dark" for="email">Email</label>
@@ -1174,20 +1025,20 @@ function readShellPageState(): ShellPageState | null {
                     </button>
                   </template>
 
-                  <p v-if="state.ui.authStatus" class="pairing-screen__status">{{ state.ui.authStatus }}</p>
+                  <p v-if="state.ui.authStatus" class="root-auth-screen__status">{{ state.ui.authStatus }}</p>
 
-                  <div v-if="state.ui.devCode || state.auth.staticBackdoorCode" class="pairing-screen__backdoor">
-                    <div class="pairing-screen__backdoor-row">
+                  <div v-if="state.ui.devCode || state.auth.staticBackdoorCode" class="root-auth-screen__backdoor">
+                    <div class="root-auth-screen__backdoor-row">
                       <span>Latest OTP</span>
                       <strong>{{ state.ui.devCode ?? "Pending" }}</strong>
                     </div>
-                    <div class="pairing-screen__backdoor-row">
+                    <div class="root-auth-screen__backdoor-row">
                       <span>Static backdoor</span>
                       <strong>{{ state.auth.staticBackdoorCode ?? "Disabled" }}</strong>
                     </div>
                   </div>
 
-                  <button class="pairing-screen__link" @click="restartOnboarding">Show setup flow again</button>
+                  <button class="root-auth-screen__text-link" @click="restartOnboarding">Show setup flow again</button>
                 </div>
               </section>
             </template>
@@ -1378,7 +1229,7 @@ function readShellPageState(): ShellPageState | null {
                       <img :src="remodexAppLogo" alt="" class="phone-empty-state__logo" />
                       <span class="section-label">Conversation</span>
                       <h2>Hi! How can I help you?</h2>
-                      <p>Chats are end-to-end encrypted.</p>
+                      <p>Messages stream from the Codex session running on your Mac.</p>
                     </div>
 
                     <div v-else class="home-empty-state">
@@ -1688,7 +1539,7 @@ function readShellPageState(): ShellPageState | null {
                         <span class="section-label">Remodex</span>
                         <h2 class="settings-hero-title">Control Codex from your iPhone.</h2>
                         <p class="settings-copy">
-                          The Codex runtime stays on your Mac. Your phone is a secure remote control connected through a relay.
+                          The Codex runtime stays on your Mac. Your phone is a focused remote control connected through a relay.
                         </p>
                       </section>
 

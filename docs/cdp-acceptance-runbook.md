@@ -2,7 +2,7 @@
 
 This runbook describes how to drive `/Users/young/mx/tmp/phodex-web` through a hidden Electron CDP session for repeatable acceptance screenshots.
 
-It is designed around the existing `electron-cdp-automation` wrapper and the current app behavior in `apps/web/src/App.vue`, which already reads:
+It is designed around the existing `electron-cdp-automation` wrapper and the current app behavior in `apps/web/src/App.vue`, which reads:
 - `flow=` for root-flow states
 - `page=` for authenticated shell pages
 
@@ -23,6 +23,7 @@ It is designed around the existing `electron-cdp-automation` wrapper and the cur
   - `$HOME/.codex/skills/electron-cdp-automation/scripts/electron_cdp.sh`
 - Optional but faster:
   - `export ELECTRON_CDP_ELECTRON_BIN="$PWD/node_modules/.bin/electron"`
+- For local TLS, start Electron with `--allow-insecure`
 
 ## Session Model
 
@@ -40,10 +41,6 @@ Use `flow=` for unauthenticated root states:
 
 - `bootstrap-failure`
 - `subscription-gate`
-- `camera-permission`
-- `scanner`
-- `scanner-error`
-- `bridge-update`
 - `email-otp`
 
 Use `page=` for authenticated shell pages:
@@ -57,14 +54,14 @@ If you need the onboarding flow, clear local state first and open `https://local
 
 ## Exact Acceptance Sequence
 
-1. Start or reuse the hidden session.
+1. Start or reuse the hidden session with `--allow-insecure`.
 2. Clear local state for `https://localhost:3443`.
 3. Open the base app URL.
 4. Capture onboarding screenshots from a clean state.
 5. Open `?flow=email-otp`.
 6. Log in as `qa-cdp@local.dev` using code `424242`.
-7. Open `?page=settings`, `?page=archived`, `?page=about`, and `?page=paywall` as needed.
-8. Use snapshot refs to click buttons that are not addressable by URL alone.
+7. Open `?page=about`, `?page=paywall`, and any other authenticated pages you need.
+8. Use snapshot refs or selector-driven `evaluate` calls for controls that are not addressable by URL alone.
 9. Re-snapshot after every rerender, modal, or navigation.
 10. Save a real screenshot for each page state.
 
@@ -73,7 +70,7 @@ If you need the onboarding flow, clear local state first and open `https://local
 The wrapper already provides the primitives you need:
 
 ```bash
-"$ECDP" start --session phodex-qa
+"$ECDP" start --allow-insecure --session phodex-qa
 "$ECDP" open https://localhost:3443 --session phodex-qa
 "$ECDP" snapshot --session phodex-qa
 "$ECDP" click e12 --session phodex-qa
@@ -85,7 +82,7 @@ For browser-state reset, use the hidden session and clear origin storage before 
 
 ```bash
 "$ECDP" cdp Storage.clearDataForOrigin '{"origin":"https://localhost:3443","storageTypes":"all"}' --session phodex-qa
-"$ECDP" evaluate "localStorage.clear(); sessionStorage.clear();" --session phodex-qa
+"$ECDP" reload --session phodex-qa
 ```
 
 ## Login Flow
@@ -111,10 +108,7 @@ After login, wait for the shell to render a stable home state before taking scre
 - Use one screenshot per page state.
 - Re-snapshot after any click that changes the page tree.
 - Do not reuse a screenshot if the URL, page title, or visible heading does not match the intended state.
-- Keep filenames explicit, for example:
-  - `acceptance-entry-01-welcome.png`
-  - `acceptance-auth-01-home-empty.png`
-  - `acceptance-auth-04-settings.png`
+- Keep filenames explicit and page-specific.
 
 ## Interaction Rules
 
@@ -131,15 +125,11 @@ Capture at least these states in one acceptance pass:
 - Onboarding welcome
 - Onboarding features
 - Onboarding step pages
-- Email pairing
+- Email OTP
 - Home empty
-- Sidebar open
-- Turn view
-- Settings
-- Archived chats
+- Turn empty
 - About
 - Paywall
-- Delete dialog
 
 ## Failure Handling
 
@@ -155,4 +145,3 @@ Store acceptance images under:
 ```bash
 /Users/young/mx/tmp/phodex-web/.artifacts/qa-cdp/
 ```
-

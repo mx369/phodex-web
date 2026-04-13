@@ -6,10 +6,10 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Page | Current status | Real behavior today | Main gaps |
 | --- | --- | --- | --- |
-| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists | Not pixel-perfect; copy/layout still approximate |
+| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists, and now routes directly into Email OTP | Not pixel-perfect; copy/layout still approximate |
 | Bootstrap failure | Shell | Rendered and navigable | Subscription restore is not real |
 | Subscription gate | Shell | Plan selection UI and navigation exist | No real purchase or restore flow |
-| Email OTP | Real | Request code, verify code, dev bypass all work | Still a web-auth surface, not source-equal mobile UI |
+| Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content | Layout still differs from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create work | Layout and interaction details still diverge |
 | Turn empty | Partial | Real selected thread and composer | Not source-equal visually |
@@ -23,6 +23,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Flow | Status | Notes |
 | --- | --- | --- |
+| Onboarding -> Email OTP | Real | Fresh unauthenticated users now move from onboarding directly into the email verification screen |
 | Email OTP login | Real | Uses `/api/auth/request-code`, `/api/auth/verify-code`, and optional `/api/auth/dev-code` |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | First send creates a thread and flushes the composer |

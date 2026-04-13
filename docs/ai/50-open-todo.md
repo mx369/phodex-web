@@ -10,32 +10,6 @@ This file is the dedicated unfinished-work list for follow-on AI agents. Keep it
 
 ## Priority Order
 
-### P0. Remove excluded QR/E2EE product remnants from the actual app
-
-Status: open
-
-Why:
-- Product decisions now explicitly exclude QR login, camera pairing, and end-to-end encryption, but the actual web app and some acceptance docs still contain those flows and that copy.
-
-Main work:
-- Remove QR-related root states and screens from `apps/web/src/App.vue`.
-- Remove QR-related styles from `apps/web/src/style.css`.
-- Collapse auth to onboarding -> email OTP only.
-- Remove encryption-themed copy from onboarding, conversation empty states, about, paywall, and any remaining UI labels.
-- Remove or rewrite stale acceptance docs that still validate scanner/recovery pages.
-
-Likely files:
-- `apps/web/src/App.vue`
-- `apps/web/src/style.css`
-- `docs/cdp-acceptance.md`
-- `docs/cdp-acceptance-runbook.md`
-- `docs/page-function-acceptance.md`
-
-Done when:
-- No user-facing QR login or camera pairing flow remains.
-- No user-facing E2EE copy remains.
-- Acceptance docs no longer treat scanner pages as part of the target product.
-
 ### P0. Replace the current web-shell layout with a true mobile-page structure
 
 Status: open
@@ -55,29 +29,6 @@ Likely files:
 Done when:
 - The app occupies the page as a mobile UI surface, not as a centered faux-device card.
 - Settings, archived, about, and paywall no longer feel like generic overlay sheets.
-
-### P0. Make the root auth and onboarding flow email-only and source-consistent
-
-Status: open
-
-Why:
-- Onboarding and auth are still partially shaped around old pairing concepts.
-
-Main work:
-- Rewrite step sequencing so onboarding leads directly into email OTP.
-- Remove bridge-mismatch / scan-error / camera-permission dependencies from auth routing.
-- Keep the local OTP backdoor for validation.
-- Re-run CDP screenshots for the revised auth stack.
-
-Likely files:
-- `apps/web/src/App.vue`
-- `apps/web/src/style.css`
-- `apps/web/src/lib/client.ts`
-- `docs/page-function-acceptance.md`
-
-Done when:
-- Fresh unauthenticated users only see onboarding and email OTP paths.
-- Auth screenshots and docs reflect the simplified product.
 
 ### P1. Bring the core pages closer to source parity, page by page
 
@@ -163,17 +114,17 @@ Likely files:
 Done when:
 - The UI no longer promises destructive delete that does not exist.
 
-### P1. Refresh the acceptance stack after product-scope cleanup
+### P1. Refresh the acceptance stack after the next shell pass
 
 Status: open
 
 Why:
-- Current acceptance docs and screenshots still include now-excluded QR flows and older shell assumptions.
+- The QR/E2EE root-auth cleanup is now reflected in the docs, but the broader page set will need another full capture after the shell/layout overhaul.
 
 Main work:
-- Re-record CDP screenshots for the current target page set.
-- Rewrite acceptance tables to match the actual product scope.
-- Remove obsolete evidence references.
+- Re-record CDP screenshots for the current target page set after shell/navigation cleanup.
+- Rewrite acceptance tables when page structure changes again.
+- Remove obsolete evidence references that no longer match the latest page tree.
 
 Likely files:
 - `docs/cdp-acceptance.md`
