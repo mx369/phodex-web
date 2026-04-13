@@ -388,6 +388,7 @@ const planAccessory = computed(() => {
 
   return null;
 });
+const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
   if (!match) {
@@ -1614,26 +1615,37 @@ function readShellPageState(): ShellPageState | null {
 
                   <footer v-if="currentThread" class="phone-composer-dock">
                     <div class="phone-composer-dock__inner">
-                      <div v-if="planAccessory" class="plan-accessory" :class="`plan-accessory--${planAccessory.tone}`">
-                        <span class="section-label">Pinned Plan</span>
-                        <strong>{{ planAccessory.title }}</strong>
-                        <p>{{ planAccessory.summary }}</p>
-                      </div>
-
-                      <div v-if="currentThread?.queuedDrafts.length" class="queued-drafts">
-                        <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
-                          <div>
-                            <span class="section-label">Queued</span>
-                            <strong>{{ draft.text }}</strong>
+                      <div v-if="composerWorkStateVisible" class="composer-work-state">
+                        <div v-if="planAccessory" class="plan-accessory" :class="`plan-accessory--${planAccessory.tone}`">
+                          <div class="plan-accessory__head">
+                            <span class="section-label">Pinned Plan</span>
+                            <span class="plan-accessory__tone">{{ planAccessory.title }}</span>
                           </div>
-                          <div class="queued-draft__actions">
-                            <button
-                              class="ghost-cta ghost-cta--compact"
-                              @click="client.resumeDraft(currentThread.id, draft.id)"
-                            >
-                              Send next
-                            </button>
-                            <button class="icon-button icon-button--tiny" @click="client.removeDraft(currentThread.id, draft.id)">×</button>
+                          <p>{{ planAccessory.summary }}</p>
+                        </div>
+
+                        <div v-if="currentThread?.queuedDrafts.length" class="queued-drafts">
+                          <div class="queued-drafts__head">
+                            <span class="section-label">Queued Drafts</span>
+                            <strong>{{ currentThread.queuedDrafts.length }}</strong>
+                          </div>
+
+                          <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
+                            <div class="queued-draft__copy">
+                              <strong>{{ draft.text }}</strong>
+                              <span>{{ formatRelativeTime(draft.createdAt) }}</span>
+                            </div>
+                            <div class="queued-draft__actions">
+                              <button
+                                class="ghost-cta ghost-cta--compact"
+                                @click="client.resumeDraft(currentThread.id, draft.id)"
+                              >
+                                Resume
+                              </button>
+                              <button class="queued-draft__remove" @click="client.removeDraft(currentThread.id, draft.id)">
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>

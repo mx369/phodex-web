@@ -15,6 +15,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Removed composer voice/attachment placeholders and marked purchase shells as preview-only.
 - Removed inert Fast/Plan toggles so composer and settings only expose backed controls.
 - Mapped real Codex execution items into turn activity cards and added a source-closer turn toolbar summary strip.
+- Grouped queued drafts into a visible composer work-state band and promoted `/plan` replies into pinned-plan surfaces.
 
 ## Result Legend
 
@@ -45,7 +46,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
-| Turn View | authenticated existing thread after richer-thread-surface pass | turn toolbar chips, real command/file/tool/subagent activity cards, and compact output previews | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
+| Turn View | authenticated existing threads after richer-thread-surface and work-state passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, and pinned-plan surface | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |
 | Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
@@ -55,7 +56,8 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.
-- Existing send / stream / stop / queue coverage was not rerun in this shell-focused pass. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
+- Composer-work-state pass: a clean test thread was used to verify queued draft visibility/actionability and a real `/plan` thread was used to verify pinned-plan rendering above the composer.
+- Full send / stream / stop regression was not rerun in this shell-focused pass, but queue and pinned-plan accessory states were rerun. Prior real turn-flow evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect
 

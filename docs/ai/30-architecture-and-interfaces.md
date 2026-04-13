@@ -75,7 +75,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
 - The current message mapper now covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the resulting UI is still a simplified card system.
-- Composer work-state surfaces such as pinned plans and queue accessories are still client-only gaps; the richer message mapper does not solve those source-parity issues.
+- Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
+- Pinned plans and queued drafts now surface above the composer, but structured-input replacement and deeper toolbar/sheet behaviors are still client-side parity gaps.
 - `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.
 
 ## Invariants

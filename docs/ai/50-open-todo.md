@@ -34,25 +34,25 @@ Done when:
 - Each page has a current screenshot and a short acceptance note.
 - Remaining visual gaps are small and explicitly tracked.
 
-### P1. Bring Turn composer work-state closer to source parity
+### P1. Bring Turn secondary states closer to source parity
 
 Status: open
 
 Why:
-- Turn timelines now show richer execution cards, but the composer area still misses the source app's visible work-state layer.
+- Turn timelines and the composer work-state band are now present, but the page still misses other source `TurnView` secondary states.
 
 Main work:
-- Add a composer accessory band above the input when plan or queue state exists.
-- Surface queued drafts as a visible resume/remove list instead of leaving queue state implicit.
-- Add a source-informed pinned-plan summary surface without reintroducing inert Fast/Plan toggles.
+- Bring the empty-state branch closer to source instead of leaving it as a generic assistant greeting.
+- Add the remaining source-informed toolbar/sheet affordances that belong to TurnView rather than the global drawer.
+- Decide whether structured-input replacement is needed, or explicitly document why it remains out of scope.
 
 Likely files:
 - `apps/web/src/App.vue`
 - `apps/web/src/style.css`
 
 Done when:
-- The accessory appears only when plan or queued drafts exist.
-- Queue state is visible and actionable in the authenticated turn view.
+- Turn empty and turn-with-messages states are both source-closer, not just structurally functional.
+- Remaining TurnView differences are narrowed to small visual polish instead of missing branches.
 - The change is verified in a real browser flow and documented with fresh evidence.
 
 ## Blockers And Caveats

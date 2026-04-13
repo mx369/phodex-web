@@ -25,7 +25,7 @@ Implemented but incomplete:
 
 - Onboarding, bootstrap failure, subscription gate, and paywall pages.
 - Home empty, sidebar, settings, archived, and about pages now render as full-page mobile surfaces, but remain approximate.
-- Turn composer work-state layers such as pinned plan, queued-draft accessory surfaces, and autocomplete UI.
+- Turn composer autocomplete, structured-input replacement states, and deeper toolbar/sheet affordances.
 
 Not yet source-equal or still shell-level:
 
@@ -41,7 +41,7 @@ Explicitly excluded by current product direction:
 ## Current Architectural Debt
 
 - Thread rendering now covers richer Codex execution items, but the resulting card system is still an approximation of source `TurnView`.
-- Composer-adjacent work-state surfaces are still missing, so queue/plan state remains less visible than upstream.
+- Composer-adjacent work-state now exists, but it is still a simpler band rather than the full source `TurnView` accessory system.
 
 ## Acceptance Bar
 

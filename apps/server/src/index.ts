@@ -71,6 +71,7 @@ type ActiveTurnState = {
   turnId: string;
   assistantMessageId: string | null;
   startedAt: string;
+  mode: "chat" | "plan";
 };
 
 type ThreadListResponse = {
@@ -114,6 +115,7 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
+const pendingTurnModes = new Map<string, "chat" | "plan">();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
 
 let codexProcess: ChildProcessWithoutNullStreams | null = null;
@@ -468,6 +470,8 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
     user.selectedThreadId = thread.id;
     clearAllBanners();
     markThreadRunning(thread.id, text);
+    const turnMode = deriveRequestedTurnMode(text, event.planArmed);
+    pendingTurnModes.set(thread.id, turnMode);
     schedulePersist();
     broadcastThreadToAllUsers(thread.id);
     broadcastSnapshotsToAllUsers();
@@ -486,7 +490,9 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
         turnId,
         assistantMessageId: null,
         startedAt: new Date().toISOString(),
+        mode: turnMode,
       });
+      pendingTurnModes.delete(thread.id);
     }
     codexLastSyncAt = new Date().toISOString();
     publishPresenceToAllUsers();
@@ -744,6 +750,7 @@ function handleTurnStarted(params: any) {
     turnId,
     assistantMessageId: null,
     startedAt: thread.lastActivityAt,
+    mode: activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
   });
   broadcastThreadToAllUsers(threadId);
 }
@@ -756,7 +763,12 @@ function handleItemStarted(params: any) {
   }
 
   const startedAt = activeTurns.get(threadId)?.startedAt ?? new Date().toISOString();
-  const message = mapLiveItemToMessage(item, startedAt, "started");
+  const message = mapLiveItemToMessage(
+    item,
+    startedAt,
+    "started",
+    activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
+  );
   if (!message) {
     return;
   }
@@ -788,7 +800,7 @@ function handleAgentMessageDelta(params: any) {
     message = {
       id: messageId,
       role: "assistant",
-      kind: "chat",
+      kind: activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
       text: "",
       createdAt: activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
       isStreaming: true,
@@ -812,7 +824,12 @@ function handleItemCompleted(params: any) {
   }
 
   const thread = ensureThreadRecord(threadId);
-  const message = mapLiveItemToMessage(item, activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(), "completed");
+  const message = mapLiveItemToMessage(
+    item,
+    activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
+    "completed",
+    activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
+  );
   if (!message) {
     return;
   }
@@ -852,6 +869,7 @@ function handleTurnCompleted(params: any) {
   }
 
   activeTurns.delete(threadId);
+  pendingTurnModes.delete(threadId);
   const thread = ensureThreadRecord(threadId);
   const local = ensureThreadLocal(threadId);
   thread.state = local.queuedDrafts.length > 0 ? "queued" : "idle";
@@ -1004,8 +1022,9 @@ function mapTurnsToMessages(turns: any[]) {
   const messages: ThreadMessage[] = [];
   for (const turn of turns) {
     const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
+    const turnMode = deriveTurnModeFromItems(Array.isArray(turn?.items) ? turn.items : []);
     for (const item of Array.isArray(turn?.items) ? turn.items : []) {
-      const message = mapLiveItemToMessage(item, createdAt, "history");
+      const message = mapLiveItemToMessage(item, createdAt, "history", turnMode);
       if (message) {
         messages.push(message);
       }
@@ -1014,7 +1033,12 @@ function mapTurnsToMessages(turns: any[]) {
   return messages;
 }
 
-function mapLiveItemToMessage(item: any, createdAt: string, stage: "history" | "started" | "completed" = "history") {
+function mapLiveItemToMessage(
+  item: any,
+  createdAt: string,
+  stage: "history" | "started" | "completed" = "history",
+  assistantKind: "chat" | "plan" = "chat"
+) {
   const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
     return {
@@ -1027,10 +1051,11 @@ function mapLiveItemToMessage(item: any, createdAt: string, stage: "history" | "
   }
 
   if (item?.type === "agentMessage") {
+    const phase = readString(item?.phase);
     return {
       id: itemId,
       role: "assistant",
-      kind: "chat",
+      kind: assistantKind === "plan" && phase !== "final_answer" ? "plan" : "chat",
       text: readString(item?.text),
       createdAt,
       isStreaming: false,
@@ -1662,6 +1687,22 @@ function summarizeAgentStatuses(agentsStates: any) {
   }
   const unique = [...new Set(values)];
   return unique.join(", ");
+}
+
+function deriveRequestedTurnMode(text: string, planArmed: boolean) {
+  if (planArmed || isPlanPrompt(text)) {
+    return "plan" as const;
+  }
+  return "chat" as const;
+}
+
+function deriveTurnModeFromItems(items: any[]) {
+  const userMessage = items.find((item) => item?.type === "userMessage");
+  return deriveRequestedTurnMode(readUserItemText(userMessage), false);
+}
+
+function isPlanPrompt(text: string) {
+  return text.trim().toLowerCase().startsWith("/plan");
 }
 
 function normalizeModel(model: string) {
