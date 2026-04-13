@@ -393,8 +393,95 @@ button {
   line-height: 1.55;
 }
 
+.app-dialog-card--create-thread {
+  width: min(100%, 388px);
+}
+
 .app-dialog-card__input {
   margin-top: 2px;
+}
+
+.thread-create-sheet__modes,
+.thread-create-sheet__targets {
+  display: grid;
+  gap: 10px;
+}
+
+.thread-create-sheet__modes {
+  margin-top: 4px;
+}
+
+.thread-create-sheet__mode,
+.thread-create-sheet__target {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid rgba(18, 18, 18, 0.07);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.035);
+  color: var(--text);
+  text-align: left;
+}
+
+.thread-create-sheet__mode--active,
+.thread-create-sheet__target--active {
+  border-color: rgba(92, 109, 255, 0.22);
+  background: rgba(92, 109, 255, 0.08);
+  box-shadow: 0 14px 28px rgba(92, 109, 255, 0.1);
+}
+
+.thread-create-sheet__mode strong,
+.thread-create-sheet__target strong {
+  display: block;
+  font-size: 14px;
+}
+
+.thread-create-sheet__mode span,
+.thread-create-sheet__target p,
+.thread-create-sheet__target span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thread-create-sheet__mode p,
+.thread-create-sheet__target p {
+  margin: 4px 0 0;
+}
+
+.thread-create-sheet__target-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thread-create-sheet__target-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.06);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.thread-create-sheet__target-copy {
+  min-width: 0;
+}
+
+.thread-create-sheet__target-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.08);
 }
 
 .root-auth-screen__topbar {
@@ -926,6 +1013,13 @@ button {
   font-size: 13px;
 }
 
+.app-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 auto;
+}
+
 .icon-button {
   display: inline-grid;
   width: 38px;
@@ -940,8 +1034,12 @@ button {
 .icon-button--tiny {
   width: 28px;
   height: 28px;
-  font-size: 12px;
   box-shadow: none;
+}
+
+.icon-button--tiny .app-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .phone-app {
@@ -1589,7 +1687,11 @@ button {
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.05);
   color: var(--muted-strong);
-  font-size: 14px;
+}
+
+.home-empty-state__trusted-icon .app-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .home-empty-state__trusted {
@@ -2021,18 +2123,21 @@ button {
 
 .drawer-new-chat__icon {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
-  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(18, 18, 18, 0.08);
 }
 
 .drawer-new-chat__copy {
   min-width: 0;
   text-align: left;
+}
+
+.drawer-new-chat__copy .section-label {
+  margin-bottom: 3px;
 }
 
 .drawer-new-chat__copy strong {
@@ -2053,6 +2158,9 @@ button {
 }
 
 .drawer-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 34px;
   padding: 0 14px;
   border-radius: 999px;
@@ -2060,6 +2168,11 @@ button {
   color: var(--muted-strong);
   font-size: 12px;
   font-weight: 700;
+}
+
+.drawer-shortcut .app-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .drawer-shortcut--active {
@@ -2095,14 +2208,18 @@ button {
 
 .drawer-group__icon {
   display: inline-grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(18, 18, 18, 0.045);
   color: var(--muted-strong);
-  font-size: 11px;
-  font-weight: 700;
+}
+
+.drawer-group__icon .app-icon,
+.drawer-group__plus .app-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .drawer-group__label {
@@ -2121,8 +2238,7 @@ button {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.08);
 }
 
 .drawer-group__action {
@@ -2161,8 +2277,8 @@ button {
   display: grid;
   justify-items: center;
   gap: 6px;
-  width: 14px;
-  margin-top: 6px;
+  width: 18px;
+  margin-top: 4px;
 }
 
 .drawer-thread__dot {
@@ -2189,10 +2305,22 @@ button {
 }
 
 .drawer-thread__badge {
-  color: var(--muted);
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.05);
+  color: var(--muted-strong);
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
+}
+
+.drawer-thread__badge .app-icon {
+  width: 10px;
+  height: 10px;
 }
 
 .drawer-thread__body {

@@ -183,7 +183,7 @@ export interface DevCodeResponse {
 
 export type ClientEvent =
   | { type: "bootstrap" }
-  | { type: "thread:create"; projectLabel?: string; mode?: ThreadCreateMode }
+  | { type: "thread:create"; projectLabel?: string; cwd?: string; mode?: ThreadCreateMode }
   | { type: "thread:select"; threadId: string }
   | { type: "thread:clearSelection" }
   | { type: "thread:rename"; threadId: string; title: string }

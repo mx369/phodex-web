@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:chil
 import { randomInt, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import type {
   AppSettings,
@@ -43,6 +43,7 @@ type OtpRecord = {
 };
 
 type ThreadLocalState = {
+  customTitle?: string;
   queuedDrafts: QueuedDraft[];
   diff: DiffStats;
 };
@@ -85,6 +86,15 @@ type OtpMailConfig = {
   sourceLabel: string;
 };
 
+type ThreadCreateRequest = Extract<ClientEvent, { type: "thread:create" }>;
+
+type ProjectContext = {
+  requestedCwd: string;
+  projectRoot: string;
+  gitCommonDir: string | null;
+  isRepo: boolean;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -105,6 +115,7 @@ const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
+const WORKTREE_ROOT = process.env.PHODEX_WORKTREE_ROOT ?? resolve(homedir(), ".codex/worktrees");
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
@@ -126,6 +137,7 @@ const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
 const pendingTurnModes = new Map<string, "chat" | "plan">();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
+const projectContextCache = new Map<string, ProjectContext>();
 
 let codexProcess: ChildProcessWithoutNullStreams | null = null;
 let codexSocket: WebSocket | null = null;
@@ -356,7 +368,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       });
       break;
     case "thread:create":
-      void handleThreadCreate(user);
+      void handleThreadCreate(user, event);
       break;
     case "thread:select":
       user.selectedThreadId = event.threadId;
@@ -403,11 +415,22 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
   }
 }
 
-async function handleThreadCreate(user: PersistedUser) {
+async function handleThreadCreate(user: PersistedUser, event: ThreadCreateRequest) {
   try {
     ensureCodexReady();
+    const requestedCwd = resolveRequestedThreadCwd(user, event);
+    const projectContext = resolveProjectContext(requestedCwd);
+    if (event.mode === "worktree" && !projectContext.isRepo) {
+      throw new Error("New worktrees only work from a git project.");
+    }
+
+    const threadCwd =
+      event.mode === "worktree"
+        ? createWorktreeForProject(projectContext.projectRoot, event.projectLabel ?? basename(projectContext.projectRoot)).worktreeCwd
+        : projectContext.projectRoot;
+
     const result = await codexRequest("thread/start", {
-      cwd: DEFAULT_THREAD_CWD,
+      cwd: threadCwd,
       model: "gpt-5.4",
       sandbox: "danger-full-access",
       approvalPolicy: "never",
@@ -434,15 +457,28 @@ async function handleThreadRename(user: PersistedUser, threadId: string, title: 
     return;
   }
 
+  const nextTitle = title.trim();
+  const local = ensureThreadLocal(threadId);
+  local.customTitle = nextTitle;
+  const thread = ensureThreadRecord(threadId);
+  thread.title = nextTitle;
+  schedulePersist();
+  broadcastThreadToAllUsers(threadId);
+
   try {
     ensureCodexReady();
     await codexRequest("thread/name/set", {
       threadId,
-      name: title.trim(),
+      name: nextTitle,
     });
+  } catch {
+    // Keep the mobile title override even if Codex does not persist names.
+  }
+
+  try {
     await syncAllThreadsFromCodex();
-  } catch (error) {
-    sendToast(user.profile.id, "error", readErrorMessage(error));
+  } catch {
+    broadcastSnapshotsToAllUsers();
   }
 }
 
@@ -508,7 +544,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
       input: [{ type: "text", text }],
       model: normalizeModel(event.model),
       approvalPolicy: mapApprovalPolicy(event.accessMode),
-      sandboxPolicy: mapSandboxPolicy(event.accessMode),
+      sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
     });
     const turnId = readString(turnResponse?.turn?.id);
     if (turnId) {
@@ -1028,7 +1064,7 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
 
   return {
     id: threadId,
-    title: deriveThreadTitle(rawThread),
+    title: local.customTitle || deriveThreadTitle(rawThread),
     preview: readString(rawThread?.preview) || existing?.preview || "Start a new remote coding pass.",
     projectLabel: deriveProjectLabel(rawThread),
     repoLabel: readString(rawThread?.cwd) || readString(rawThread?.path) || existing?.repoLabel || DEFAULT_THREAD_CWD,
@@ -1205,12 +1241,13 @@ function ensureThreadRecord(threadId: string) {
   }
 
   const local = ensureThreadLocal(threadId);
+  const defaultProject = resolveProjectContext(DEFAULT_THREAD_CWD);
   const thread: ThreadRecord = {
     id: threadId,
-    title: "New Chat",
+    title: local.customTitle || "New Chat",
     preview: "",
-    projectLabel: basename(DEFAULT_THREAD_CWD),
-    repoLabel: DEFAULT_THREAD_CWD,
+    projectLabel: basename(defaultProject.projectRoot) || "Codex",
+    repoLabel: defaultProject.projectRoot,
     branch: "main",
     state: local.queuedDrafts.length > 0 ? "queued" : "idle",
     lastActivityAt: new Date().toISOString(),
@@ -1313,6 +1350,7 @@ function findFirstLiveThreadId(excludingThreadId?: string) {
 function ensureThreadLocal(threadId: string) {
   if (!persisted.threadLocal[threadId]) {
     persisted.threadLocal[threadId] = {
+      customTitle: undefined,
       queuedDrafts: [],
       diff: { additions: 0, deletions: 0 },
     };
@@ -1344,12 +1382,121 @@ function deriveProjectLabel(rawThread: any) {
   if (!cwd) {
     return "Codex";
   }
-  return basename(cwd) || "Codex";
+  return basename(resolveProjectContext(cwd).projectRoot) || basename(cwd) || "Codex";
 }
 
 function isWorktreeThread(rawThread: any) {
   const cwd = readString(rawThread?.cwd);
   return cwd.includes("/worktrees/") || cwd.includes("/.codex/worktrees/");
+}
+
+function resolveRequestedThreadCwd(user: PersistedUser, event: ThreadCreateRequest) {
+  const explicitCwd = readString(event.cwd);
+  if (explicitCwd) {
+    return resolve(explicitCwd);
+  }
+
+  const selectedThread = user.selectedThreadId ? threadCache.get(user.selectedThreadId) : null;
+  if (selectedThread?.repoLabel) {
+    return resolve(selectedThread.repoLabel);
+  }
+
+  const groupThread = event.projectLabel
+    ? [...threadCache.values()].find((thread) => thread.projectLabel === event.projectLabel && thread.state !== "archived")
+    : null;
+  if (groupThread?.repoLabel) {
+    return resolve(groupThread.repoLabel);
+  }
+
+  return DEFAULT_THREAD_CWD;
+}
+
+function resolveProjectContext(cwd: string): ProjectContext {
+  const requestedCwd = resolve(cwd);
+  const cached = projectContextCache.get(requestedCwd);
+  if (cached) {
+    return cached;
+  }
+
+  let projectRoot = requestedCwd;
+  let gitCommonDir: string | null = null;
+  let isRepo = false;
+
+  const topLevelResult = gitSpawnSync(["rev-parse", "--path-format=absolute", "--show-toplevel"], requestedCwd);
+  if (topLevelResult.ok) {
+    isRepo = true;
+    projectRoot = topLevelResult.stdout || requestedCwd;
+    const commonDirResult = gitSpawnSync(["rev-parse", "--path-format=absolute", "--git-common-dir"], requestedCwd);
+    if (commonDirResult.ok) {
+      gitCommonDir = commonDirResult.stdout || null;
+      if (gitCommonDir && basename(gitCommonDir) === ".git") {
+        projectRoot = dirname(gitCommonDir);
+      }
+    }
+  }
+
+  const context = {
+    requestedCwd,
+    projectRoot,
+    gitCommonDir,
+    isRepo,
+  } satisfies ProjectContext;
+  projectContextCache.set(requestedCwd, context);
+  return context;
+}
+
+function createWorktreeForProject(projectRoot: string, seed: string) {
+  const repoSlug = sanitizeGitRefSegment(basename(projectRoot) || "project");
+  const branchSeed = sanitizeGitRefSegment(seed || repoSlug);
+  const stamp = Date.now().toString(36);
+  const suffix = randomUUID().slice(0, 6).toLowerCase();
+  const branchName = `codex-${branchSeed}-${stamp}-${suffix}`;
+  const worktreeCwd = resolve(WORKTREE_ROOT, repoSlug, `${stamp}-${suffix}`);
+  mkdirSync(dirname(worktreeCwd), { recursive: true });
+
+  const result = gitSpawnSync(["worktree", "add", "-b", branchName, worktreeCwd, "HEAD"], projectRoot);
+  if (!result.ok) {
+    throw new Error(result.stderr || "Unable to create a new worktree.");
+  }
+
+  return { worktreeCwd, branchName };
+}
+
+function sanitizeGitRefSegment(value: string) {
+  const sanitized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+
+  return sanitized || "worktree";
+}
+
+function gitSpawnSync(args: string[], cwd: string) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+  });
+
+  if (result.error) {
+    return {
+      ok: false as const,
+      stderr: readErrorMessage(result.error),
+    };
+  }
+
+  if (result.status !== 0) {
+    return {
+      ok: false as const,
+      stderr: (result.stderr || result.stdout || `git ${args.join(" ")} failed`).trim(),
+    };
+  }
+
+  return {
+    ok: true as const,
+    stdout: (result.stdout || "").trim(),
+  };
 }
 
 function dedupeMessages(messages: ThreadMessage[]) {
@@ -1753,7 +1900,11 @@ function mapApprovalPolicy(accessMode: "read-only" | "on-request" | "full-access
   return "never";
 }
 
-function mapSandboxPolicy(accessMode: "read-only" | "on-request" | "full-access") {
+function writableRootForThread(thread: ThreadRecord) {
+  return thread.repoLabel ? resolve(thread.repoLabel) : DEFAULT_THREAD_CWD;
+}
+
+function mapSandboxPolicy(accessMode: "read-only" | "on-request" | "full-access", writableRoot = DEFAULT_THREAD_CWD) {
   if (accessMode === "read-only") {
     return {
       type: "readOnly",
@@ -1771,7 +1922,7 @@ function mapSandboxPolicy(accessMode: "read-only" | "on-request" | "full-access"
       readOnlyAccess: {
         type: "fullAccess",
       },
-      writableRoots: [DEFAULT_THREAD_CWD],
+      writableRoots: [writableRoot],
     };
   }
 

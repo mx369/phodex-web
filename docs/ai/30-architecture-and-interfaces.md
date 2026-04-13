@@ -26,6 +26,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 ## Client -> Server Events
 
 - `thread:create`
+  accepts `mode` (`local` or `worktree`) and an optional `cwd` seed from the selected drawer project target
 - `thread:select`
 - `thread:clearSelection`
 - `thread:rename`
@@ -45,6 +46,9 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Historical thread reads and live item notifications now map richer Codex execution items into structured thread cards.
 - Completion banners are synthesized after run completion.
 - The web client now inserts a local pending-thread placeholder as soon as `thread:create` is sent, then removes it when the server snapshot or thread update for the real thread arrives.
+- `thread:create` now resolves the selected Git project root on the server: local chats start from that root, while worktree chats first run `git worktree add` under `~/.codex/worktrees/<repo>/...` and then start the Codex thread from the new worktree path.
+- Thread grouping now uses the Git common-dir root rather than the raw worktree cwd, so worktree chats stay grouped under the main project label.
+- Thread rename now applies a persisted local title override immediately, then best-effort syncs `thread/name/set` through Codex when the backend supports it.
 
 ## Codex App-Server Methods In Use
 
@@ -79,6 +83,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
 - Pinned plans and queued drafts now surface above the composer, but structured-input replacement and deeper toolbar/sheet behaviors are still client-side parity gaps.
 - `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.
+- `on-request` sandbox writable roots are now derived from each thread's actual repo/worktree cwd instead of always falling back to the default app root.
 
 ## Invariants
 

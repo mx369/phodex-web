@@ -20,7 +20,7 @@ Legend:
 | `SubscriptionGateView` | full-page gate with feature stack, plan choice, CTA, restore/manage/legal | `partial` | keep preview-only purchases, but move closer to source card hierarchy |
 | `QRScannerView` | live camera scanner and QR recovery flow | `out-of-scope` | use only as reference for auth-shell sparseness; do not implement QR/camera |
 | `HomeEmptyStateView` | sparse connected/offline home with trusted Mac summary and CTA swaps | `partial` | disconnected/connecting variants and final spacing still differ |
-| `SidebarView` | searchable project-grouped conversation tree with rename/archive/delete/project picker | `partial` | grouping behavior, project picker, refresh affordances, and thread-row actions are still simplified |
+| `SidebarView` | searchable project-grouped conversation tree with rename/archive/delete/project picker | `partial` | grouping and project picker are now real, but refresh affordances and final row-level parity are still simplified |
 | `TurnView` | timeline, toolbar, pinned plan, structured prompts, queued drafts, scroll state machine, tool cards, sheets | `partial` | richer surfaces landed, but scroll behavior and several secondary actions are still missing |
 | `SettingsView` | standalone settings stack with many cards and linked subpages | `partial` | current page exists but still lacks source card depth and some linked behaviors |
 | `ArchivedChatsView` | archived list, restore, delete | `partial` | restore exists; destructive delete remains intentionally unavailable |

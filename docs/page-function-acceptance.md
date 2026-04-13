@@ -19,6 +19,8 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Replaced the generic turn-empty welcome card with an embedded empty-timeline block that keeps the composer in the same working layout.
 - Locked the main shell to the viewport again so Turn scrolling happens inside the timeline instead of on `body`.
 - Added a source-informed Turn auto-scroll state machine with assistant anchoring, bottom-threshold tolerance, and a latest-jump button.
+- Rebuilt the drawer's create path around a real project-picker sheet, replaced placeholder glyph icons with a consistent SVG icon system, and wired worktree creation to a real git worktree flow.
+- Added a persisted local rename fallback so drawer row rename remains functional even when Codex thread-name sync does not round-trip.
 
 ## Result Legend
 
@@ -48,7 +50,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Turn Empty | clean authenticated chat after empty-state parity pass | embedded empty-timeline block, source-closer guidance copy, composer visible, no voice/attachment/Fast/Plan placeholders | pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
-| Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
+| Sidebar Drawer | authenticated session after the drawer parity pass | drawer render, SVG icon system, explicit create sheet, project-group `+` preselection, real worktree start path, row rename action, connection footer, and settings/archive/disconnect actions | pass | `.artifacts/qa-76-drawer-open.png`, `.artifacts/qa-77-drawer-create-sheet.png`, `.artifacts/qa-78-drawer-worktree-created.png`, `.artifacts/qa-80-drawer-rename-fixed.png` |
 | Turn View | authenticated existing threads after richer-thread-surface, work-state, and scroll-state passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, pinned-plan surface, internal timeline scrolling, visible latest-jump button, and return-to-bottom behavior | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png`, `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-74-turn-scroll-arrow-only.png` |
 | Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
@@ -57,6 +59,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 - OTP login: pass in a real browser flow; repeatable QA still uses the backdoor code `424242`, and the current server build now prefers live Resend delivery for request-code before falling back to the local mailbox.
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
+- Drawer parity pass: the authenticated shell was rerun after replacing glyph icons with SVG icons, adding the shared create sheet, validating a real worktree creation path, and rechecking rename through the drawer row actions.
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.
 - Composer-work-state pass: a clean test thread was used to verify queued draft visibility/actionability and a real `/plan` thread was used to verify pinned-plan rendering above the composer.

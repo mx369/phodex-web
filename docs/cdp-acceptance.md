@@ -26,7 +26,10 @@ All screenshots in this file were captured from real browser renders through the
 | Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Turn View Work-State Band | Same authenticated session, created a clean test thread and verified queued-draft and pinned-plan accessory states above the composer | `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |
 | Turn View Scroll State | Same authenticated session, used a long thread to verify internal timeline scrolling, the arrow-only latest-jump button, and return-to-bottom behavior after the source-informed scroll-state pass | `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-74-turn-scroll-arrow-only.png` |
-| Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
+| Sidebar Open | Same authenticated session, opened the drawer after the drawer parity pass | `.artifacts/qa-76-drawer-open.png` |
+| Sidebar Create Sheet | Same authenticated session, opened drawer `New Chat` after the drawer parity pass | `.artifacts/qa-77-drawer-create-sheet.png` |
+| Sidebar Worktree Create | Same authenticated session, switched the create sheet to `Worktree Chat`, targeted `phodex-web`, and waited for the real thread to land | `.artifacts/qa-78-drawer-worktree-created.png` |
+| Sidebar Rename | Same authenticated session, reopened the drawer row actions and renamed the new worktree thread | `.artifacts/qa-80-drawer-rename-fixed.png` |
 | Settings | Authenticated session reloaded at `/?page=settings` after trimming runtime defaults to backed fields only | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the preview-only purchase control pass | `.artifacts/qa-60-paywall-preview-only.png` |
@@ -36,7 +39,7 @@ All screenshots in this file were captured from real browser renders through the
 
 - The unauthenticated capture set now reflects the current product scope: onboarding, subscription gate, bootstrap failure, and email OTP.
 - The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
-- Sidebar and archived evidence now reflect the restore-only delete policy: no destructive delete affordance is shown.
+- Sidebar evidence now also reflects the new SVG icon system, shared create sheet, and real worktree/rename flows in addition to the restore-only delete policy.
 - Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
 - Turn-empty evidence now reflects the embedded timeline block rather than the earlier generic welcome card.
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.

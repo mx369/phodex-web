@@ -1,10 +1,155 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
-import type { ThreadRecord } from "@phodex/shared";
+import type { ThreadCreateMode, ThreadRecord } from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
 import remodexAppLogo from "./assets/remodex-app-logo.png";
 import { createAppClient, state } from "./lib/client";
+
+type AppIconName =
+  | "archive"
+  | "close"
+  | "edit"
+  | "folder"
+  | "home"
+  | "info"
+  | "menu"
+  | "plus"
+  | "settings"
+  | "restore"
+  | "worktree";
+
+type AppIconSpec = {
+  circles?: Array<{ cx: number; cy: number; r: number }>;
+  lines?: Array<{ x1: number; y1: number; x2: number; y2: number }>;
+  paths?: string[];
+  polylines?: string[];
+};
+
+type DrawerProjectTarget = {
+  label: string;
+  cwd: string | null;
+  repoName: string;
+  detail: string;
+  liveCount: number;
+  hasWorktree: boolean;
+  isCurrent: boolean;
+};
+
+const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
+  archive: {
+    lines: [
+      { x1: 4, y1: 8, x2: 20, y2: 8 },
+      { x1: 12, y1: 5, x2: 12, y2: 13 },
+    ],
+    paths: ["M6 8.5v7.25A2.25 2.25 0 0 0 8.25 18h7.5A2.25 2.25 0 0 0 18 15.75V8.5"],
+    polylines: ["9.25 10.5 12 13.25 14.75 10.5"],
+  },
+  close: {
+    lines: [
+      { x1: 7, y1: 7, x2: 17, y2: 17 },
+      { x1: 17, y1: 7, x2: 7, y2: 17 },
+    ],
+  },
+  edit: {
+    lines: [{ x1: 13.5, y1: 6.5, x2: 17.5, y2: 10.5 }],
+    paths: ["M4.5 19.5H8l9.4-9.4a2 2 0 1 0-2.82-2.82L5.18 16.68z"],
+  },
+  folder: {
+    paths: ["M3.75 8.5A2.75 2.75 0 0 1 6.5 5.75H10l2.1 2.1h5.4a2.75 2.75 0 0 1 2.75 2.75v5.9a2.75 2.75 0 0 1-2.75 2.75h-11A2.75 2.75 0 0 1 3.75 16.5z"],
+  },
+  home: {
+    paths: ["M4.75 10.5 12 4.75l7.25 5.75V19a1 1 0 0 1-1 1h-4.5v-5.25h-3.5V20h-4.5a1 1 0 0 1-1-1z"],
+  },
+  info: {
+    circles: [{ cx: 12, cy: 12, r: 8.5 }],
+    lines: [
+      { x1: 12, y1: 10.5, x2: 12, y2: 16 },
+      { x1: 12, y1: 7.5, x2: 12, y2: 7.5 },
+    ],
+  },
+  menu: {
+    lines: [
+      { x1: 5, y1: 7, x2: 19, y2: 7 },
+      { x1: 5, y1: 12, x2: 19, y2: 12 },
+      { x1: 5, y1: 17, x2: 19, y2: 17 },
+    ],
+  },
+  plus: {
+    lines: [
+      { x1: 12, y1: 6, x2: 12, y2: 18 },
+      { x1: 6, y1: 12, x2: 18, y2: 12 },
+    ],
+  },
+  settings: {
+    circles: [{ cx: 12, cy: 12, r: 2.5 }],
+    lines: [
+      { x1: 12, y1: 3.5, x2: 12, y2: 6 },
+      { x1: 12, y1: 18, x2: 12, y2: 20.5 },
+      { x1: 3.5, y1: 12, x2: 6, y2: 12 },
+      { x1: 18, y1: 12, x2: 20.5, y2: 12 },
+      { x1: 6.35, y1: 6.35, x2: 8.15, y2: 8.15 },
+      { x1: 15.85, y1: 15.85, x2: 17.65, y2: 17.65 },
+      { x1: 15.85, y1: 8.15, x2: 17.65, y2: 6.35 },
+      { x1: 6.35, y1: 17.65, x2: 8.15, y2: 15.85 },
+    ],
+  },
+  restore: {
+    lines: [
+      { x1: 4, y1: 8, x2: 20, y2: 8 },
+      { x1: 12, y1: 13, x2: 12, y2: 5 },
+    ],
+    paths: ["M6 8.5v7.25A2.25 2.25 0 0 0 8.25 18h7.5A2.25 2.25 0 0 0 18 15.75V8.5"],
+    polylines: ["9.25 7.5 12 4.75 14.75 7.5"],
+  },
+  worktree: {
+    circles: [
+      { cx: 7, cy: 5.5, r: 2 },
+      { cx: 17, cy: 9, r: 2 },
+      { cx: 17, cy: 17.5, r: 2 },
+    ],
+    lines: [
+      { x1: 7, y1: 7.5, x2: 7, y2: 12 },
+      { x1: 7, y1: 12, x2: 17, y2: 12 },
+      { x1: 17, y1: 11, x2: 17, y2: 7 },
+      { x1: 17, y1: 13, x2: 17, y2: 15.5 },
+    ],
+  },
+};
+
+const AppIcon = defineComponent({
+  name: "AppIcon",
+  props: {
+    name: {
+      type: String as PropType<AppIconName>,
+      required: true,
+    },
+  },
+  setup(props) {
+    return () => {
+      const spec = APP_ICON_SPECS[props.name];
+      return h(
+        "svg",
+        {
+          class: "app-icon",
+          viewBox: "0 0 24 24",
+          fill: "none",
+          stroke: "currentColor",
+          "stroke-width": "1.85",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+          "aria-hidden": "true",
+        },
+        [
+          ...(spec.paths?.map((d) => h("path", { d })) ?? []),
+          ...(spec.lines?.map((line) => h("line", line)) ?? []),
+          ...(spec.polylines?.map((points) => h("polyline", { points })) ?? []),
+          ...(spec.circles?.map((circle) => h("circle", circle)) ?? []),
+        ]
+      );
+    };
+  },
+});
 
 const client = createAppClient();
 type RootFlowState =
@@ -18,7 +163,8 @@ type ShellPageState = "settings" | "archived" | "about" | "paywall";
 
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
-  | { kind: "archive-group"; projectLabel: string; liveCount: number };
+  | { kind: "archive-group"; projectLabel: string; liveCount: number }
+  | { kind: "create-thread"; mode: ThreadCreateMode; projectLabel: string; cwd: string | null };
 
 type TurnAutoScrollMode = "followBottom" | "anchorAssistantResponse" | "manual";
 
@@ -318,7 +464,65 @@ const threadGroups = computed(() => {
     groups.set(thread.projectLabel, existing);
   }
 
-  return [...groups.entries()].map(([label, threads]) => ({ label, threads, liveCount: threads.length }));
+  return [...groups.entries()].map(([label, threads]) => {
+    const representative =
+      threads.find((thread) => thread.id === currentThread.value?.id) ??
+      threads.find((thread) => !thread.isWorktree) ??
+      threads[0];
+
+    return {
+      label,
+      threads,
+      liveCount: threads.length,
+      cwd: representative?.repoLabel ?? null,
+      hasWorktree: threads.some((thread) => thread.isWorktree),
+    };
+  });
+});
+const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
+  const targets: DrawerProjectTarget[] = threadGroups.value.map((group) => ({
+    label: group.label,
+    cwd: group.cwd,
+    repoName: repoNameFromPath(group.cwd),
+    detail: describeTargetPath(group.cwd, group.hasWorktree),
+    liveCount: group.liveCount,
+    hasWorktree: group.hasWorktree,
+    isCurrent: group.label === currentThread.value?.projectLabel,
+  }));
+
+  if (currentThread.value?.projectLabel && !targets.some((target) => target.label === currentThread.value?.projectLabel)) {
+    targets.unshift({
+      label: currentThread.value.projectLabel,
+      cwd: currentThread.value.repoLabel,
+      repoName: repoNameFromPath(currentThread.value.repoLabel),
+      detail: describeTargetPath(currentThread.value.repoLabel, currentThread.value.isWorktree),
+      liveCount: 1,
+      hasWorktree: currentThread.value.isWorktree,
+      isCurrent: true,
+    });
+  }
+
+  if (!targets.length) {
+    targets.push({
+      label: "Phodex Web",
+      cwd: null,
+      repoName: "Default workspace",
+      detail: "Uses the relay default project root on your Mac.",
+      liveCount: 0,
+      hasWorktree: false,
+      isCurrent: true,
+    });
+  }
+
+  return [...targets].sort((left, right) => {
+    if (left.isCurrent !== right.isCurrent) {
+      return left.isCurrent ? -1 : 1;
+    }
+    if (left.liveCount !== right.liveCount) {
+      return right.liveCount - left.liveCount;
+    }
+    return left.label.localeCompare(right.label);
+  });
 });
 const archivedThreads = computed(() =>
   [...(state.snapshot?.threads ?? [])]
@@ -398,13 +602,43 @@ const homeStatusCopy = computed(() => {
       return "Reconnect to recover threads, queued drafts, and remote controls.";
   }
 });
-const currentThreadRepoName = computed(() => {
-  const repoLabel = currentThread.value?.repoLabel ?? "";
+
+function repoNameFromPath(value: string | null | undefined) {
+  const repoLabel = value ?? "";
   if (!repoLabel) {
     return "";
   }
+
   const segments = repoLabel.split("/").filter(Boolean);
   return segments.at(-1) ?? repoLabel;
+}
+
+function pathTail(value: string | null | undefined, depth = 2) {
+  const pathValue = value ?? "";
+  if (!pathValue) {
+    return "Default workspace";
+  }
+
+  const segments = pathValue.split("/").filter(Boolean);
+  if (!segments.length) {
+    return pathValue;
+  }
+  return segments.slice(-depth).join("/");
+}
+
+function describeTargetPath(cwd: string | null, hasWorktree: boolean) {
+  if (!cwd) {
+    return "Uses the relay default project root on your Mac.";
+  }
+  return hasWorktree ? `Project root ${pathTail(cwd, 2)} with worktree support` : `Project root ${pathTail(cwd, 2)}`;
+}
+
+function formatThreadLocation(thread: ThreadRecord) {
+  return thread.isWorktree ? `Worktree · ${pathTail(thread.repoLabel, 3)}` : `Project · ${pathTail(thread.repoLabel, 2)}`;
+}
+
+const currentThreadRepoName = computed(() => {
+  return repoNameFromPath(currentThread.value?.repoLabel ?? "");
 });
 const planAccessory = computed(() => {
   if (!currentThread.value || isCurrentThreadPendingCreate.value) {
@@ -485,6 +719,8 @@ const composerSuggestion = computed(() => {
 });
 const dialogTitle = computed(() => {
   switch (dialogState.value?.kind) {
+    case "create-thread":
+      return dialogState.value.mode === "worktree" ? "Start in a fresh worktree" : "Start a new local chat";
     case "rename-thread":
       return "Rename chat";
     case "archive-group":
@@ -495,6 +731,10 @@ const dialogTitle = computed(() => {
 });
 const dialogBody = computed(() => {
   switch (dialogState.value?.kind) {
+    case "create-thread":
+      return dialogState.value.mode === "worktree"
+        ? "Choose which project should get a fresh git worktree before Codex starts the chat."
+        : "Choose which project root should back the next chat on your Mac.";
     case "rename-thread":
       return "Update the thread title shown in the sidebar and top navigation.";
     case "archive-group":
@@ -505,6 +745,8 @@ const dialogBody = computed(() => {
 });
 const dialogConfirmLabel = computed(() => {
   switch (dialogState.value?.kind) {
+    case "create-thread":
+      return dialogState.value.mode === "worktree" ? "Create Worktree" : "Start Chat";
     case "rename-thread":
       return "Save";
     case "archive-group":
@@ -662,22 +904,53 @@ function splitParagraphs(text: string) {
     .filter(Boolean);
 }
 
-function projectGroupIcon(label: string) {
-  const normalized = label.toLowerCase();
-  if (normalized.includes("worktree")) {
-    return "⑂";
+function resolveCreateThreadTarget(projectLabel?: string, cwd?: string | null) {
+  if (cwd || projectLabel) {
+    const match = drawerProjectTargets.value.find((target) => {
+      if (cwd) {
+        return target.cwd === cwd;
+      }
+      return target.label === projectLabel;
+    });
+    if (match) {
+      return match;
+    }
   }
-  if (normalized.includes("relay")) {
-    return "↔";
-  }
-  if (normalized.includes("remodex")) {
-    return "⌂";
-  }
-  return "•";
+
+  return drawerProjectTargets.value.find((target) => target.isCurrent) ?? drawerProjectTargets.value[0];
 }
 
-function preferredGroupMode(label: string): "local" | "worktree" {
-  return label.toLowerCase().includes("worktree") ? "worktree" : "local";
+function openCreateThreadDialog(mode: ThreadCreateMode, projectLabel?: string, cwd?: string | null) {
+  const target = resolveCreateThreadTarget(projectLabel, cwd);
+  dialogState.value = {
+    kind: "create-thread",
+    mode,
+    projectLabel: target?.label ?? projectLabel ?? "Phodex Web",
+    cwd: target?.cwd ?? cwd ?? null,
+  };
+}
+
+function selectCreateThreadTarget(target: DrawerProjectTarget) {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread") {
+    return;
+  }
+
+  dialogState.value = {
+    ...dialogState.value,
+    projectLabel: target.label,
+    cwd: target.cwd,
+  };
+}
+
+function setCreateThreadMode(mode: ThreadCreateMode) {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread") {
+    return;
+  }
+
+  dialogState.value = {
+    ...dialogState.value,
+    mode,
+  };
 }
 
 function openSidebar() {
@@ -793,13 +1066,11 @@ function handleArchiveGroup(projectLabel: string) {
 }
 
 function startLocalChat() {
-  client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "local");
-  closeSidebar();
+  openCreateThreadDialog("local", currentThread.value?.projectLabel, currentThread.value?.repoLabel ?? null);
 }
 
 function startWorktreeChat() {
-  client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "worktree");
-  closeSidebar();
+  openCreateThreadDialog("worktree", currentThread.value?.projectLabel, currentThread.value?.repoLabel ?? null);
 }
 
 function openPanel(panel: ShellPageState, replace = false) {
@@ -837,6 +1108,13 @@ function closeDialog() {
 
 function confirmDialogAction() {
   if (!dialogState.value) {
+    return;
+  }
+
+  if (dialogState.value.kind === "create-thread") {
+    client.createThread(dialogState.value.projectLabel, dialogState.value.mode, dialogState.value.cwd ?? undefined);
+    closeDialog();
+    closeSidebar();
     return;
   }
 
@@ -1682,7 +1960,9 @@ function handleScrollToLatest() {
                             <strong class="drawer-brand__title">Remodex</strong>
                           </div>
                         </div>
-                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">×</button>
+                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">
+                          <AppIcon name="close" />
+                        </button>
                       </div>
 
                       <input
@@ -1693,10 +1973,13 @@ function handleScrollToLatest() {
                       />
 
                       <button class="drawer-new-chat" @click="startLocalChat">
-                        <span class="drawer-new-chat__icon">＋</span>
+                        <span class="drawer-new-chat__icon">
+                          <AppIcon name="plus" />
+                        </span>
                         <div class="drawer-new-chat__copy">
+                          <span class="section-label">Create</span>
                           <strong>New Chat</strong>
-                          <p>Start from the active local checkout.</p>
+                          <p>Pick a project, then start a local chat or a fresh worktree on your Mac.</p>
                         </div>
                       </button>
 
@@ -1706,25 +1989,38 @@ function handleScrollToLatest() {
                           :class="{ 'drawer-shortcut--active': !currentThread }"
                           @click="client.clearThreadSelection()"
                         >
-                          Home
+                          <AppIcon name="home" />
+                          <span>Home</span>
                         </button>
-                        <button class="drawer-shortcut" @click="startWorktreeChat">New Worktree</button>
-                        <button class="drawer-shortcut" @click="openPanel('about')">About</button>
+                        <button class="drawer-shortcut" @click="startWorktreeChat">
+                          <AppIcon name="worktree" />
+                          <span>New Worktree</span>
+                        </button>
+                        <button class="drawer-shortcut" @click="openPanel('about')">
+                          <AppIcon name="info" />
+                          <span>About</span>
+                        </button>
                       </div>
 
                       <div class="drawer-groups">
                         <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
                           <div class="drawer-group__head">
                             <div class="drawer-group__title">
-                              <span class="drawer-group__icon">{{ projectGroupIcon(group.label) }}</span>
+                              <span class="drawer-group__icon">
+                                <AppIcon name="folder" />
+                              </span>
                               <p class="drawer-group__label">{{ group.label }}</p>
                             </div>
                             <div class="drawer-group__head-actions">
                               <button class="drawer-group__action" @click="handleArchiveGroup(group.label)">
                                 Archive {{ group.liveCount }}
                               </button>
-                              <button class="drawer-group__plus" @click="client.createThread(group.label, preferredGroupMode(group.label))">
-                                +
+                              <button
+                                class="drawer-group__plus"
+                                :aria-label="`Start a new chat in ${group.label}`"
+                                @click="openCreateThreadDialog('local', group.label, group.cwd)"
+                              >
+                                <AppIcon name="plus" />
                               </button>
                             </div>
                           </div>
@@ -1744,8 +2040,13 @@ function handleScrollToLatest() {
                           >
                             <div class="drawer-thread__indicator">
                               <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
-                              <span v-if="thread.isWorktree" class="drawer-thread__badge">⑂</span>
-                              <span v-else-if="thread.isForked" class="drawer-thread__badge">⇄</span>
+                              <span v-if="thread.isWorktree" class="drawer-thread__badge">
+                                <AppIcon name="worktree" />
+                                <span>WT</span>
+                              </span>
+                              <span v-else-if="thread.isForked" class="drawer-thread__badge">
+                                <span>Fork</span>
+                              </span>
                             </div>
 
                             <div class="drawer-thread__body">
@@ -1755,7 +2056,7 @@ function handleScrollToLatest() {
                               </div>
                               <p>{{ thread.preview }}</p>
                               <div class="drawer-thread__meta">
-                                <span>{{ thread.repoLabel }}</span>
+                                <span>{{ formatThreadLocation(thread) }}</span>
                                 <span>{{ thread.branch }}</span>
                                 <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
                                 <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
@@ -1765,9 +2066,19 @@ function handleScrollToLatest() {
                             </div>
 
                             <div class="drawer-thread__actions">
-                              <button class="icon-button icon-button--tiny" @click.stop="handleRenameThread(thread.id, thread.title)">✎</button>
-                              <button class="icon-button icon-button--tiny" @click.stop="client.toggleArchiveThread(thread)">
-                                {{ thread.state === "archived" ? "↺" : "⌁" }}
+                              <button
+                                class="icon-button icon-button--tiny"
+                                aria-label="Rename chat"
+                                @click.stop="handleRenameThread(thread.id, thread.title)"
+                              >
+                                <AppIcon name="edit" />
+                              </button>
+                              <button
+                                class="icon-button icon-button--tiny"
+                                :aria-label="thread.state === 'archived' ? 'Restore chat' : 'Archive chat'"
+                                @click.stop="client.toggleArchiveThread(thread)"
+                              >
+                                <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
                               </button>
                             </div>
                           </button>
@@ -1805,14 +2116,18 @@ function handleScrollToLatest() {
                   </transition>
 
                   <header class="phone-topbar">
-                    <button class="icon-button" @click="openSidebar">☰</button>
+                    <button class="icon-button" aria-label="Open menu" @click="openSidebar">
+                      <AppIcon name="menu" />
+                    </button>
 
                     <div class="phone-topbar__title" :class="{ 'phone-topbar__title--home': !currentThread }">
                       <span class="section-label">{{ currentThread?.projectLabel ?? "Remodex" }}</span>
                       <strong>{{ currentThread?.title ?? "Home" }}</strong>
                     </div>
 
-                    <button v-if="!currentThread" class="icon-button phone-topbar__action" aria-label="Settings" @click="openPanel('settings')">⚙</button>
+                    <button v-if="!currentThread" class="icon-button phone-topbar__action" aria-label="Settings" @click="openPanel('settings')">
+                      <AppIcon name="settings" />
+                    </button>
                     <span v-else class="phone-topbar__spacer" aria-hidden="true"></span>
                   </header>
 
@@ -1823,7 +2138,9 @@ function handleScrollToLatest() {
                         <strong>{{ visibleBanner.title }}</strong>
                         <p>{{ visibleBanner.subtitle }}</p>
                       </div>
-                      <button class="icon-button icon-button--tiny" @click="dismissBanner">×</button>
+                      <button class="icon-button icon-button--tiny" aria-label="Dismiss banner" @click="dismissBanner">
+                        <AppIcon name="close" />
+                      </button>
                     </div>
                   </transition>
 
@@ -1975,7 +2292,9 @@ function handleScrollToLatest() {
                             {{ state.snapshot.connection.state === "connected" ? "Connected To Mac" : "Trusted Mac" }}
                           </span>
                           <div class="home-empty-state__trusted-row">
-                            <span class="home-empty-state__trusted-icon">⌂</span>
+                            <span class="home-empty-state__trusted-icon">
+                              <AppIcon name="home" />
+                            </span>
                             <div class="home-empty-state__trusted">
                               <strong>{{ state.snapshot?.connection.macLabel }}</strong>
                               <p>{{ state.snapshot?.connection.relayLabel }}</p>
@@ -2122,11 +2441,71 @@ function handleScrollToLatest() {
               </transition>
 
               <transition name="scrim">
-                <div v-if="dialogState" class="app-dialog-scrim">
-                  <div class="app-dialog-card">
-                    <span class="section-label">{{ dialogState.kind === "rename-thread" ? "Rename" : "Confirm" }}</span>
+                <div v-if="dialogState" class="app-dialog-scrim" @click.self="closeDialog">
+                  <div class="app-dialog-card" :class="{ 'app-dialog-card--create-thread': dialogState.kind === 'create-thread' }">
+                    <span class="section-label">
+                      {{
+                        dialogState.kind === "rename-thread"
+                          ? "Rename"
+                          : dialogState.kind === "create-thread"
+                            ? "Create"
+                            : "Confirm"
+                      }}
+                    </span>
                     <h3>{{ dialogTitle }}</h3>
                     <p>{{ dialogBody }}</p>
+
+                    <template v-if="dialogState.kind === 'create-thread'">
+                      <div class="thread-create-sheet__modes">
+                        <button
+                          class="thread-create-sheet__mode"
+                          :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'local' }"
+                          @click="setCreateThreadMode('local')"
+                        >
+                          <AppIcon name="folder" />
+                          <div>
+                            <strong>Local Chat</strong>
+                            <span>Starts at the project root</span>
+                          </div>
+                        </button>
+                        <button
+                          class="thread-create-sheet__mode"
+                          :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'worktree' }"
+                          @click="setCreateThreadMode('worktree')"
+                        >
+                          <AppIcon name="worktree" />
+                          <div>
+                            <strong>Worktree Chat</strong>
+                            <span>Creates a fresh git worktree first</span>
+                          </div>
+                        </button>
+                      </div>
+
+                      <div class="thread-create-sheet__targets">
+                        <button
+                          v-for="target in drawerProjectTargets"
+                          :key="`${target.label}-${target.cwd ?? 'default'}`"
+                          class="thread-create-sheet__target"
+                          :class="{
+                            'thread-create-sheet__target--active':
+                              dialogState.projectLabel === target.label && dialogState.cwd === target.cwd,
+                          }"
+                          @click="selectCreateThreadTarget(target)"
+                        >
+                          <span class="thread-create-sheet__target-icon">
+                            <AppIcon :name="dialogState.mode === 'worktree' ? 'worktree' : 'folder'" />
+                          </span>
+                          <div class="thread-create-sheet__target-copy">
+                            <div class="thread-create-sheet__target-head">
+                              <strong>{{ target.label }}</strong>
+                              <span v-if="target.isCurrent" class="thread-create-sheet__target-tag">Current</span>
+                            </div>
+                            <p>{{ target.detail }}</p>
+                            <span>{{ target.liveCount }} live {{ target.liveCount === 1 ? "chat" : "chats" }}</span>
+                          </div>
+                        </button>
+                      </div>
+                    </template>
 
                     <input
                       v-if="dialogState.kind === 'rename-thread'"

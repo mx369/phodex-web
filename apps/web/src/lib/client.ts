@@ -193,7 +193,7 @@ export function createAppClient() {
     pushToast("info", "Signed out.");
   }
 
-  function createThread(projectLabel?: string, mode: ThreadCreateMode = "local") {
+  function createThread(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
     if (pendingThreadCreate) {
       pushToast("info", "A new chat is already starting on your Mac.");
       return false;
@@ -202,6 +202,7 @@ export function createAppClient() {
     const sent = send({
       type: "thread:create",
       projectLabel,
+      cwd,
       mode,
     });
     if (!sent) {
@@ -212,8 +213,8 @@ export function createAppClient() {
     return true;
   }
 
-  function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local") {
-    const created = createThread(projectLabel, mode);
+  function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
+    const created = createThread(projectLabel, mode, cwd);
     if (created) {
       pendingSendAfterThreadCreate = true;
     }
