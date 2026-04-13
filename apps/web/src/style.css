@@ -2358,9 +2358,17 @@ button {
   font-size: 13px;
 }
 
+.archived-page {
+  display: grid;
+  min-height: 100%;
+}
+
 .archived-list {
   display: grid;
-  gap: 10px;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: rgba(18, 18, 18, 0.06);
 }
 
 .archived-empty {
@@ -2398,9 +2406,8 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(18, 18, 18, 0.04);
+  padding: 15px 16px;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .archived-row strong {
@@ -2425,7 +2432,19 @@ button {
 
 .archived-row__actions {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+.archived-row__action {
+  padding: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.archived-row__action--danger {
+  color: var(--danger);
 }
 
 .paywall-points {

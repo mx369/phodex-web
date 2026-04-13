@@ -1664,8 +1664,7 @@ function readShellPageState(): ShellPageState | null {
                     </template>
 
                     <template v-else-if="activePanel === 'archived'">
-                      <section class="settings-card">
-                        <span class="section-label">Stored Locally</span>
+                      <section class="archived-page">
                         <div v-if="archivedThreads.length" class="archived-list">
                           <article v-for="thread in archivedThreads" :key="thread.id" class="archived-row">
                             <div>
@@ -1674,8 +1673,8 @@ function readShellPageState(): ShellPageState | null {
                               <p>{{ thread.preview }}</p>
                             </div>
                             <div class="archived-row__actions">
-                              <button class="ghost-cta ghost-cta--compact" @click="client.toggleArchiveThread(thread)">Restore</button>
-                              <button class="ghost-cta ghost-cta--compact" @click="handleDeleteThread(thread)">Delete</button>
+                              <button class="archived-row__action" @click="client.toggleArchiveThread(thread)">Restore</button>
+                              <button class="archived-row__action archived-row__action--danger" @click="handleDeleteThread(thread)">Delete</button>
                             </div>
                           </article>
                         </div>
