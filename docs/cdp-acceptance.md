@@ -25,7 +25,7 @@ All screenshots in this file were captured from real browser renders through the
 | Turn Empty | Same authenticated session, opened a clean chat after the empty-timeline pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png` |
 | Turn View Work-State Band | Same authenticated session, created a clean test thread and verified queued-draft and pinned-plan accessory states above the composer | `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |
-| Turn View Scroll State | Same authenticated session, used a long thread to verify internal timeline scrolling, the lighter arrow-only latest-jump button, and return-to-bottom behavior after the source-informed scroll-state pass | `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-cdp/qa-85-turn-scroll-glass-arrow.png` |
+| Turn View Scroll State | Same authenticated session, used a long thread to verify internal timeline scrolling, the smaller centered black latest-jump button, and return-to-bottom behavior after the source-informed scroll-state pass | `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-cdp/qa-87-turn-scroll-black-centered.png` |
 | Turn View Model Picker | Same authenticated session, opened the composer model trigger and switched the selection from `GPT-5.4` to `GPT-5.4 mini` after replacing the native browser dropdown with a custom popover | `.artifacts/qa-cdp/qa-83-model-picker-open.png`, `.artifacts/qa-cdp/qa-84-model-picker-mini-selected.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the drawer parity pass | `.artifacts/qa-76-drawer-open.png` |
 | Sidebar Create Sheet | Same authenticated session, opened drawer `New Chat` after the drawer parity pass | `.artifacts/qa-77-drawer-create-sheet.png` |
@@ -51,6 +51,6 @@ All screenshots in this file were captured from real browser renders through the
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
 - Turn-view evidence now reflects the summary toolbar plus real Codex execution cards instead of chat-only message rows.
 - Turn-view work-state evidence now reflects visible queued-draft and pinned-plan accessory surfaces instead of hiding that state in thread metadata alone.
-- Turn-view scroll evidence now reflects a fixed mobile shell with an internally scrolling timeline and a lighter, single-surface latest-jump affordance.
+- Turn-view scroll evidence now reflects a fixed mobile shell with an internally scrolling timeline and a smaller centered black latest-jump affordance.
 - Turn-view composer evidence now reflects a custom in-shell model picker instead of the browser-native select popup.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

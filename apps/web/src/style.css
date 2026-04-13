@@ -1843,29 +1843,33 @@ button {
 
 .scroll-latest-cta {
   position: absolute;
-  right: 18px;
-  bottom: calc(100% + 12px);
+  left: 50%;
+  bottom: calc(100% + 8px);
   display: inline-grid;
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.86);
+  border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  color: rgba(18, 18, 18, 0.72);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 14px 28px rgba(18, 18, 18, 0.12);
+  background: rgba(18, 18, 18, 0.92);
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 20px rgba(18, 18, 18, 0.18);
+  transform: translateX(-50%);
 }
 
 .scroll-latest-cta .app-icon {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2.1;
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.35;
+}
+
+.scroll-latest-cta:hover {
+  transform: translate(-50%, -1px);
 }
 
 .scroll-latest-cta:active {
-  transform: scale(0.97);
+  transform: translateX(-50%) scale(0.96);
 }
 
 .composer-work-state {
