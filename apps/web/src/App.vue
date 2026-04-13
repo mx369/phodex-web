@@ -646,16 +646,8 @@ function handleArchiveGroup(projectLabel: string) {
   };
 }
 
-function showHome() {
-  client.clearThreadSelection();
-}
-
 function startLocalChat() {
   client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "local");
-}
-
-function startWorktreeChat() {
-  client.createThread(currentThread.value?.projectLabel ?? "Phodex Web", "worktree");
 }
 
 function openPanel(panel: ShellPageState, replace = false) {
@@ -1219,12 +1211,6 @@ function readShellPageState(): ShellPageState | null {
                       </div>
                     </button>
 
-                    <div class="drawer-action-row">
-                      <button class="drawer-mini-action" @click="showHome">Home</button>
-                      <button class="drawer-mini-action" @click="startWorktreeChat">New Worktree</button>
-                      <button class="drawer-mini-action" @click="openPanel('about')">About</button>
-                    </div>
-
                     <div class="drawer-groups">
                       <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
                         <div class="drawer-group__head">
@@ -1289,18 +1275,12 @@ function readShellPageState(): ShellPageState | null {
                     </div>
 
                     <div class="phone-drawer__foot">
-                      <div class="drawer-connection">
-                        <div class="drawer-connection__copy">
-                          <span class="section-label">Connected To Mac</span>
-                          <strong>{{ state.snapshot?.connection.macLabel }}</strong>
-                          <p>{{ state.snapshot?.connection.relayLabel }}</p>
-                        </div>
-                        <span class="drawer-connection__latency">{{ state.snapshot?.connection.latencyMs }}ms</span>
-                      </div>
-                      <button class="drawer-settings-fab" @click="openPanel('settings')">Settings</button>
-                      <div class="phone-drawer__foot-actions">
-                        <button class="ghost-cta ghost-cta--compact" @click="openPanel('archived')">Archived</button>
-                        <button class="ghost-cta ghost-cta--compact" @click="client.logout()">Disconnect</button>
+                      <button class="drawer-settings-fab" aria-label="Settings" @click="openPanel('settings')">⚙</button>
+                      <div class="drawer-status">
+                        <span class="drawer-status__label">
+                          {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Saved Mac" }}
+                        </span>
+                        <strong>{{ state.snapshot?.connection.macLabel }}</strong>
                       </div>
                     </div>
                   </aside>
