@@ -8,6 +8,7 @@ import { createAppClient, state } from "./lib/client";
 
 type AppIconName =
   | "archive"
+  | "arrow-down"
   | "check"
   | "chevron-down"
   | "close"
@@ -46,6 +47,10 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
     ],
     paths: ["M6 8.5v7.25A2.25 2.25 0 0 0 8.25 18h7.5A2.25 2.25 0 0 0 18 15.75V8.5"],
     polylines: ["9.25 10.5 12 13.25 14.75 10.5"],
+  },
+  "arrow-down": {
+    lines: [{ x1: 12, y1: 6.5, x2: 12, y2: 17.5 }],
+    polylines: ["7.5 13 12 17.5 16.5 13"],
   },
   check: {
     polylines: ["5.5 12.5 10 17 18.5 8.5"],
@@ -2509,7 +2514,7 @@ function handleScrollToLatest() {
                         aria-label="Scroll to latest"
                         @click="handleScrollToLatest"
                       >
-                        <span aria-hidden="true">↓</span>
+                        <AppIcon name="arrow-down" aria-hidden="true" />
                       </button>
 
                       <div v-if="composerWorkStateVisible" class="composer-work-state">
