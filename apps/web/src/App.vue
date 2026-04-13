@@ -50,7 +50,7 @@ const onboardingScreens = [
     kind: "welcome",
     title: "Remodex",
     subtitle: "Control Codex from your iPhone.",
-    badge: "Source-shaped mobile shell",
+    badge: "End-to-end encrypted",
   },
   {
     kind: "features",
@@ -72,14 +72,14 @@ const onboardingScreens = [
       {
         icon: "⌁",
         tone: "cyan",
-        title: "HTTPS + WSS",
-        subtitle: "Encrypted transport without the original E2E pairing flow",
+        title: "End-to-end encrypted",
+        subtitle: "The relay never sees your prompts or code",
       },
       {
         icon: "◉",
         tone: "purple",
-        title: "Voice-ready shell",
-        subtitle: "UI reserved for speech-to-text and live controls",
+        title: "Voice mode",
+        subtitle: "Talk to Codex with speech-to-text",
       },
       {
         icon: "△",
@@ -94,24 +94,24 @@ const onboardingScreens = [
     step: "Step 1",
     icon: "⌘",
     title: "Install Codex CLI",
-    subtitle: "The AI coding agent lives in your terminal. This remake keeps the mobile shell on top of it.",
+    subtitle: "The AI coding agent that lives in your terminal. Remodex connects to it from your iPhone.",
     command: "npm install -g @openai/codex@latest",
   },
   {
     kind: "step",
     step: "Step 2",
     icon: "↔",
-    title: "Start the Bun relay",
-    subtitle: "Use the local Bun HTTPS and WSS relay instead of the original pair bridge flow.",
-    command: "bun run start:server",
+    title: "Install the Bridge",
+    subtitle: "A lightweight relay that securely connects your Mac to your iPhone.",
+    command: "npm install -g remodex@latest",
   },
   {
     kind: "step",
     step: "Step 3",
     icon: "@",
-    title: "Pair with Email OTP",
-    subtitle: "Email verification replaces QR pairing, while the visual flow stays close to the source app.",
-    command: "Request a code from the phone shell",
+    title: "Start Pairing",
+    subtitle: "Run this on your Mac. A QR code will appear in your terminal — scan it next.",
+    command: "remodex up",
   },
 ] as const;
 
@@ -120,30 +120,42 @@ const gatePlans = [
     id: "monthly",
     title: "Monthly",
     price: "$3.99",
-    subtitle: "Flexible access with the full mobile shell.",
+    subtitle: "Billed monthly",
     badge: "Popular",
   },
   {
     id: "annual",
     title: "Annual",
     price: "$29.99",
-    subtitle: "Best value for long-running local relay work.",
+    subtitle: "Billed yearly",
     badge: "Best value",
   },
 ] as const;
 
-const scannerFeatureList = [
+const subscriptionGateFeatures = [
   {
-    title: "Camera permission",
-    subtitle: "The source app starts with a real camera flow before it falls back to anything else.",
+    title: "Fast mode",
+    subtitle: "Lower-latency turns for quick interactions",
   },
   {
-    title: "Bridge recovery",
-    subtitle: "Version mismatch shows a repair sheet with copyable commands and a retry path.",
+    title: "Git from your phone",
+    subtitle: "Commit, push, pull, and switch branches",
   },
   {
-    title: "Email OTP fallback",
-    subtitle: "This remake keeps a local backdoor, but it stays secondary to the scanner route.",
+    title: "End-to-end encrypted",
+    subtitle: "The relay never sees your prompts or code",
+  },
+  {
+    title: "Voice mode",
+    subtitle: "Speech-to-text transcription for your messages",
+  },
+  {
+    title: "Subagents",
+    subtitle: "Delegate complex tasks to specialized sub-agents",
+  },
+  {
+    title: "$skills /cmds @files",
+    subtitle: "Invoke skills, run slash commands, and mention files inline",
   },
 ] as const;
 
@@ -939,28 +951,15 @@ function readShellPageState(): ShellPageState | null {
                     <div class="root-auth-screen__hero-icon">!</div>
                     <span class="section-label section-label--light">Bootstrap Failure</span>
                     <h2>Couldn’t load subscription status</h2>
-                    <p>Remodex could not confirm Pro access yet. Retry, restore purchases, or jump to the local pairing backdoor.</p>
-                  </div>
-
-                  <div class="root-auth-screen__feature-list">
-                    <article v-for="feature in scannerFeatureList" :key="feature.title" class="root-auth-screen__feature-row">
-                      <strong>{{ feature.title }}</strong>
-                      <p>{{ feature.subtitle }}</p>
-                    </article>
+                    <p>Remodex couldn’t confirm your Pro access yet. Check your connection, retry, or restore your App Store purchases.</p>
                   </div>
 
                   <button class="primary-cta primary-cta--dark" @click="switchRootFlow('subscription-gate')">Retry</button>
                   <button class="ghost-cta ghost-cta--dark" @click="switchRootFlow('camera-permission')">Restore Purchases</button>
 
-                  <div class="pairing-screen__backdoor">
-                    <div class="pairing-screen__backdoor-row">
-                      <span>Privacy</span>
-                      <strong>Open</strong>
-                    </div>
-                    <div class="pairing-screen__backdoor-row">
-                      <span>Terms</span>
-                      <strong>Open</strong>
-                    </div>
+                  <div class="root-auth-screen__links">
+                    <button class="root-auth-screen__link" @click="openExternal('https://example.com/privacy')">Privacy</button>
+                    <button class="root-auth-screen__link" @click="openExternal('https://example.com/terms')">Terms</button>
                   </div>
                 </div>
               </section>
@@ -977,7 +976,7 @@ function readShellPageState(): ShellPageState | null {
                     <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
                     <span class="section-label section-label--light">Subscription Gate</span>
                     <h2>Unlock the app to connect your iPhone to Codex running on your Mac.</h2>
-                    <p>HTTPS and WSS stay in place, while the original QR-based E2E handshake is replaced with this local remake flow.</p>
+                    <p>Remodex is subscription-only. Unlock the app to connect your iPhone to Codex running on your Mac.</p>
                   </div>
 
                   <div class="gate-plan-scroll">
@@ -998,7 +997,7 @@ function readShellPageState(): ShellPageState | null {
                   </div>
 
                   <div class="root-auth-screen__feature-list">
-                    <article v-for="feature in scannerFeatureList" :key="feature.title" class="root-auth-screen__feature-row">
+                    <article v-for="feature in subscriptionGateFeatures" :key="feature.title" class="root-auth-screen__feature-row">
                       <strong>{{ feature.title }}</strong>
                       <p>{{ feature.subtitle }}</p>
                     </article>
@@ -1025,15 +1024,8 @@ function readShellPageState(): ShellPageState | null {
                   <div class="pairing-screen__head">
                     <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
                     <span class="section-label section-label--light">Camera Permission</span>
-                    <h2>Allow camera access to scan the pairing QR code.</h2>
-                    <p>The original app starts with camera scanning. This remake keeps that page tree and keeps email OTP as the fallback.</p>
-                  </div>
-
-                  <div class="root-auth-screen__feature-list">
-                    <article v-for="feature in scannerFeatureList" :key="feature.title" class="root-auth-screen__feature-row">
-                      <strong>{{ feature.title }}</strong>
-                      <p>{{ feature.subtitle }}</p>
-                    </article>
+                    <h2>Camera access needed</h2>
+                    <p>Open Settings and allow camera access to scan the pairing QR code.</p>
                   </div>
 
                   <button class="primary-cta primary-cta--dark" @click="continueFromCameraPermission">Allow Camera</button>
@@ -1054,7 +1046,7 @@ function readShellPageState(): ShellPageState | null {
                     <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
                     <span class="section-label section-label--light">QR Scanner</span>
                     <h2>Scan the QR code from Remodex CLI.</h2>
-                    <p>If the bridge version does not match, a recovery sheet appears first. If scanning fails, email OTP still works.</p>
+                    <p>If the bridge version does not match, update Remodex on your Mac and scan a fresh QR code.</p>
                   </div>
 
                   <div class="scanner-preview">
@@ -1086,7 +1078,7 @@ function readShellPageState(): ShellPageState | null {
                     <div class="root-auth-screen__hero-icon root-auth-screen__hero-icon--warn">!</div>
                     <span class="section-label section-label--light">Scan Error</span>
                     <h2>{{ scannerErrorMessage }}</h2>
-                    <p>The camera could not decode the code. Retry scanning, open bridge recovery, or fall back to email OTP.</p>
+                    <p>The camera couldn’t decode the code. Retry scanning, update the bridge, or use the local email fallback.</p>
                   </div>
                   <button class="primary-cta primary-cta--dark" @click="resumeScannerFlow">Try Again</button>
                   <button class="ghost-cta ghost-cta--dark" @click="showBridgeUpdateRecovery">Bridge Recovery</button>
@@ -1141,8 +1133,8 @@ function readShellPageState(): ShellPageState | null {
                   <div class="pairing-screen__head">
                     <img :src="remodexAppLogo" alt="" class="pairing-screen__logo" />
                     <span class="section-label section-label--light">Email OTP</span>
-                    <h2>Use email verification as the local backdoor.</h2>
-                    <p>The remake keeps OTP as the fallback route, but it no longer replaces the scanner tree on its own.</p>
+                    <h2>Continue with email verification.</h2>
+                    <p>Use a local verification code when QR pairing is unavailable on this device.</p>
                   </div>
 
                   <label class="input-label input-label--dark" for="email">Email</label>
