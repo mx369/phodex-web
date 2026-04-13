@@ -8,6 +8,8 @@ import { createAppClient, state } from "./lib/client";
 
 type AppIconName =
   | "archive"
+  | "check"
+  | "chevron-down"
   | "close"
   | "edit"
   | "folder"
@@ -44,6 +46,12 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
     ],
     paths: ["M6 8.5v7.25A2.25 2.25 0 0 0 8.25 18h7.5A2.25 2.25 0 0 0 18 15.75V8.5"],
     polylines: ["9.25 10.5 12 13.25 14.75 10.5"],
+  },
+  check: {
+    polylines: ["5.5 12.5 10 17 18.5 8.5"],
+  },
+  "chevron-down": {
+    polylines: ["6.5 9.5 12 15 17.5 9.5"],
   },
   close: {
     lines: [
@@ -190,6 +198,8 @@ const activePanel = computed(() => shellPageStack.value.at(-1) ?? null);
 const panelCanGoBack = computed(() => shellPageStack.value.length > 1);
 const dialogState = ref<AppDialogState | null>(null);
 const dialogInput = ref("");
+const modelPickerOpen = ref(false);
+const modelPickerEl = ref<HTMLElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
 const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
 const isScrolledToBottom = ref(true);
@@ -399,6 +409,8 @@ const slashCommandCatalog = [
 ] as const;
 
 onMounted(() => {
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  document.addEventListener("keydown", handleDocumentKeyDown);
   void client.restoreSession().then(() => {
     if (pendingShellPage.value && isAuthenticated.value) {
       openPanel(pendingShellPage.value, true);
@@ -408,6 +420,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  document.removeEventListener("keydown", handleDocumentKeyDown);
   clearFollowBottomTimer();
   clearWheelScrollEndTimer();
   clearTimelineSyncTimer();
@@ -1063,11 +1077,62 @@ function updateCreateThreadCustomCwd(value: string) {
   };
 }
 
+function modelOptionCopy(model: string) {
+  switch (model) {
+    case "GPT-5.4":
+      return "Best for heavier coding passes and deeper edits.";
+    case "GPT-5.4 mini":
+      return "Faster daily driver for most routine chats.";
+    case "o4-mini":
+      return "Lightest option for quick checks and short turns.";
+    default:
+      return "Available in this local shell.";
+  }
+}
+
+function closeModelPicker() {
+  modelPickerOpen.value = false;
+}
+
+function toggleModelPicker() {
+  if (isCurrentThreadPendingCreate.value) {
+    return;
+  }
+  modelPickerOpen.value = !modelPickerOpen.value;
+}
+
+function selectModel(model: string) {
+  state.ui.selectedModel = model;
+  closeModelPicker();
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (!modelPickerOpen.value || !modelPickerEl.value) {
+    return;
+  }
+  const target = event.target;
+  if (!(target instanceof Node)) {
+    return;
+  }
+  if (modelPickerEl.value.contains(target)) {
+    return;
+  }
+  closeModelPicker();
+}
+
+function handleDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    closeModelPicker();
+  }
+}
+
 function openSidebar() {
+  closeModelPicker();
   state.ui.sidebarOpen = true;
 }
 
 function closeSidebar() {
+  closeModelPicker();
   state.ui.sidebarOpen = false;
 }
 
@@ -1184,6 +1249,7 @@ function startWorktreeChat() {
 }
 
 function openPanel(panel: ShellPageState, replace = false) {
+  closeModelPicker();
   if (panel === "settings") {
     shellPageStack.value = ["settings"];
     state.ui.sidebarOpen = false;
@@ -1199,6 +1265,7 @@ function openPanel(panel: ShellPageState, replace = false) {
 }
 
 function closePanel() {
+  closeModelPicker();
   if (shellPageStack.value.length > 1) {
     shellPageStack.value = shellPageStack.value.slice(0, -1);
     return;
@@ -1212,6 +1279,7 @@ function dismissBanner() {
 }
 
 function closeDialog() {
+  closeModelPicker();
   dialogState.value = null;
   dialogInput.value = "";
 }
@@ -2503,9 +2571,47 @@ function handleScrollToLatest() {
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
-                            <select v-model="state.ui.selectedModel" class="phone-select" :disabled="isCurrentThreadPendingCreate">
-                              <option v-for="model in MODELS" :key="model">{{ model }}</option>
-                            </select>
+                            <div ref="modelPickerEl" class="model-picker">
+                              <button
+                                class="model-picker__trigger"
+                                type="button"
+                                aria-haspopup="listbox"
+                                :aria-expanded="modelPickerOpen"
+                                aria-label="Select model"
+                                :disabled="isCurrentThreadPendingCreate"
+                                @click="toggleModelPicker"
+                              >
+                                <strong class="model-picker__trigger-label">{{ state.ui.selectedModel }}</strong>
+                                <AppIcon name="chevron-down" />
+                              </button>
+
+                              <transition name="composer-picker">
+                                <div v-if="modelPickerOpen" class="model-picker__menu" role="listbox" aria-label="Model options">
+                                  <button
+                                    v-for="model in MODELS"
+                                    :key="model"
+                                    class="model-picker__option"
+                                    :class="{ 'model-picker__option--active': state.ui.selectedModel === model }"
+                                    type="button"
+                                    role="option"
+                                    :aria-selected="state.ui.selectedModel === model"
+                                    @click="selectModel(model)"
+                                  >
+                                    <span class="model-picker__copy">
+                                      <strong>{{ model }}</strong>
+                                      <span>{{ modelOptionCopy(model) }}</span>
+                                    </span>
+                                    <span
+                                      class="model-picker__status"
+                                      :class="{ 'model-picker__status--visible': state.ui.selectedModel === model }"
+                                      aria-hidden="true"
+                                    >
+                                      <AppIcon name="check" />
+                                    </span>
+                                  </button>
+                                </div>
+                              </transition>
+                            </div>
                           </div>
 
                           <div class="phone-composer__toolbar-right">

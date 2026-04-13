@@ -968,7 +968,6 @@ button {
 
 .input-field,
 .drawer-search,
-.phone-select,
 .phone-composer__input {
   width: 100%;
   border: 1px solid var(--line);
@@ -994,7 +993,8 @@ button {
 .drawer-new-chat,
 .send-cta,
 .icon-button,
-.pill--button {
+.pill--button,
+.model-picker__trigger {
   transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -1003,12 +1003,14 @@ button {
 .drawer-new-chat:hover,
 .send-cta:hover,
 .icon-button:hover,
-.pill--button:hover {
+.pill--button:hover,
+.model-picker__trigger:hover {
   transform: translateY(-1px);
 }
 
 .primary-cta:disabled,
-.ghost-cta:disabled {
+.ghost-cta:disabled,
+.model-picker__trigger:disabled {
   cursor: default;
   transform: none;
   opacity: 0.48;
@@ -2011,12 +2013,120 @@ button {
   gap: 6px;
 }
 
-.phone-select {
-  width: auto;
-  min-height: 32px;
-  padding: 0 11px;
+.model-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.model-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(18, 18, 18, 0.08);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 10px 18px rgba(18, 18, 18, 0.05);
+}
+
+.model-picker__trigger .app-icon,
+.model-picker__status .app-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.model-picker__trigger .app-icon {
+  color: var(--muted-strong);
+}
+
+.model-picker__trigger-label {
+  max-width: min(42vw, 180px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.model-picker__menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 12;
+  display: grid;
+  gap: 4px;
+  width: min(280px, calc(100vw - 68px));
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 44px rgba(18, 18, 18, 0.12);
+  backdrop-filter: blur(26px);
+}
+
+.model-picker__option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.model-picker__option:hover {
+  background: rgba(18, 18, 18, 0.045);
+}
+
+.model-picker__option--active {
+  background: linear-gradient(135deg, rgba(92, 109, 255, 0.14) 0%, rgba(92, 109, 255, 0.07) 100%);
+  box-shadow: inset 0 0 0 1px rgba(92, 109, 255, 0.16);
+}
+
+.model-picker__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-picker__copy strong {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.model-picker__copy span {
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.model-picker__status {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(92, 109, 255, 0.9);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.model-picker__status--visible {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .pill {
@@ -3087,6 +3197,17 @@ button {
 .banner-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.composer-picker-enter-active,
+.composer-picker-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.composer-picker-enter-from,
+.composer-picker-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
 }
 
 @keyframes status-pulse {
