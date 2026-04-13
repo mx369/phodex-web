@@ -164,7 +164,14 @@ type ShellPageState = "settings" | "archived" | "about" | "paywall";
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
   | { kind: "archive-group"; projectLabel: string; liveCount: number }
-  | { kind: "create-thread"; mode: ThreadCreateMode; projectLabel: string; cwd: string | null };
+  | {
+      kind: "create-thread";
+      mode: ThreadCreateMode;
+      projectLabel: string;
+      cwd: string | null;
+      customCwdInput: string;
+      useCustomCwd: boolean;
+    };
 
 type TurnAutoScrollMode = "followBottom" | "anchorAssistantResponse" | "manual";
 
@@ -198,6 +205,7 @@ const TURN_SCROLL_COALESCE_MS = 16;
 const TURN_RECOVERY_DELAYS_MS = [0, 16, 50, 100] as const;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const WHEEL_SCROLL_END_DEBOUNCE_MS = 140;
+const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 
 let followBottomTimer: number | null = null;
 let wheelScrollEndTimer: number | null = null;
@@ -733,8 +741,8 @@ const dialogBody = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
       return dialogState.value.mode === "worktree"
-        ? "Choose which project should get a fresh git worktree before Codex starts the chat."
-        : "Choose which project root should back the next chat on your Mac.";
+        ? "Choose an existing project or point at a git-backed path before starting a fresh worktree on your Mac."
+        : "Choose an existing project or type a new path for the next chat on your Mac.";
     case "rename-thread":
       return "Update the thread title shown in the sidebar and top navigation.";
     case "archive-group":
@@ -746,6 +754,9 @@ const dialogBody = computed(() => {
 const dialogConfirmLabel = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
+      if (dialogState.value.useCustomCwd && dialogState.value.mode === "local") {
+        return "Create Folder & Start Chat";
+      }
       return dialogState.value.mode === "worktree" ? "Create Worktree" : "Start Chat";
     case "rename-thread":
       return "Save";
@@ -768,6 +779,55 @@ const activePanelTitle = computed(() => {
     default:
       return "";
   }
+});
+const createThreadSelection = computed(() => {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread") {
+    return null;
+  }
+
+  if (!dialogState.value.useCustomCwd) {
+    return {
+      projectLabel: dialogState.value.projectLabel,
+      cwd: dialogState.value.cwd,
+      isCustom: false,
+    };
+  }
+
+  const input = dialogState.value.customCwdInput.trim();
+  return {
+    projectLabel: deriveProjectLabelFromPathInput(input),
+    cwd: input || null,
+    isCustom: true,
+  };
+});
+const createThreadResolvedPathHint = computed(() => {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread" || !dialogState.value.useCustomCwd) {
+    return "";
+  }
+  return previewCreateThreadPath(dialogState.value.customCwdInput);
+});
+const createThreadHintCopy = computed(() => {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread" || !dialogState.value.useCustomCwd) {
+    return "";
+  }
+  return dialogState.value.mode === "worktree"
+    ? "Absolute paths are used as-is. Folder names resolve inside the default Phodex projects directory, but worktree mode still needs the resolved path to belong to an existing git project."
+    : "Paste an absolute path to use it directly, or just type a folder name to create it inside the default Phodex projects directory.";
+});
+const dialogConfirmDisabled = computed(() => {
+  if (!dialogState.value) {
+    return false;
+  }
+  if (dialogState.value.kind === "rename-thread") {
+    return !dialogInput.value.trim();
+  }
+  if (dialogState.value.kind === "create-thread") {
+    if (!dialogState.value.useCustomCwd) {
+      return false;
+    }
+    return !dialogState.value.customCwdInput.trim();
+  }
+  return false;
 });
 
 watch(
@@ -904,6 +964,30 @@ function splitParagraphs(text: string) {
     .filter(Boolean);
 }
 
+function deriveProjectLabelFromPathInput(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return "New Project";
+  }
+
+  const normalized = trimmed === "~" ? trimmed : trimmed.replace(/^~\//, "");
+  const segments = normalized.split("/").filter(Boolean);
+  return segments.at(-1) ?? normalized;
+}
+
+function previewCreateThreadPath(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return `${PROJECTS_ROOT_HINT}/my-project`;
+  }
+
+  if (trimmed === "~" || trimmed.startsWith("~/") || trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  return `${PROJECTS_ROOT_HINT}/${trimmed.replace(/^\.\/+/, "").replace(/^\/+/, "")}`;
+}
+
 function resolveCreateThreadTarget(projectLabel?: string, cwd?: string | null) {
   if (cwd || projectLabel) {
     const match = drawerProjectTargets.value.find((target) => {
@@ -927,6 +1011,8 @@ function openCreateThreadDialog(mode: ThreadCreateMode, projectLabel?: string, c
     mode,
     projectLabel: target?.label ?? projectLabel ?? "Phodex Web",
     cwd: target?.cwd ?? cwd ?? null,
+    customCwdInput: "",
+    useCustomCwd: false,
   };
 }
 
@@ -939,6 +1025,7 @@ function selectCreateThreadTarget(target: DrawerProjectTarget) {
     ...dialogState.value,
     projectLabel: target.label,
     cwd: target.cwd,
+    useCustomCwd: false,
   };
 }
 
@@ -950,6 +1037,29 @@ function setCreateThreadMode(mode: ThreadCreateMode) {
   dialogState.value = {
     ...dialogState.value,
     mode,
+  };
+}
+
+function activateCustomCreateThreadInput() {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread") {
+    return;
+  }
+
+  dialogState.value = {
+    ...dialogState.value,
+    useCustomCwd: true,
+  };
+}
+
+function updateCreateThreadCustomCwd(value: string) {
+  if (!dialogState.value || dialogState.value.kind !== "create-thread") {
+    return;
+  }
+
+  dialogState.value = {
+    ...dialogState.value,
+    customCwdInput: value,
+    useCustomCwd: true,
   };
 }
 
@@ -1112,7 +1222,15 @@ function confirmDialogAction() {
   }
 
   if (dialogState.value.kind === "create-thread") {
-    client.createThread(dialogState.value.projectLabel, dialogState.value.mode, dialogState.value.cwd ?? undefined);
+    const nextSelection = createThreadSelection.value;
+    if (!nextSelection?.cwd && nextSelection?.isCustom) {
+      return;
+    }
+    client.createThread(
+      nextSelection?.projectLabel ?? dialogState.value.projectLabel,
+      dialogState.value.mode,
+      nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
+    );
     closeDialog();
     closeSidebar();
     return;
@@ -2488,7 +2606,9 @@ function handleScrollToLatest() {
                           class="thread-create-sheet__target"
                           :class="{
                             'thread-create-sheet__target--active':
-                              dialogState.projectLabel === target.label && dialogState.cwd === target.cwd,
+                              !dialogState.useCustomCwd &&
+                              dialogState.projectLabel === target.label &&
+                              dialogState.cwd === target.cwd,
                           }"
                           @click="selectCreateThreadTarget(target)"
                         >
@@ -2505,6 +2625,43 @@ function handleScrollToLatest() {
                           </div>
                         </button>
                       </div>
+
+                      <div class="thread-create-sheet__custom">
+                        <button
+                          class="thread-create-sheet__target"
+                          :class="{ 'thread-create-sheet__target--active': dialogState.useCustomCwd }"
+                          @click="activateCustomCreateThreadInput"
+                        >
+                          <span class="thread-create-sheet__target-icon">
+                            <AppIcon name="plus" />
+                          </span>
+                          <div class="thread-create-sheet__target-copy">
+                            <div class="thread-create-sheet__target-head">
+                              <strong>New Project Path</strong>
+                              <span v-if="dialogState.useCustomCwd" class="thread-create-sheet__target-tag">Custom</span>
+                            </div>
+                            <p>Paste a full path or just type a folder name.</p>
+                            <span>Folder names default into {{ PROJECTS_ROOT_HINT }}</span>
+                          </div>
+                        </button>
+
+                        <div v-if="dialogState.useCustomCwd" class="thread-create-sheet__custom-body">
+                          <label class="input-label input-label--stacked thread-create-sheet__field-label">Project path</label>
+                          <input
+                            :value="dialogState.customCwdInput"
+                            class="input-field app-dialog-card__input"
+                            type="text"
+                            placeholder="my-project or /Users/young/code/my-project"
+                            @input="updateCreateThreadCustomCwd(($event.target as HTMLInputElement).value)"
+                          />
+
+                          <div class="thread-create-sheet__preview">
+                            <span class="section-label">Resolved Path</span>
+                            <strong>{{ createThreadResolvedPathHint }}</strong>
+                            <p>{{ createThreadHintCopy }}</p>
+                          </div>
+                        </div>
+                      </div>
                     </template>
 
                     <input
@@ -2517,7 +2674,9 @@ function handleScrollToLatest() {
 
                     <div class="alert-card__actions">
                       <button class="ghost-cta ghost-cta--compact" @click="closeDialog">Cancel</button>
-                      <button class="primary-cta primary-cta--compact" @click="confirmDialogAction">{{ dialogConfirmLabel }}</button>
+                      <button class="primary-cta primary-cta--compact" :disabled="dialogConfirmDisabled" @click="confirmDialogAction">
+                        {{ dialogConfirmLabel }}
+                      </button>
                     </div>
                   </div>
                 </div>

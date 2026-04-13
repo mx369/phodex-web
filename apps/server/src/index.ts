@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import type {
@@ -115,6 +115,7 @@ const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
+const PROJECTS_ROOT = process.env.PHODEX_PROJECTS_ROOT ?? resolve(homedir(), ".phodex-web/projects");
 const WORKTREE_ROOT = process.env.PHODEX_WORKTREE_ROOT ?? resolve(homedir(), ".codex/worktrees");
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
@@ -427,7 +428,7 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
     const threadCwd =
       event.mode === "worktree"
         ? createWorktreeForProject(projectContext.projectRoot, event.projectLabel ?? basename(projectContext.projectRoot)).worktreeCwd
-        : projectContext.projectRoot;
+        : ensureLocalThreadCwd(requestedCwd);
 
     const result = await codexRequest("thread/start", {
       cwd: threadCwd,
@@ -1393,7 +1394,7 @@ function isWorktreeThread(rawThread: any) {
 function resolveRequestedThreadCwd(user: PersistedUser, event: ThreadCreateRequest) {
   const explicitCwd = readString(event.cwd);
   if (explicitCwd) {
-    return resolve(explicitCwd);
+    return resolveExplicitThreadCwd(explicitCwd);
   }
 
   const selectedThread = user.selectedThreadId ? threadCache.get(user.selectedThreadId) : null;
@@ -1411,6 +1412,48 @@ function resolveRequestedThreadCwd(user: PersistedUser, event: ThreadCreateReque
   return DEFAULT_THREAD_CWD;
 }
 
+function resolveExplicitThreadCwd(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return DEFAULT_THREAD_CWD;
+  }
+
+  if (trimmed === "~") {
+    return homedir();
+  }
+
+  if (trimmed.startsWith("~/")) {
+    return resolve(homedir(), trimmed.slice(2));
+  }
+
+  if (isAbsolute(trimmed)) {
+    return resolve(trimmed);
+  }
+
+  const resolvedWithinProjectsRoot = resolve(PROJECTS_ROOT, trimmed);
+  const relativeToProjectsRoot = relative(PROJECTS_ROOT, resolvedWithinProjectsRoot);
+  if (relativeToProjectsRoot.startsWith("..") || isAbsolute(relativeToProjectsRoot)) {
+    throw new Error("Relative project names must stay inside the Phodex projects directory.");
+  }
+
+  return resolvedWithinProjectsRoot;
+}
+
+function ensureLocalThreadCwd(cwd: string) {
+  const resolvedCwd = resolve(cwd);
+  projectContextCache.delete(resolvedCwd);
+  if (existsSync(resolvedCwd)) {
+    const stat = statSync(resolvedCwd);
+    if (!stat.isDirectory()) {
+      throw new Error("The requested cwd points at a file, not a folder.");
+    }
+    return resolvedCwd;
+  }
+
+  mkdirSync(resolvedCwd, { recursive: true });
+  return resolvedCwd;
+}
+
 function resolveProjectContext(cwd: string): ProjectContext {
   const requestedCwd = resolve(cwd);
   const cached = projectContextCache.get(requestedCwd);
@@ -1418,15 +1461,18 @@ function resolveProjectContext(cwd: string): ProjectContext {
     return cached;
   }
 
+  const gitProbeCwd = findNearestExistingDirectory(requestedCwd);
   let projectRoot = requestedCwd;
   let gitCommonDir: string | null = null;
   let isRepo = false;
 
-  const topLevelResult = gitSpawnSync(["rev-parse", "--path-format=absolute", "--show-toplevel"], requestedCwd);
-  if (topLevelResult.ok) {
+  const topLevelResult = gitProbeCwd
+    ? gitSpawnSync(["rev-parse", "--path-format=absolute", "--show-toplevel"], gitProbeCwd)
+    : { ok: false as const, stderr: "" };
+  if (gitProbeCwd && topLevelResult.ok) {
     isRepo = true;
     projectRoot = topLevelResult.stdout || requestedCwd;
-    const commonDirResult = gitSpawnSync(["rev-parse", "--path-format=absolute", "--git-common-dir"], requestedCwd);
+    const commonDirResult = gitSpawnSync(["rev-parse", "--path-format=absolute", "--git-common-dir"], gitProbeCwd);
     if (commonDirResult.ok) {
       gitCommonDir = commonDirResult.stdout || null;
       if (gitCommonDir && basename(gitCommonDir) === ".git") {
@@ -1443,6 +1489,27 @@ function resolveProjectContext(cwd: string): ProjectContext {
   } satisfies ProjectContext;
   projectContextCache.set(requestedCwd, context);
   return context;
+}
+
+function findNearestExistingDirectory(value: string) {
+  let cursor = resolve(value);
+  while (true) {
+    if (existsSync(cursor)) {
+      try {
+        if (statSync(cursor).isDirectory()) {
+          return cursor;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    const parent = dirname(cursor);
+    if (parent === cursor) {
+      return null;
+    }
+    cursor = parent;
+  }
 }
 
 function createWorktreeForProject(projectRoot: string, seed: string) {

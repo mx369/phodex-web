@@ -11,7 +11,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Subscription gate | Shell | Plan selection UI and navigation exist with preview-only purchase copy | No real purchase or restore flow |
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly, and OTP delivery now uses live Resend when configured | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
-| Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats through a real project-picker sheet, and open about/settings from the shell drawer | Refresh-style affordances and final source parity polish are still missing |
+| Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats through a real project-picker sheet, create fresh project folders from a folder name or full path, and open about/settings from the shell drawer | Refresh-style affordances and final source parity polish are still missing |
 | Turn empty | Partial | Real selected thread, embedded empty-timeline block, backed composer, and an immediate local "starting chat" state while `thread/start` resolves | Structured-input replacement state and final micro-spacing/polish are still missing |
 | Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, a visible composer work-state band, and source-informed internal timeline scrolling with a latest-jump button | Running-empty / pinned-plan-empty branches, queued steer/pause semantics, and toolbar/sheet affordances still differ from source |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
@@ -29,6 +29,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | New chat -> first send | Real | `New Chat` now swaps immediately into a local pending thread state while the bridge asks Codex to create the real thread; first send still creates the real thread and flushes the composer once it lands |
 | Drawer create sheet | Real | Drawer `New Chat`, `New Worktree`, and project-group `+` now open a shared project-picker sheet so creation mode and target project are explicit before `thread:create` is sent |
 | Drawer worktree create | Real | Worktree creation now makes a real git worktree under `~/.codex/worktrees/<repo>/...` before starting the new Codex thread |
+| Drawer custom project create | Real | The create sheet now accepts either a folder name or a full path: folder names create a fresh project under `~/.phodex-web/projects`, while absolute paths are used directly as the new local chat cwd |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |
 | Turn auto-scroll and scroll-to-latest | Real | Turn scrolling now happens inside the fixed mobile shell rather than on `body`, with follow-bottom, assistant anchoring, bottom-threshold tolerance, and a visible latest-jump button when the user leaves bottom |
 | Stop run | Real | Sends turn interrupt to local Codex |

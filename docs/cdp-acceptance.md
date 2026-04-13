@@ -30,6 +30,8 @@ All screenshots in this file were captured from real browser renders through the
 | Sidebar Create Sheet | Same authenticated session, opened drawer `New Chat` after the drawer parity pass | `.artifacts/qa-77-drawer-create-sheet.png` |
 | Sidebar Worktree Create | Same authenticated session, switched the create sheet to `Worktree Chat`, targeted `phodex-web`, and waited for the real thread to land | `.artifacts/qa-78-drawer-worktree-created.png` |
 | Sidebar Rename | Same authenticated session, reopened the drawer row actions and renamed the new worktree thread | `.artifacts/qa-80-drawer-rename-fixed.png` |
+| Sidebar Custom Folder Name | Same authenticated session, switched the create sheet to `New Project Path`, typed a folder name, and verified the resolved default path preview before starting the chat | `.artifacts/qa-81-drawer-custom-folder-input.png` |
+| Sidebar Custom Absolute Path | Same authenticated session, reopened `New Project Path`, pasted an absolute cwd, and started the chat from that path | `.artifacts/qa-82-drawer-custom-absolute-path.png` |
 | Settings | Authenticated session reloaded at `/?page=settings` after trimming runtime defaults to backed fields only | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the preview-only purchase control pass | `.artifacts/qa-60-paywall-preview-only.png` |
@@ -40,6 +42,7 @@ All screenshots in this file were captured from real browser renders through the
 - The unauthenticated capture set now reflects the current product scope: onboarding, subscription gate, bootstrap failure, and email OTP.
 - The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
 - Sidebar evidence now also reflects the new SVG icon system, shared create sheet, and real worktree/rename flows in addition to the restore-only delete policy.
+- Sidebar evidence now also reflects custom cwd creation from both a folder name and a pasted absolute path.
 - Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
 - Turn-empty evidence now reflects the embedded timeline block rather than the earlier generic welcome card.
 - Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
