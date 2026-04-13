@@ -61,28 +61,12 @@ button {
   background: linear-gradient(180deg, #faf9f5 0%, #f0ede7 100%);
 }
 
-.app-stage {
-  position: relative;
-  display: grid;
-  width: 100%;
-  min-height: 100vh;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  padding: 16px;
-  overflow-x: hidden;
-}
-
-.app-surface {
+.app-shell {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(100%, 430px);
-  min-height: min(900px, calc(100dvh - 32px));
-  overflow: hidden;
-  border-radius: 34px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 244, 239, 1) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.52);
-  box-shadow: var(--shadow-soft);
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .section-label {
@@ -97,6 +81,7 @@ button {
 .phone-splash {
   display: grid;
   flex: 1;
+  min-height: 100vh;
   place-content: center;
   gap: 18px;
   padding: 24px;
@@ -958,7 +943,11 @@ button {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-height: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(92, 109, 255, 0.08), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(239, 142, 85, 0.08), transparent 24%),
+    linear-gradient(180deg, #fbfaf7 0%, #f4f0e8 100%);
 }
 
 .phone-topbar {
@@ -968,7 +957,9 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 14px 10px;
+  width: min(100%, 460px);
+  margin: 0 auto;
+  padding: 8px 14px 10px;
 }
 
 .phone-topbar__title {
@@ -998,7 +989,8 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  margin: 0 16px 12px;
+  width: min(calc(100% - 32px), 428px);
+  margin: 0 auto 12px;
   padding: 14px 15px;
   border-radius: 22px;
   border: 1px solid rgba(239, 142, 85, 0.14);
@@ -1026,7 +1018,7 @@ button {
 }
 
 .phone-conversation__inner {
-  width: min(100%, 332px);
+  width: min(100%, 428px);
   margin: 0 auto;
 }
 
@@ -1369,7 +1361,7 @@ button {
 }
 
 .phone-composer-dock__inner {
-  width: min(100%, 332px);
+  width: min(100%, 428px);
   margin: 0 auto;
 }
 
@@ -1602,7 +1594,7 @@ button {
   z-index: 16;
   display: flex;
   flex-direction: column;
-  width: min(316px, calc(100% - 34px));
+  width: min(340px, calc(100% - 28px));
   padding: 20px 16px 16px;
   background: rgba(252, 251, 248, 0.98);
   border-right: 1px solid rgba(18, 18, 18, 0.06);
@@ -1914,88 +1906,87 @@ button {
   box-shadow: 0 12px 28px rgba(18, 18, 18, 0.12);
 }
 
-.app-panel,
-.app-sheet {
-  position: absolute;
-  inset: 0;
-  z-index: 18;
+.mobile-page {
+  position: relative;
   display: flex;
+  flex: 1;
   flex-direction: column;
   overflow: hidden;
+  min-height: 100vh;
   background:
     radial-gradient(circle at top left, rgba(92, 109, 255, 0.08), transparent 28%),
     radial-gradient(circle at bottom right, rgba(239, 142, 85, 0.08), transparent 24%),
     linear-gradient(180deg, #fbfaf7 0%, #f4f0e8 100%);
 }
 
-.app-sheet--settings {
+.mobile-page--settings {
   background:
     radial-gradient(circle at top left, rgba(92, 109, 255, 0.08), transparent 28%),
     linear-gradient(180deg, #fbfaf7 0%, #f1ece4 100%);
 }
 
-.app-sheet--archived {
+.mobile-page--archived {
   background:
     radial-gradient(circle at top right, rgba(38, 162, 105, 0.08), transparent 28%),
     linear-gradient(180deg, #fbfaf7 0%, #f1ede7 100%);
 }
 
-.app-sheet--about {
+.mobile-page--about {
   background:
     radial-gradient(circle at top left, rgba(239, 142, 85, 0.09), transparent 28%),
     linear-gradient(180deg, #fbfaf7 0%, #f2ece5 100%);
 }
 
-.app-sheet--paywall {
+.mobile-page--paywall {
   background:
     radial-gradient(circle at top left, rgba(92, 109, 255, 0.08), transparent 26%),
     radial-gradient(circle at bottom right, rgba(239, 142, 85, 0.11), transparent 24%),
     linear-gradient(180deg, #fbfaf7 0%, #f2ede5 100%);
 }
 
-.app-panel__topbar,
-.app-sheet__topbar {
+.mobile-page__topbar {
   display: grid;
   grid-template-columns: 44px 1fr 44px;
   align-items: center;
   gap: 10px;
+  width: min(100%, 480px);
+  margin: 0 auto;
   padding: 8px 14px 10px;
   border-bottom: 1px solid rgba(18, 18, 18, 0.06);
   background: rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(18px);
 }
 
-.app-panel__topbar strong,
-.app-sheet__topbar strong {
+.mobile-page__topbar strong {
   text-align: center;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
-.app-panel__spacer,
-.app-sheet__spacer {
+.mobile-page__spacer {
   width: 44px;
   height: 36px;
 }
 
-.app-panel__body,
-.app-sheet__body {
+.mobile-page__body {
   flex: 1;
   overflow: auto;
   display: grid;
   gap: 12px;
+  width: min(100%, 480px);
+  margin: 0 auto;
   min-width: 0;
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
-.app-sheet__body::-webkit-scrollbar {
+.mobile-page__body::-webkit-scrollbar {
   display: none;
 }
 
-.app-sheet__nav {
+.mobile-page__nav {
   justify-self: start;
   min-height: 34px;
   padding: 0;
@@ -2006,8 +1997,8 @@ button {
   letter-spacing: -0.01em;
 }
 
-.app-sheet .primary-cta,
-.app-sheet .ghost-cta {
+.mobile-page .primary-cta,
+.mobile-page .ghost-cta {
   margin-top: 0;
 }
 
@@ -2022,19 +2013,19 @@ button {
   box-shadow: 0 16px 34px rgba(18, 18, 18, 0.05);
 }
 
-.app-sheet .settings-card,
-.app-sheet .paywall-card {
+.mobile-page .settings-card,
+.mobile-page .paywall-card {
   border-radius: 26px;
   background: rgba(255, 255, 255, 0.88);
 }
 
-.app-sheet .paywall-card {
+.mobile-page .paywall-card {
   background:
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.26), transparent 24%),
     linear-gradient(180deg, rgba(255, 251, 247, 0.98), rgba(255, 244, 236, 0.94));
 }
 
-.app-sheet--paywall .root-auth-screen__link {
+.mobile-page--paywall .root-auth-screen__link {
   border-color: rgba(18, 18, 18, 0.06);
   background: rgba(18, 18, 18, 0.04);
   color: var(--muted-strong);
@@ -2509,23 +2500,12 @@ button {
   }
 }
 
-@media (min-width: 860px) {
-  .app-stage {
-    padding: 26px;
-  }
-}
-
 @media (max-width: 540px) {
-  .app-stage {
-    padding: 0;
-  }
-
-  .app-surface {
-    width: 100%;
+  .app-shell,
+  .phone-app,
+  .mobile-page,
+  .phone-splash {
     min-height: 100dvh;
-    border-radius: 0;
-    box-shadow: none;
-    border: 0;
   }
 
   .root-auth-screen__card {
@@ -2546,7 +2526,8 @@ button {
     grid-auto-columns: 158px;
   }
 
-  .app-sheet__body {
+  .phone-conversation,
+  .mobile-page__body {
     padding-right: 14px;
     padding-left: 14px;
   }

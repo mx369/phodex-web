@@ -21,15 +21,16 @@ All screenshots in this file were captured from real browser renders through the
 
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
-| Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state | `.artifacts/qa-42-home-empty-email-only.png` |
+| Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the shell refactor | `.artifacts/qa-46-home-shell-mobile-page.png` |
 | Turn Empty | Same authenticated session, tapped `Open chats`, then `New Chat` | `.artifacts/qa-43-turn-empty-email-only.png` |
-| About | Authenticated session reloaded at `/?page=about` | `.artifacts/qa-44-about-email-only.png` |
-| Paywall Shell | Authenticated session reloaded at `/?page=paywall` | `.artifacts/qa-45-paywall-email-only.png` |
-| Sidebar Open | Earlier real authenticated capture; not rerun in this pass | `.artifacts/qa-14-sidebar.png` |
-| Settings | Earlier real authenticated capture; not rerun in this pass | `.artifacts/qa-20-settings.png` |
-| Archived Chats | Earlier real authenticated capture; not rerun in this pass | `.artifacts/qa-23-archived.png` |
+| Sidebar Open | Same authenticated session, opened the drawer from the full-page shell | `.artifacts/qa-47-sidebar-shell-mobile-page.png` |
+| Settings | Authenticated session reloaded at `/?page=settings` after the shell refactor | `.artifacts/qa-48-settings-mobile-page.png` |
+| About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
+| Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the shell refactor | `.artifacts/qa-50-paywall-mobile-page.png` |
+| Archived Chats | Authenticated session reloaded at `/?page=archived` after the shell refactor | `.artifacts/qa-51-archived-mobile-page.png` |
 
 ## Notes
 
 - The unauthenticated capture set now reflects the current product scope: onboarding, subscription gate, bootstrap failure, and email OTP.
+- The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

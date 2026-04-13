@@ -4,7 +4,7 @@ This file is the level-1 handoff and status summary. It is intentionally broader
 
 ## Repository Shape
 
-- `apps/web`: Vue 3 single-surface app shell, current UI implementation, and client socket/bootstrap logic.
+- `apps/web`: Vue 3 full-page mobile shell, current UI implementation, and client socket/bootstrap logic.
 - `apps/server`: Bun HTTPS/WSS relay, email OTP auth, local state persistence, and Codex app-server bridge.
 - `packages/shared`: shared protocol and record types.
 - `docs`: source audit notes, page matrices, CDP acceptance docs, and this AI context stack.
@@ -24,7 +24,7 @@ Implemented and real:
 Implemented but incomplete:
 
 - Onboarding, bootstrap failure, subscription gate, and paywall pages.
-- Home empty, sidebar, settings, archived, and about pages.
+- Home empty, sidebar, settings, archived, and about pages now render as full-page mobile surfaces, but remain approximate.
 - Model selector, access mode toggle, fast/plan UI toggles, pinned plan surface, and autocomplete UI.
 
 Not yet source-equal or still shell-level:
@@ -41,9 +41,9 @@ Explicitly excluded by current product direction:
 
 ## Current Architectural Debt
 
-- `apps/web` still renders through a fixed-width `app-surface`.
-- Settings, archived, about, and paywall still use the local `app-sheet` overlay system instead of a source-equal navigation model.
 - Several UI surfaces expose placeholders whose backing data is not fully implemented.
+- Thread delete still over-promises destructive behavior that the backend does not support.
+- Thread rendering still maps only the simpler Codex message shapes and misses richer execution surfaces where available.
 
 ## Acceptance Bar
 

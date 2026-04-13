@@ -3,18 +3,19 @@
 Date: 2026-04-13
 Runtime: `https://localhost:3443`
 Transport: Bun HTTPS + WSS relay to local Codex app-server
-Browser harness: Electron CDP hidden session `phodex-email`
+Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automation` wrapper
 
 ## Fixes Applied During This Pass
 
 - Removed QR / camera-pairing root states and screens from the actual app.
 - Collapsed the unauthenticated path to `onboarding -> email OTP`.
 - Removed user-facing E2EE copy from onboarding, turn empty, about, and paywall surfaces.
+- Replaced the fixed-width `app-surface` / `app-sheet` shell with a full-page `app-shell` + `mobile-page` structure.
 
 ## Result Legend
 
 - `pass`: verified in a real browser flow this pass
-- `legacy_evidence`: existing real CDP evidence exists from an earlier pass, but this page was not isolated again after the latest auth cleanup
+- `legacy_evidence`: existing real CDP evidence exists from an earlier pass, but this page was not isolated again after the latest auth or shell cleanup
 
 ## Root Flow Pages
 
@@ -35,19 +36,20 @@ Browser harness: Electron CDP hidden session `phodex-email`
 
 | Page | Entry path | Function points checked in this pass | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| Home Empty | fresh OTP login after auth cleanup | connected state, trusted Mac card, `Open chats` | pass | `.artifacts/qa-42-home-empty-email-only.png` |
-| Turn Empty | `Home Empty -> Open chats -> New Chat` | updated empty-copy render, composer visible | pass | `.artifacts/qa-43-turn-empty-email-only.png` |
-| About | authenticated `?page=about` | updated architecture and sign-in copy render | pass | `.artifacts/qa-44-about-email-only.png` |
-| Paywall | authenticated `?page=paywall` | updated feature copy render | pass | `.artifacts/qa-45-paywall-email-only.png` |
-| Sidebar Drawer | menu button from authenticated state | not isolated again after auth cleanup | legacy_evidence | `.artifacts/qa-14-sidebar.png`, `.artifacts/qa-19-thread-select-attempt.png` |
+| Home Empty | fresh OTP login after shell pass | connected state, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-46-home-shell-mobile-page.png` |
+| Turn Empty | `Home Empty -> Open chats -> New Chat` | not isolated again after the shell pass | legacy_evidence | `.artifacts/qa-43-turn-empty-email-only.png` |
+| About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
+| Paywall | authenticated `?page=paywall` after shell pass | full-page mobile page render, updated feature copy | pass | `.artifacts/qa-50-paywall-mobile-page.png` |
+| Sidebar Drawer | menu button from authenticated state after shell pass | drawer render, thread list, shell navigation | pass | `.artifacts/qa-47-sidebar-shell-mobile-page.png` |
 | Turn View | send real prompt on clean thread | not rerun in this pass | legacy_evidence | `.artifacts/qa-27-turn-response.png` |
-| Settings | authenticated `?page=settings` | not rerun in this pass | legacy_evidence | `.artifacts/qa-20-settings.png` |
-| Archived | authenticated `?page=archived` | not rerun in this pass | legacy_evidence | `.artifacts/qa-23-archived.png` |
+| Settings | authenticated `?page=settings` after shell pass | dedicated mobile page render, settings cards, archive/about/paywall navigation | pass | `.artifacts/qa-48-settings-mobile-page.png` |
+| Archived | authenticated `?page=archived` after shell pass | dedicated mobile page render, archived list shell, restore/delete actions present | pass | `.artifacts/qa-51-archived-mobile-page.png` |
 
 ## Interaction Flows
 
-- OTP login: pass in a real browser flow with `qa-emailonly-20260413@local.dev` and backdoor code `424242`.
-- Existing send / stream / stop / queue coverage was not rerun for this auth-only cleanup. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
+- OTP login: pass in a real browser flow with a local dev mailbox and backdoor code `424242`.
+- Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor.
+- Existing send / stream / stop / queue coverage was not rerun in this shell-focused pass. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect
 
@@ -57,4 +59,5 @@ Browser harness: Electron CDP hidden session `phodex-email`
 ## Notes
 
 - Acceptance docs now treat only onboarding, subscription gate, bootstrap failure, and email OTP as in-scope unauthenticated pages.
+- The authenticated shell evidence now reflects the full-page mobile-page layout rather than the old centered card plus overlay-sheet structure.
 - The screenshots listed above are real CDP captures from the running Bun relay on this machine.

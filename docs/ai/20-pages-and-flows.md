@@ -10,14 +10,14 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Bootstrap failure | Shell | Rendered and navigable | Subscription restore is not real |
 | Subscription gate | Shell | Plan selection UI and navigation exist | No real purchase or restore flow |
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
-| Home empty | Partial | Real connection state drives content | Layout still differs from upstream |
-| Sidebar | Partial | Real threads render; select, rename, archive, create work | Layout and interaction details still diverge |
+| Home empty | Partial | Real connection state drives content inside the full-page mobile shell | Visual parity still differs from upstream |
+| Sidebar | Partial | Real threads render; select, rename, archive, create work from the shell drawer | Layout and interaction details still diverge |
 | Turn empty | Partial | Real selected thread and composer | Not source-equal visually |
 | Turn with messages | Partial | Real streamed chat bridge | Richer upstream message/tool surfaces still missing |
-| Settings | Partial | Real setting patches persist | Still an overlay sheet, not source-equal navigation |
-| Archived chats | Partial | Real archived list and restore | Delete is not real; list behavior is simplified |
-| About | Partial | Static explanatory content exists | Not a full upstream information architecture |
-| Paywall | Shell | Plan selection UI exists | No RevenueCat or StoreKit behavior |
+| Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
+| Archived chats | Partial | Real archived list and restore render in a dedicated mobile page | Delete is not real; list behavior is simplified |
+| About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
+| Paywall | Shell | Plan selection UI exists in a dedicated mobile page | No RevenueCat or StoreKit behavior |
 
 ## Flow Inventory
 
@@ -47,6 +47,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 - Do not copy the App Store or marketing device frame. Rebuild the app content inside the screenshots, not the screenshot chrome.
 - Do not add fake status bars or dynamic islands.
 - Do not reintroduce QR-pairing screens or encryption marketing because of the original app.
+- Treat the current shell as a full-page mobile surface, not a centered faux-device card.
 - If changing page structure, update this file and the screenshot evidence when the behavior changes.
 
 ## Deep References

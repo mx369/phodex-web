@@ -6,6 +6,8 @@ It is designed around the existing `electron-cdp-automation` wrapper and the cur
 - `flow=` for root-flow states
 - `page=` for authenticated shell pages
 
+Authenticated `page=` states now render as dedicated full-page mobile surfaces, not overlay sheets above a centered card.
+
 ## What This Runbook Covers
 
 - Clear local browser state in a hidden session
@@ -127,7 +129,10 @@ Capture at least these states in one acceptance pass:
 - Onboarding step pages
 - Email OTP
 - Home empty
+- Sidebar
 - Turn empty
+- Settings
+- Archived
 - About
 - Paywall
 

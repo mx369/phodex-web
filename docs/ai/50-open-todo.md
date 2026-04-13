@@ -10,26 +10,6 @@ This file is the dedicated unfinished-work list for follow-on AI agents. Keep it
 
 ## Priority Order
 
-### P0. Replace the current web-shell layout with a true mobile-page structure
-
-Status: open
-
-Why:
-- The current UI still depends on a fixed-width `app-surface` and overlay `app-sheet` model. That is the main reason the build still feels like a web shell instead of the intended mobile app.
-
-Main work:
-- Remove the fixed centered card assumption from the main shell.
-- Rebuild top-level navigation so pages feel like native mobile pages, not a desktop page containing a phone-sized card.
-- Revisit top bars, drawer behavior, and page transitions after the shell change.
-
-Likely files:
-- `apps/web/src/App.vue`
-- `apps/web/src/style.css`
-
-Done when:
-- The app occupies the page as a mobile UI surface, not as a centered faux-device card.
-- Settings, archived, about, and paywall no longer feel like generic overlay sheets.
-
 ### P1. Bring the core pages closer to source parity, page by page
 
 Status: open
@@ -113,28 +93,6 @@ Likely files:
 
 Done when:
 - The UI no longer promises destructive delete that does not exist.
-
-### P1. Refresh the acceptance stack after the next shell pass
-
-Status: open
-
-Why:
-- The QR/E2EE root-auth cleanup is now reflected in the docs, but the broader page set will need another full capture after the shell/layout overhaul.
-
-Main work:
-- Re-record CDP screenshots for the current target page set after shell/navigation cleanup.
-- Rewrite acceptance tables when page structure changes again.
-- Remove obsolete evidence references that no longer match the latest page tree.
-
-Likely files:
-- `docs/cdp-acceptance.md`
-- `docs/cdp-acceptance-runbook.md`
-- `docs/page-function-acceptance.md`
-- `.artifacts/current-audit/`
-
-Done when:
-- Acceptance docs describe only in-scope pages and flows.
-- Evidence files correspond to the current UI.
 
 ### P2. Decide what to do with purchases, voice, and attachments
 

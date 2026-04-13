@@ -800,8 +800,7 @@ function readShellPageState(): ShellPageState | null {
 
 <template>
   <div class="app-page">
-    <div class="app-stage">
-      <div class="app-surface">
+    <div class="app-shell">
         <div v-if="state.ui.loadingSession" class="phone-splash">
               <img :src="remodexAppLogo" alt="" class="phone-splash__logo" />
               <p>Hydrating relay session…</p>
@@ -1044,341 +1043,15 @@ function readShellPageState(): ShellPageState | null {
             </template>
 
             <template v-else>
-              <div class="phone-app">
-                <transition name="drawer">
-                  <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
-                    <div class="phone-drawer__head">
-                      <div class="drawer-brand">
-                        <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
-                        <strong class="drawer-brand__title">Remodex</strong>
-                      </div>
-                      <button class="icon-button" aria-label="Close menu" @click="closeSidebar">☰</button>
-                    </div>
-
-                    <input
-                      v-model="state.ui.search"
-                      class="drawer-search"
-                      type="search"
-                      placeholder="Search conversations"
-                    />
-
-                    <button class="drawer-new-chat" @click="startLocalChat">
-                      <span class="drawer-new-chat__icon">＋</span>
-                      <div class="drawer-new-chat__copy">
-                        <strong>New Chat</strong>
-                        <p>Start from the active local checkout.</p>
-                      </div>
-                    </button>
-
-                    <div class="drawer-groups">
-                      <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
-                        <div class="drawer-group__head">
-                          <div class="drawer-group__title">
-                            <span class="drawer-group__icon">{{ projectGroupIcon(group.label) }}</span>
-                            <p class="drawer-group__label">{{ group.label }}</p>
-                          </div>
-                          <div class="drawer-group__head-actions">
-                            <button class="drawer-group__action" @click="handleArchiveGroup(group.label)">
-                              Archive {{ group.liveCount }}
-                            </button>
-                            <button class="drawer-group__plus" @click="client.createThread(group.label, preferredGroupMode(group.label))">
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        <button
-                          v-for="thread in group.threads"
-                          :key="thread.id"
-                          class="drawer-thread"
-                          :class="{
-                            'drawer-thread--selected': currentThread?.id === thread.id,
-                            'drawer-thread--archived': thread.state === 'archived',
-                          }"
-                          @click="
-                            client.selectThread(thread.id);
-                            closeSidebar();
-                          "
-                        >
-                          <div class="drawer-thread__indicator">
-                            <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
-                            <span v-if="thread.isWorktree" class="drawer-thread__badge">⑂</span>
-                            <span v-else-if="thread.isForked" class="drawer-thread__badge">⇄</span>
-                          </div>
-
-                          <div class="drawer-thread__body">
-                            <div class="drawer-thread__top">
-                              <strong>{{ thread.title }}</strong>
-                              <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
-                            </div>
-                            <p>{{ thread.preview }}</p>
-                            <div class="drawer-thread__meta">
-                              <span>{{ thread.repoLabel }}</span>
-                              <span>{{ thread.branch }}</span>
-                              <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
-                              <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
-                              <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
-                              <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
-                            </div>
-                          </div>
-
-                          <div class="drawer-thread__actions">
-                            <button class="icon-button icon-button--tiny" @click.stop="handleRenameThread(thread.id, thread.title)">✎</button>
-                            <button class="icon-button icon-button--tiny" @click.stop="client.toggleArchiveThread(thread)">
-                              {{ thread.state === "archived" ? "↺" : "⌁" }}
-                            </button>
-                            <button class="icon-button icon-button--tiny" @click.stop="handleDeleteThread(thread)">−</button>
-                          </div>
-                        </button>
-                      </section>
-                    </div>
-
-                    <div class="phone-drawer__foot">
-                      <button class="drawer-settings-fab" aria-label="Settings" @click="openPanel('settings')">⚙</button>
-                      <div class="drawer-status">
-                        <span class="drawer-status__label">
-                          {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Saved Mac" }}
-                        </span>
-                        <strong>{{ state.snapshot?.connection.macLabel }}</strong>
-                      </div>
-                    </div>
-                  </aside>
-                </transition>
-
-                <transition name="scrim">
-                  <button v-if="state.ui.sidebarOpen" class="phone-drawer-scrim phone-drawer-scrim--visible" @click="closeSidebar"></button>
-                </transition>
-
-                <header class="phone-topbar">
-                  <button class="icon-button" @click="openSidebar">☰</button>
-
-                  <div class="phone-topbar__title">
-                    <span v-if="currentThread?.projectLabel" class="section-label">{{ currentThread.projectLabel }}</span>
-                    <strong>{{ currentThread?.title ?? "Remodex" }}</strong>
-                  </div>
-
-                  <span class="phone-topbar__spacer" aria-hidden="true"></span>
-                </header>
-
-                <transition name="banner">
-                  <div v-if="visibleBanner" class="phone-banner">
-                    <div>
-                      <span class="section-label">Run Complete</span>
-                      <strong>{{ visibleBanner.title }}</strong>
-                      <p>{{ visibleBanner.subtitle }}</p>
-                    </div>
-                    <button class="icon-button icon-button--tiny" @click="dismissBanner">×</button>
-                  </div>
-                </transition>
-
-                <section class="phone-conversation">
-                  <div class="phone-conversation__inner">
-                    <template v-if="currentThread && currentThread.messages.length">
-                      <article
-                        v-for="message in currentThread.messages"
-                        :key="message.id"
-                        class="phone-message"
-                        :class="`phone-message--${message.role}`"
-                      >
-                        <div class="phone-message__meta">
-                          <span>{{ message.role }}</span>
-                          <span>{{ formatRelativeTime(message.createdAt) }}</span>
-                          <span>{{ message.kind }}</span>
-                        </div>
-
-                        <div class="phone-message__card">
-                          <p v-if="message.emphasis" class="message-emphasis">{{ message.emphasis }}</p>
-
-                          <div v-if="message.runEvents?.length" class="run-event-stack">
-                            <div
-                              v-for="event in message.runEvents"
-                              :key="`${message.id}-${event.label}`"
-                              class="run-event-row"
-                            >
-                              <span :class="`run-event-row__dot run-event-row__dot--${event.tone}`"></span>
-                              <strong>{{ event.label }}</strong>
-                              <span>{{ event.detail }}</span>
-                            </div>
-                          </div>
-
-                          <div v-if="message.text" class="phone-message__copy">
-                            <p v-for="paragraph in splitParagraphs(message.text)" :key="`${message.id}-${paragraph}`">
-                              {{ paragraph }}
-                            </p>
-                            <span v-if="message.isStreaming" class="stream-cursor"></span>
-                          </div>
-
-                          <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
-
-                          <div v-if="message.fileChanges?.length" class="file-change-stack">
-                            <div
-                              v-for="change in message.fileChanges"
-                              :key="`${message.id}-${change.path}`"
-                              class="file-change-row"
-                            >
-                              <span>{{ change.action }}</span>
-                              <strong>{{ change.path }}</strong>
-                              <em>+{{ change.additions }} -{{ change.deletions }}</em>
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    </template>
-
-                    <div v-else-if="currentThread" class="phone-empty-state">
-                      <img :src="remodexAppLogo" alt="" class="phone-empty-state__logo" />
-                      <span class="section-label">Conversation</span>
-                      <h2>Hi! How can I help you?</h2>
-                      <p>Messages stream from the Codex session running on your Mac.</p>
-                    </div>
-
-                    <div v-else class="home-empty-state">
-                      <img :src="remodexAppLogo" alt="" class="home-empty-state__logo" />
-                      <div class="home-status-badge">
-                        <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>
-                        <strong>{{ homeStatusLabel }}</strong>
-                      </div>
-                      <div v-if="state.snapshot?.connection.macLabel" class="home-empty-state__trusted-card">
-                        <span class="section-label">
-                          {{ state.snapshot.connection.state === "connected" ? "Connected To Mac" : "Trusted Mac" }}
-                        </span>
-                        <div class="home-empty-state__trusted-row">
-                          <span class="home-empty-state__trusted-icon">⌂</span>
-                          <div class="home-empty-state__trusted">
-                            <strong>{{ state.snapshot?.connection.macLabel }}</strong>
-                            <p>{{ state.snapshot?.connection.relayLabel }}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <p class="home-empty-state__copy">{{ homeStatusCopy }}</p>
-                      <button
-                        class="primary-cta primary-cta--compact home-empty-state__primary"
-                        :disabled="state.snapshot?.connection.state === 'connecting'"
-                        @click="handleHomePrimaryAction"
-                      >
-                        {{ homePrimaryLabel }}
-                      </button>
-                      <button class="home-empty-state__secondary" @click="handleHomeSecondaryAction">{{ homeSecondaryLabel }}</button>
-                    </div>
-                  </div>
-                </section>
-
-                <footer v-if="currentThread" class="phone-composer-dock">
-                  <div class="phone-composer-dock__inner">
-                    <div v-if="planAccessory" class="plan-accessory" :class="`plan-accessory--${planAccessory.tone}`">
-                      <span class="section-label">Pinned Plan</span>
-                      <strong>{{ planAccessory.title }}</strong>
-                      <p>{{ planAccessory.summary }}</p>
-                    </div>
-
-                    <div v-if="currentThread?.queuedDrafts.length" class="queued-drafts">
-                      <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
-                        <div>
-                          <span class="section-label">Queued</span>
-                          <strong>{{ draft.text }}</strong>
-                        </div>
-                        <div class="queued-draft__actions">
-                          <button
-                            class="ghost-cta ghost-cta--compact"
-                            @click="client.resumeDraft(currentThread.id, draft.id)"
-                          >
-                            Send next
-                          </button>
-                          <button class="icon-button icon-button--tiny" @click="client.removeDraft(currentThread.id, draft.id)">×</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div v-if="composerSuggestion" class="composer-autocomplete">
-                      <span class="section-label">{{ composerSuggestion.title }}</span>
-                      <button
-                        v-for="item in composerSuggestion.items"
-                        :key="item.value"
-                        class="composer-autocomplete__item"
-                        @click="applyComposerSuggestion(item.value)"
-                      >
-                        <strong>{{ item.title }}</strong>
-                        <span>{{ item.detail }}</span>
-                      </button>
-                    </div>
-
-                    <div class="phone-composer">
-                      <textarea
-                        v-model="state.ui.composerText"
-                        class="phone-composer__input"
-                        :placeholder="composerPlaceholder"
-                        rows="3"
-                      ></textarea>
-
-                      <div class="phone-composer__toolbar">
-                        <div class="phone-composer__toolbar-left">
-                          <button class="pill pill--button pill--icon">＋</button>
-                          <select v-model="state.ui.selectedModel" class="phone-select">
-                            <option v-for="model in MODELS" :key="model">{{ model }}</option>
-                          </select>
-                          <button
-                            class="pill pill--button"
-                            :class="{ 'pill--active': state.ui.fastMode }"
-                            @click="state.ui.fastMode = !state.ui.fastMode"
-                          >
-                            Fast
-                          </button>
-                          <button
-                            class="pill pill--button"
-                            :class="{ 'pill--active': state.ui.planArmed }"
-                            @click="state.ui.planArmed = !state.ui.planArmed"
-                          >
-                            Plan
-                          </button>
-                        </div>
-
-                        <div class="phone-composer__toolbar-right">
-                          <button class="composer-circle composer-circle--ghost" title="Voice shell placeholder">◉</button>
-                          <button
-                            v-if="currentThread?.state === 'running'"
-                            class="composer-circle composer-circle--dark"
-                            @click="client.stopRun(currentThread.id)"
-                          >
-                            ■
-                          </button>
-                          <button class="send-cta send-cta--circle" :title="currentThread?.state === 'running' ? 'Queue' : 'Send'" @click="handleSend">
-                            {{ currentThread?.state === "running" ? "+" : "↑" }}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="phone-secondary-bar">
-                      <span class="pill">Local</span>
-                      <button
-                        class="pill pill--button"
-                        @click="
-                          state.ui.accessMode =
-                            state.ui.accessMode === 'full-access'
-                              ? 'on-request'
-                              : state.ui.accessMode === 'on-request'
-                                ? 'read-only'
-                                : 'full-access'
-                        "
-                      >
-                        {{ ACCESS_MODE_LABELS[state.ui.accessMode] }}
-                      </button>
-                      <span class="pill">{{ currentThread?.branch ?? "main" }}</span>
-                      <span class="pill pill--muted">{{ state.snapshot?.connection.macLabel }}</span>
-                    </div>
-                  </div>
-                </footer>
-              </div>
-
-              <transition name="panel">
-                <section v-if="activePanel" class="app-sheet" :class="`app-sheet--${activePanel}`">
-                  <header class="app-sheet__topbar">
-                    <button class="app-sheet__nav" @click="closePanel">{{ panelCanGoBack ? "‹ Back" : "Done" }}</button>
+              <transition name="panel" mode="out-in">
+                <section v-if="activePanel" :key="activePanel" class="mobile-page" :class="`mobile-page--${activePanel}`">
+                  <header class="mobile-page__topbar">
+                    <button class="mobile-page__nav" @click="closePanel">{{ panelCanGoBack ? "‹ Back" : "Done" }}</button>
                     <strong>{{ activePanelTitle }}</strong>
-                    <span class="app-sheet__spacer"></span>
+                    <span class="mobile-page__spacer"></span>
                   </header>
 
-                  <div class="app-sheet__body">
+                  <div class="mobile-page__body">
                     <template v-if="activePanel === 'settings' && state.snapshot">
                       <section class="settings-card">
                         <span class="section-label">Archived Chats</span>
@@ -1614,6 +1287,334 @@ function readShellPageState(): ShellPageState | null {
                 </section>
               </transition>
 
+              <transition v-if="!activePanel" name="panel" mode="out-in">
+                <div key="main-shell" class="phone-app">
+                  <transition name="drawer">
+                    <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
+                      <div class="phone-drawer__head">
+                        <div class="drawer-brand">
+                          <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
+                          <strong class="drawer-brand__title">Remodex</strong>
+                        </div>
+                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">☰</button>
+                      </div>
+
+                      <input
+                        v-model="state.ui.search"
+                        class="drawer-search"
+                        type="search"
+                        placeholder="Search conversations"
+                      />
+
+                      <button class="drawer-new-chat" @click="startLocalChat">
+                        <span class="drawer-new-chat__icon">＋</span>
+                        <div class="drawer-new-chat__copy">
+                          <strong>New Chat</strong>
+                          <p>Start from the active local checkout.</p>
+                        </div>
+                      </button>
+
+                      <div class="drawer-groups">
+                        <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
+                          <div class="drawer-group__head">
+                            <div class="drawer-group__title">
+                              <span class="drawer-group__icon">{{ projectGroupIcon(group.label) }}</span>
+                              <p class="drawer-group__label">{{ group.label }}</p>
+                            </div>
+                            <div class="drawer-group__head-actions">
+                              <button class="drawer-group__action" @click="handleArchiveGroup(group.label)">
+                                Archive {{ group.liveCount }}
+                              </button>
+                              <button class="drawer-group__plus" @click="client.createThread(group.label, preferredGroupMode(group.label))">
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          <button
+                            v-for="thread in group.threads"
+                            :key="thread.id"
+                            class="drawer-thread"
+                            :class="{
+                              'drawer-thread--selected': currentThread?.id === thread.id,
+                              'drawer-thread--archived': thread.state === 'archived',
+                            }"
+                            @click="
+                              client.selectThread(thread.id);
+                              closeSidebar();
+                            "
+                          >
+                            <div class="drawer-thread__indicator">
+                              <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
+                              <span v-if="thread.isWorktree" class="drawer-thread__badge">⑂</span>
+                              <span v-else-if="thread.isForked" class="drawer-thread__badge">⇄</span>
+                            </div>
+
+                            <div class="drawer-thread__body">
+                              <div class="drawer-thread__top">
+                                <strong>{{ thread.title }}</strong>
+                                <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
+                              </div>
+                              <p>{{ thread.preview }}</p>
+                              <div class="drawer-thread__meta">
+                                <span>{{ thread.repoLabel }}</span>
+                                <span>{{ thread.branch }}</span>
+                                <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
+                                <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
+                                <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
+                                <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
+                              </div>
+                            </div>
+
+                            <div class="drawer-thread__actions">
+                              <button class="icon-button icon-button--tiny" @click.stop="handleRenameThread(thread.id, thread.title)">✎</button>
+                              <button class="icon-button icon-button--tiny" @click.stop="client.toggleArchiveThread(thread)">
+                                {{ thread.state === "archived" ? "↺" : "⌁" }}
+                              </button>
+                              <button class="icon-button icon-button--tiny" @click.stop="handleDeleteThread(thread)">−</button>
+                            </div>
+                          </button>
+                        </section>
+                      </div>
+
+                      <div class="phone-drawer__foot">
+                        <button class="drawer-settings-fab" aria-label="Settings" @click="openPanel('settings')">⚙</button>
+                        <div class="drawer-status">
+                          <span class="drawer-status__label">
+                            {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Saved Mac" }}
+                          </span>
+                          <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                        </div>
+                      </div>
+                    </aside>
+                  </transition>
+
+                  <transition name="scrim">
+                    <button v-if="state.ui.sidebarOpen" class="phone-drawer-scrim phone-drawer-scrim--visible" @click="closeSidebar"></button>
+                  </transition>
+
+                  <header class="phone-topbar">
+                    <button class="icon-button" @click="openSidebar">☰</button>
+
+                    <div class="phone-topbar__title">
+                      <span v-if="currentThread?.projectLabel" class="section-label">{{ currentThread.projectLabel }}</span>
+                      <strong>{{ currentThread?.title ?? "Remodex" }}</strong>
+                    </div>
+
+                    <span class="phone-topbar__spacer" aria-hidden="true"></span>
+                  </header>
+
+                  <transition name="banner">
+                    <div v-if="visibleBanner" class="phone-banner">
+                      <div>
+                        <span class="section-label">Run Complete</span>
+                        <strong>{{ visibleBanner.title }}</strong>
+                        <p>{{ visibleBanner.subtitle }}</p>
+                      </div>
+                      <button class="icon-button icon-button--tiny" @click="dismissBanner">×</button>
+                    </div>
+                  </transition>
+
+                  <section class="phone-conversation">
+                    <div class="phone-conversation__inner">
+                      <template v-if="currentThread && currentThread.messages.length">
+                        <article
+                          v-for="message in currentThread.messages"
+                          :key="message.id"
+                          class="phone-message"
+                          :class="`phone-message--${message.role}`"
+                        >
+                          <div class="phone-message__meta">
+                            <span>{{ message.role }}</span>
+                            <span>{{ formatRelativeTime(message.createdAt) }}</span>
+                            <span>{{ message.kind }}</span>
+                          </div>
+
+                          <div class="phone-message__card">
+                            <p v-if="message.emphasis" class="message-emphasis">{{ message.emphasis }}</p>
+
+                            <div v-if="message.runEvents?.length" class="run-event-stack">
+                              <div
+                                v-for="event in message.runEvents"
+                                :key="`${message.id}-${event.label}`"
+                                class="run-event-row"
+                              >
+                                <span :class="`run-event-row__dot run-event-row__dot--${event.tone}`"></span>
+                                <strong>{{ event.label }}</strong>
+                                <span>{{ event.detail }}</span>
+                              </div>
+                            </div>
+
+                            <div v-if="message.text" class="phone-message__copy">
+                              <p v-for="paragraph in splitParagraphs(message.text)" :key="`${message.id}-${paragraph}`">
+                                {{ paragraph }}
+                              </p>
+                              <span v-if="message.isStreaming" class="stream-cursor"></span>
+                            </div>
+
+                            <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
+
+                            <div v-if="message.fileChanges?.length" class="file-change-stack">
+                              <div
+                                v-for="change in message.fileChanges"
+                                :key="`${message.id}-${change.path}`"
+                                class="file-change-row"
+                              >
+                                <span>{{ change.action }}</span>
+                                <strong>{{ change.path }}</strong>
+                                <em>+{{ change.additions }} -{{ change.deletions }}</em>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      </template>
+
+                      <div v-else-if="currentThread" class="phone-empty-state">
+                        <img :src="remodexAppLogo" alt="" class="phone-empty-state__logo" />
+                        <span class="section-label">Conversation</span>
+                        <h2>Hi! How can I help you?</h2>
+                        <p>Messages stream from the Codex session running on your Mac.</p>
+                      </div>
+
+                      <div v-else class="home-empty-state">
+                        <img :src="remodexAppLogo" alt="" class="home-empty-state__logo" />
+                        <div class="home-status-badge">
+                          <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>
+                          <strong>{{ homeStatusLabel }}</strong>
+                        </div>
+                        <div v-if="state.snapshot?.connection.macLabel" class="home-empty-state__trusted-card">
+                          <span class="section-label">
+                            {{ state.snapshot.connection.state === "connected" ? "Connected To Mac" : "Trusted Mac" }}
+                          </span>
+                          <div class="home-empty-state__trusted-row">
+                            <span class="home-empty-state__trusted-icon">⌂</span>
+                            <div class="home-empty-state__trusted">
+                              <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                              <p>{{ state.snapshot?.connection.relayLabel }}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <p class="home-empty-state__copy">{{ homeStatusCopy }}</p>
+                        <button
+                          class="primary-cta primary-cta--compact home-empty-state__primary"
+                          :disabled="state.snapshot?.connection.state === 'connecting'"
+                          @click="handleHomePrimaryAction"
+                        >
+                          {{ homePrimaryLabel }}
+                        </button>
+                        <button class="home-empty-state__secondary" @click="handleHomeSecondaryAction">{{ homeSecondaryLabel }}</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <footer v-if="currentThread" class="phone-composer-dock">
+                    <div class="phone-composer-dock__inner">
+                      <div v-if="planAccessory" class="plan-accessory" :class="`plan-accessory--${planAccessory.tone}`">
+                        <span class="section-label">Pinned Plan</span>
+                        <strong>{{ planAccessory.title }}</strong>
+                        <p>{{ planAccessory.summary }}</p>
+                      </div>
+
+                      <div v-if="currentThread?.queuedDrafts.length" class="queued-drafts">
+                        <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
+                          <div>
+                            <span class="section-label">Queued</span>
+                            <strong>{{ draft.text }}</strong>
+                          </div>
+                          <div class="queued-draft__actions">
+                            <button
+                              class="ghost-cta ghost-cta--compact"
+                              @click="client.resumeDraft(currentThread.id, draft.id)"
+                            >
+                              Send next
+                            </button>
+                            <button class="icon-button icon-button--tiny" @click="client.removeDraft(currentThread.id, draft.id)">×</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div v-if="composerSuggestion" class="composer-autocomplete">
+                        <span class="section-label">{{ composerSuggestion.title }}</span>
+                        <button
+                          v-for="item in composerSuggestion.items"
+                          :key="item.value"
+                          class="composer-autocomplete__item"
+                          @click="applyComposerSuggestion(item.value)"
+                        >
+                          <strong>{{ item.title }}</strong>
+                          <span>{{ item.detail }}</span>
+                        </button>
+                      </div>
+
+                      <div class="phone-composer">
+                        <textarea
+                          v-model="state.ui.composerText"
+                          class="phone-composer__input"
+                          :placeholder="composerPlaceholder"
+                          rows="3"
+                        ></textarea>
+
+                        <div class="phone-composer__toolbar">
+                          <div class="phone-composer__toolbar-left">
+                            <button class="pill pill--button pill--icon">＋</button>
+                            <select v-model="state.ui.selectedModel" class="phone-select">
+                              <option v-for="model in MODELS" :key="model">{{ model }}</option>
+                            </select>
+                            <button
+                              class="pill pill--button"
+                              :class="{ 'pill--active': state.ui.fastMode }"
+                              @click="state.ui.fastMode = !state.ui.fastMode"
+                            >
+                              Fast
+                            </button>
+                            <button
+                              class="pill pill--button"
+                              :class="{ 'pill--active': state.ui.planArmed }"
+                              @click="state.ui.planArmed = !state.ui.planArmed"
+                            >
+                              Plan
+                            </button>
+                          </div>
+
+                          <div class="phone-composer__toolbar-right">
+                            <button class="composer-circle composer-circle--ghost" title="Voice shell placeholder">◉</button>
+                            <button
+                              v-if="currentThread?.state === 'running'"
+                              class="composer-circle composer-circle--dark"
+                              @click="client.stopRun(currentThread.id)"
+                            >
+                              ■
+                            </button>
+                            <button class="send-cta send-cta--circle" :title="currentThread?.state === 'running' ? 'Queue' : 'Send'" @click="handleSend">
+                              {{ currentThread?.state === "running" ? "+" : "↑" }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="phone-secondary-bar">
+                        <span class="pill">Local</span>
+                        <button
+                          class="pill pill--button"
+                          @click="
+                            state.ui.accessMode =
+                              state.ui.accessMode === 'full-access'
+                                ? 'on-request'
+                                : state.ui.accessMode === 'on-request'
+                                  ? 'read-only'
+                                  : 'full-access'
+                          "
+                        >
+                          {{ ACCESS_MODE_LABELS[state.ui.accessMode] }}
+                        </button>
+                        <span class="pill">{{ currentThread?.branch ?? "main" }}</span>
+                        <span class="pill pill--muted">{{ state.snapshot?.connection.macLabel }}</span>
+                      </div>
+                    </div>
+                  </footer>
+                </div>
+              </transition>
+
               <transition name="scrim">
                 <div v-if="dialogState" class="app-dialog-scrim">
                   <div class="app-dialog-card">
@@ -1648,7 +1649,6 @@ function readShellPageState(): ShellPageState | null {
                 </div>
               </div>
         </template>
-      </div>
     </div>
   </div>
 </template>
