@@ -1,70 +1,80 @@
 # Remodex Page Matrix
 
-This matrix turns the SwiftUI source audit into a concrete page-by-page acceptance list for `/Users/young/mx/tmp/phodex-web`.
+This matrix maps upstream source truth to the current Phodex Web build.
+Unlike older versions, it now separates:
+- source parity targets we should actively close
+- upstream-only features that are now out of scope for Phodex
 
 Legend:
-- `done`: implemented and already captured with a real browser screenshot
-- `partial`: implemented only as a shell, or missing source states
-- `missing`: not implemented yet
+- `done`: implemented and verified in the current web app
+- `partial`: implemented, but still materially different from upstream
+- `missing`: not implemented in current web
+- `out-of-scope`: upstream exists, but product overrides exclude it
 
-## Root Flow
+## Primary Surfaces
 
-| Source page | Required source states | Current web status | Screenshot evidence |
+| Upstream surface | Source truth | Current web status | Gap to close next |
 | --- | --- | --- | --- |
-| `OnboardingView` | welcome, features, step 1 install Codex, step 2 install bridge, step 3 start pairing, bottom CTA, install reminder alert | `done` for the 5-page shell, still needs final pixel pass | `acceptance-entry-01-welcome-fixed.png`, `acceptance-entry-02-pairing-fixed.png` |
-| `SubscriptionBootstrapFailureView` | failure copy, retry, restore purchases, privacy, terms | `partial` | `root-bootstrap-failure.png` |
-| `SubscriptionGateView` | hero, feature marketing, pricing, CTA, paywall entry, restore/manage/legal links | `partial` | `subscription-gate-932-r5.png` |
-| `QRScannerView` | camera permission, live scanner, scan error alert, bridge-version mismatch recovery, back action | `partial` | `camera-permission-top-r3.png`, `root-scanner.png`, `root-scanner-error.png` |
-| `BridgeUpdateSheet` | copy command, retry, scan new QR, dismiss | `partial` | `bridge-update-top-r3.png`, `bridge-update-bottom-r4.png` |
-| deleted-thread alert | alert copy + new-thread CTA | `missing` | none |
-| thread completion banner | banner + dismiss + open thread | `done` | `acceptance-auth-03-turn-fixed.png` |
+| `OnboardingView` | 5-page mobile flow with hero, features, 3 setup steps, fixed CTA, install reminder alert | `partial` | page structure exists, but visual pacing and some copy/spacing still differ |
+| `SubscriptionBootstrapFailureView` | locked error shell with retry/recovery/legal affordances | `partial` | keep the shell but tighten hierarchy and recovery affordances |
+| `SubscriptionGateView` | full-page gate with feature stack, plan choice, CTA, restore/manage/legal | `partial` | keep preview-only purchases, but move closer to source card hierarchy |
+| `QRScannerView` | live camera scanner and QR recovery flow | `out-of-scope` | use only as reference for auth-shell sparseness; do not implement QR/camera |
+| `HomeEmptyStateView` | sparse connected/offline home with trusted Mac summary and CTA swaps | `partial` | disconnected/connecting variants and final spacing still differ |
+| `SidebarView` | searchable project-grouped conversation tree with rename/archive/delete/project picker | `partial` | grouping behavior, project picker, refresh affordances, and thread-row actions are still simplified |
+| `TurnView` | timeline, toolbar, pinned plan, structured prompts, queued drafts, scroll state machine, tool cards, sheets | `partial` | richer surfaces landed, but scroll behavior and several secondary actions are still missing |
+| `SettingsView` | standalone settings stack with many cards and linked subpages | `partial` | current page exists but still lacks source card depth and some linked behaviors |
+| `ArchivedChatsView` | archived list, restore, delete | `partial` | restore exists; destructive delete remains intentionally unavailable |
+| `RevenueCatPaywallView` | full-screen paywall page | `partial` | preview-only page exists, but source hierarchy is still simplified |
+| `AboutRemodexView` | long-form about page in a dedicated stack | `partial` | dedicated page exists, but source information architecture is still reduced |
 
-## Main Shell
+## Root And Overlay Surfaces
 
-| Source page | Required source states | Current web status | Screenshot evidence |
+| Upstream surface | Source truth | Current web status | Gap to close next |
 | --- | --- | --- | --- |
-| `HomeEmptyStateView` | connected, connecting, offline, trusted Mac summary, primary CTA swap | `partial` | `acceptance-auth-01-home-empty-fixed.png` |
-| `SidebarView` | search, grouped threads, archive group, rename, archive, delete, connected Mac footer, settings entry | `partial` | `sidebar-open-932.png`, `acceptance-auth-08-delete-dialog-fixed.png` |
-| `TurnView` | empty thread, active timeline, queued drafts, send/stop/queue, toolbar, composer suggestions | `partial` | `acceptance-auth-03-turn-fixed.png` |
-| `SettingsView` | standalone page stack, archived/about/paywall subpages, appearance, notifications, runtime, connection | `partial` | `settings-932.png` |
-| `ArchivedChatsView` | empty state, list state, restore, delete | `partial` | `archived-932-r2.png` |
-| `AboutRemodexView` | standalone article page with Done/back behavior | `partial` | `about-932.png` |
-| `RevenueCatPaywallView` | full-screen paywall, CTA, restore, manage, privacy, terms, plans | `partial` | `paywall-932-r2.png` |
+| root router in `ContentView.swift` | onboarding -> subscription failure -> gate -> scanner -> main app | `partial` | Phodex correctly replaces scanner with Email OTP, but root auth shell can still move closer to source pacing |
+| `BridgeUpdateSheet` | update instructions, copy command, retry, scan-new-QR | `out-of-scope` | QR recovery is excluded; only generic bridge-recovery ideas matter |
+| deleted-thread alert | alert with start-new-chat recovery | `missing` | add if backend/state model can expose the deleted-thread recovery prompt |
+| thread completion banner | top completion banner | `done` | keep validated |
 
-## Turn Secondary Pages
+## Turn Interaction Matrix
 
-| Source page | Required source states | Current web status | Screenshot evidence |
+| Upstream interaction | Source truth | Current web status | Priority |
 | --- | --- | --- | --- |
-| `TurnStatusSheet` | run state summary and actions | `missing` | none |
-| `TurnDiffSheet` | diff summary, files, revert/inspect affordances | `missing` | none |
-| `AssistantRevertSheet` | assistant revert confirmation flow | `missing` | none |
-| `TurnThreadPathSheet` | thread path / workspace location | `missing` | none |
-| `TurnWorktreeHandoffOverlay` | worktree handoff overlay states | `missing` | none |
-| `GPTVoiceSetupSheet` | voice setup and account prerequisites | `missing` | none |
-| image preview / selectable text / mermaid preview | modal detail viewers | `missing` | none |
-| plan execution / structured input sheets | deeper plan mode flows | `missing` | none |
-| command execution / subagent detail sheets | secondary detail pages | `missing` | none |
+| auto-scroll state machine | `followBottom` / `anchorAssistantResponse` / `manual` modes | `missing` | P1 |
+| bottom threshold + anti-jitter behavior | `12pt` bottom threshold, `1pt` correction threshold, `250ms` cooldown, coalesced follow scrolls | `missing` | P1 |
+| scroll-to-latest affordance | floating button when not at bottom | `missing` | P1 |
+| initial scroll recovery | multi-pass recovery snap on thread change | `missing` | P1 |
+| large-thread tail rendering | render last 40 rows first, then “Load earlier messages” | `missing` | P2 |
+| empty timeline static mode | empty chats avoid inert scrolling | `partial` | empty card exists, but scroll behavior is still generic |
+| running-empty state | “Working on it… / You can stop it below” while a thread is running but still empty | `missing` | P1 |
+| pinned-plan empty fallback | empty timeline defers to plan accessory when a pinned plan exists | `missing` | P1 |
+| pinned plan accessory | compact accessory above composer, sheet-backed | `partial` | summary band exists, but no drill-in sheet or structured replacement behavior |
+| structured-input replacement | active structured prompts can replace composer | `missing` | P2 |
+| queued draft restore/steer/remove | `Restore`, `Steer`, `Remove`; busy-state aware | `partial` | `Resume` and `Remove` exist; `Steer` is missing |
+| queued pause/resume semantics | failed flush pauses queue and exposes resume action | `missing` | P2 |
+| toolbar path sheet | subtitle opens thread path | `missing` | P2 |
+| diff pill drill-in | toolbar diff opens diff sheet | `missing` | P2 |
+| thread actions menu | handoff/new-chat actions grouped in toolbar menu | `partial` | we still use simplified standalone buttons |
+| composer secondary bar | runtime picker, access mode, git branch selector, status ring | `partial` | only minimal local/access/branch pills exist |
+| `/status` behavior | opens formal status sheet | `missing` | P2 |
 
-## Functional Evidence Still Needed
+## Current Serial Execution Order
 
-These are not separate top-level pages, but they need their own real screenshot states once implemented:
+1. turn auto-scroll state machine
+2. scroll-to-latest affordance plus bottom-threshold behavior
+3. running-empty and pinned-plan-empty branching
+4. queued draft steer / pause / resume semantics
+5. toolbar path / diff / thread-actions affordances
+6. secondary composer bar parity
 
-| Area | Required state | Current web status |
-| --- | --- | --- |
-| pairing | camera permission denied | missing |
-| pairing | scan error alert | missing |
-| pairing | bridge update recovery | missing |
-| home | offline trusted Mac state | partial |
-| home | connecting pulse state | partial |
-| sidebar | populated archived list | missing evidence |
-| turn | empty timeline | missing evidence |
-| turn | queued draft remove/resume | partial |
-| turn | connection state variants | missing evidence |
-| settings | toggled appearance/notification variants | missing evidence |
+## Evidence Pointers
 
-## Priority Order
+Upstream screenshot-backed pages:
+- onboarding: `onboarding.png`, `ui-onboarding.png`
+- scanner: `scanner*.png`, `ui-scanner.png`
+- home: `home*.png`, `ui-home.png`
+- settings: `settings*.png`, `ui-settings.png`
 
-1. Implement root-flow blockers: `SubscriptionBootstrapFailureView`, `SubscriptionGateView`, `QRScannerView`, `BridgeUpdateSheet`.
-2. Replace inline settings/about/paywall presentation with a more native page-stack model.
-3. Fill in shell state variants and secondary screenshots for home/sidebar/turn/settings.
-4. Continue into Turn secondary sheets and protocol-backed cards.
+Current web evidence:
+- see `/Users/young/mx/tmp/phodex-web/docs/page-function-acceptance.md`
+- see `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance.md`

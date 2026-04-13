@@ -42,9 +42,15 @@ Why:
 - Turn timelines, the composer work-state band, and the empty timeline state are now present, but the page still misses other source `TurnView` secondary states.
 
 Main work:
+- Add the source-confirmed turn scroll state machine:
+  `followBottom` / `manual` / `anchorAssistantResponse`, plus bottom threshold, cooldown, and scroll-to-latest affordance.
+- Add the remaining empty-state branches:
+  running-empty and pinned-plan-empty behavior.
+- Add queued-draft follow-up behavior that still differs from source:
+  `Steer`, paused queue handling, and resume affordances when flush fails.
 - Add the remaining source-informed toolbar/sheet affordances that belong to TurnView rather than the global drawer.
 - Decide whether structured-input replacement is needed, or explicitly document why it remains out of scope.
-- Tighten any remaining TurnView spacing/copy mismatches only after the missing branches above are resolved.
+- Tighten remaining TurnView spacing/copy mismatches only after the missing branches above are resolved.
 
 Likely files:
 - `apps/web/src/App.vue`
