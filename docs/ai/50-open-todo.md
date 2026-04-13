@@ -34,26 +34,6 @@ Done when:
 - Each page has a current screenshot and a short acceptance note.
 - Remaining visual gaps are small and explicitly tracked.
 
-### P1. Remove UI placeholders that look real but are not backed by real behavior
-
-Status: open
-
-Why:
-- Several surfaces currently imply richer implementation than the backend actually provides.
-
-Main work:
-- Audit `runEvents`, `fileChanges`, `codeBlock`, `subagentCount`, and `unreadCount` behavior.
-- Either implement the backing behavior or visibly demote/remove the placeholder.
-- Ensure the UI does not over-claim capabilities.
-
-Likely files:
-- `apps/web/src/App.vue`
-- `apps/server/src/index.ts`
-- `packages/shared/src/index.ts`
-
-Done when:
-- Every visible control or card either works or is intentionally absent.
-
 ### P1. Improve message mapping from Codex app-server into richer thread surfaces
 
 Status: open

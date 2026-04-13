@@ -75,7 +75,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
 - The current message mapper only turns `userMessage` and `agentMessage` into thread messages.
 - Richer upstream message types are not fully surfaced yet.
-- `fastMode` and `planArmed` are currently UI-level fields with limited or no downstream behavioral effect.
+- `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.
 
 ## Invariants
 

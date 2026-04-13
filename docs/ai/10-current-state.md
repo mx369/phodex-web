@@ -40,7 +40,6 @@ Explicitly excluded by current product direction:
 
 ## Current Architectural Debt
 
-- Several UI surfaces expose placeholders whose backing data is not fully implemented.
 - Thread rendering still maps only the simpler Codex message shapes and misses richer execution surfaces where available.
 
 ## Acceptance Bar

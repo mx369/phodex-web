@@ -22,9 +22,9 @@ All screenshots in this file were captured from real browser renders through the
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
 | Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
-| Turn Empty | Same authenticated session, opened a clean chat after placeholder removal in the composer | `.artifacts/qa-58-turn-empty-no-placeholders.png` |
+| Turn Empty | Same authenticated session, opened a clean chat after trimming the composer to backed controls only | `.artifacts/qa-61-turn-empty-real-controls.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
-| Settings | Authenticated session reloaded at `/?page=settings` after the Pro preview copy pass | `.artifacts/qa-59-settings-pro-preview.png` |
+| Settings | Authenticated session reloaded at `/?page=settings` after trimming runtime defaults to backed fields only | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the preview-only purchase control pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Archived Chats | Authenticated session reloaded at `/?page=archived` after the delete-UX cleanup | `.artifacts/qa-55-archived-restore-only.png` |
@@ -35,4 +35,5 @@ All screenshots in this file were captured from real browser renders through the
 - The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
 - Sidebar and archived evidence now reflect the restore-only delete policy: no destructive delete affordance is shown.
 - Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
+- Turn-empty and settings evidence now also reflect the removal of inert Fast/Plan UI.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

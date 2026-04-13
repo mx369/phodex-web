@@ -13,6 +13,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Replaced the fixed-width `app-surface` / `app-sheet` shell with a full-page `app-shell` + `mobile-page` structure.
 - Removed permanent-delete affordances from the UI and replaced archived-page copy with honest restore-only guidance.
 - Removed composer voice/attachment placeholders and marked purchase shells as preview-only.
+- Removed inert Fast/Plan toggles so composer and settings only expose backed controls.
 
 ## Result Legend
 
@@ -39,19 +40,19 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Page | Entry path | Function points checked in this pass | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | Home Empty | fresh OTP login after source-parity pass | connected state, source-closer header chips, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-52-home-page-parity.png` |
-| Turn Empty | clean authenticated chat after placeholder cleanup | empty-copy render, composer visible, no voice/attachment placeholders | pass | `.artifacts/qa-58-turn-empty-no-placeholders.png` |
+| Turn Empty | clean authenticated chat after placeholder cleanup | empty-copy render, composer visible, no voice/attachment/Fast/Plan placeholders | pass | `.artifacts/qa-61-turn-empty-real-controls.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
 | Turn View | send real prompt on clean thread | not rerun in this pass | legacy_evidence | `.artifacts/qa-27-turn-response.png` |
-| Settings | authenticated `?page=settings` after preview-only pass | dedicated mobile page render, settings cards, and Pro-preview copy/navigation | pass | `.artifacts/qa-59-settings-pro-preview.png` |
+| Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
 ## Interaction Flows
 
 - OTP login: pass in a real browser flow with a local dev mailbox and backdoor code `424242`.
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
-- Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment affordances and marking purchases preview-only.
+- Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Existing send / stream / stop / queue coverage was not rerun in this shell-focused pass. Prior real evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect

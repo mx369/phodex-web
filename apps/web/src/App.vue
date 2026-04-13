@@ -378,14 +378,6 @@ const planAccessory = computed(() => {
     };
   }
 
-  if (state.ui.planArmed) {
-    return {
-      title: "Plan mode armed",
-      summary: "The next turn will draft a task plan before it executes file and git work.",
-      tone: "blue",
-    };
-  }
-
   return null;
 });
 const composerSuggestion = computed(() => {
@@ -1118,10 +1110,6 @@ function readShellPageState(): ShellPageState | null {
                           <span>Access</span>
                           <strong>{{ ACCESS_MODE_LABELS[state.ui.accessMode] }}</strong>
                         </div>
-                        <div class="settings-metric-row">
-                          <span>Fast mode</span>
-                          <strong>{{ state.ui.fastMode ? "Enabled" : "Disabled" }}</strong>
-                        </div>
                       </section>
 
                       <section class="settings-card">
@@ -1575,20 +1563,6 @@ function readShellPageState(): ShellPageState | null {
                             <select v-model="state.ui.selectedModel" class="phone-select">
                               <option v-for="model in MODELS" :key="model">{{ model }}</option>
                             </select>
-                            <button
-                              class="pill pill--button"
-                              :class="{ 'pill--active': state.ui.fastMode }"
-                              @click="state.ui.fastMode = !state.ui.fastMode"
-                            >
-                              Fast
-                            </button>
-                            <button
-                              class="pill pill--button"
-                              :class="{ 'pill--active': state.ui.planArmed }"
-                              @click="state.ui.planArmed = !state.ui.planArmed"
-                            >
-                              Plan
-                            </button>
                           </div>
 
                           <div class="phone-composer__toolbar-right">

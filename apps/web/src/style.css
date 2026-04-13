@@ -1571,11 +1571,6 @@ button {
   border: 0;
 }
 
-.pill--active {
-  background: var(--orange-soft);
-  color: var(--orange);
-}
-
 .pill--muted {
   max-width: 100%;
   overflow: hidden;
