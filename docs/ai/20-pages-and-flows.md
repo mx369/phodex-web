@@ -13,7 +13,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
 | Turn empty | Partial | Real selected thread, embedded empty-timeline block, and backed composer | Structured-input replacement state and final micro-spacing/polish are still missing |
-| Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, a visible composer work-state band, and source-informed internal timeline scrolling with `Scroll to latest` | Running-empty / pinned-plan-empty branches, queued steer/pause semantics, and toolbar/sheet affordances still differ from source |
+| Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, a visible composer work-state band, and source-informed internal timeline scrolling with a latest-jump button | Running-empty / pinned-plan-empty branches, queued steer/pause semantics, and toolbar/sheet affordances still differ from source |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
 | Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
@@ -28,7 +28,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | First send creates a thread and flushes the composer |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |
-| Turn auto-scroll and scroll-to-latest | Real | Turn scrolling now happens inside the fixed mobile shell rather than on `body`, with follow-bottom, assistant anchoring, bottom-threshold tolerance, and a visible `Scroll to latest` affordance when the user leaves bottom |
+| Turn auto-scroll and scroll-to-latest | Real | Turn scrolling now happens inside the fixed mobile shell rather than on `body`, with follow-bottom, assistant anchoring, bottom-threshold tolerance, and a visible latest-jump button when the user leaves bottom |
 | Stop run | Real | Sends turn interrupt to local Codex |
 | Queue while running | Real | Draft is stored locally and shown in queued list |
 | Resume queued draft | Real | Replays queued text as a new turn |

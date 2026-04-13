@@ -18,7 +18,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Grouped queued drafts into a visible composer work-state band and promoted `/plan` replies into pinned-plan surfaces.
 - Replaced the generic turn-empty welcome card with an embedded empty-timeline block that keeps the composer in the same working layout.
 - Locked the main shell to the viewport again so Turn scrolling happens inside the timeline instead of on `body`.
-- Added a source-informed Turn auto-scroll state machine with assistant anchoring, bottom-threshold tolerance, and `Scroll to latest`.
+- Added a source-informed Turn auto-scroll state machine with assistant anchoring, bottom-threshold tolerance, and a latest-jump button.
 
 ## Result Legend
 
@@ -49,7 +49,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
-| Turn View | authenticated existing threads after richer-thread-surface, work-state, and scroll-state passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, pinned-plan surface, internal timeline scrolling, visible `Scroll to latest`, and return-to-bottom behavior | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png`, `.artifacts/qa-72-turn-scroll-latest.png`, `.artifacts/qa-73-turn-scroll-bottom.png` |
+| Turn View | authenticated existing threads after richer-thread-surface, work-state, and scroll-state passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, pinned-plan surface, internal timeline scrolling, visible latest-jump button, and return-to-bottom behavior | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png`, `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-74-turn-scroll-arrow-only.png` |
 | Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
@@ -60,7 +60,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.
 - Composer-work-state pass: a clean test thread was used to verify queued draft visibility/actionability and a real `/plan` thread was used to verify pinned-plan rendering above the composer.
-- Turn-scroll pass: a long live thread was used to verify that the shell stays viewport-locked, the timeline scrolls internally, `Scroll to latest` appears when leaving bottom, and clicking it returns the timeline to the latest content.
+- Turn-scroll pass: a long live thread was used to verify that the shell stays viewport-locked, the timeline scrolls internally, the latest-jump button appears when leaving bottom, and clicking it returns the timeline to the latest content.
 - Full send / stream / stop regression was not rerun in this shell-focused pass, but queue and pinned-plan accessory states were rerun. Prior real turn-flow evidence remains in `.artifacts/qa-27-turn-response.png` through `.artifacts/qa-31-send-next.png`.
 
 ## Known Product Limitations Verified Or Still In Effect

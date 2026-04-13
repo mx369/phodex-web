@@ -1641,11 +1641,11 @@ button {
   right: 6px;
   bottom: 100%;
   transform: translateY(-18px);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.92);
   color: white;
@@ -1656,18 +1656,12 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
-}
-
-.scroll-latest-cta strong {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
 .composer-work-state {

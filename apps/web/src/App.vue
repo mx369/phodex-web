@@ -1967,9 +1967,14 @@ function handleScrollToLatest() {
 
                   <footer v-if="currentThread" class="phone-composer-dock">
                     <div class="phone-composer-dock__inner">
-                      <button v-if="showScrollToLatestButton" class="scroll-latest-cta" @click="handleScrollToLatest">
-                        <span>↓</span>
-                        <strong>Scroll to latest</strong>
+                      <button
+                        v-if="showScrollToLatestButton"
+                        class="scroll-latest-cta"
+                        type="button"
+                        aria-label="Scroll to latest"
+                        @click="handleScrollToLatest"
+                      >
+                        <span aria-hidden="true">↓</span>
                       </button>
 
                       <div v-if="composerWorkStateVisible" class="composer-work-state">
