@@ -15,7 +15,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Turn empty | Partial | Real selected thread and composer | Not source-equal visually |
 | Turn with messages | Partial | Real streamed chat bridge | Richer upstream message/tool surfaces still missing |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
-| Archived chats | Partial | Real archived list and restore render in a dedicated mobile page | Delete is not real; list behavior is simplified |
+| Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
 | Paywall | Shell | Plan selection UI exists in a dedicated mobile page | No RevenueCat or StoreKit behavior |
 
@@ -33,7 +33,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Resume queued draft | Real | Replays queued text as a new turn |
 | Rename thread | Real | Uses Codex thread name update |
 | Archive thread | Real | Uses Codex archive/unarchive |
-| Delete thread | Not real | UI exists but server returns archive-only guidance |
+| Delete thread | Unavailable | UI intentionally omits permanent delete because the backend cannot support it |
 | Purchase / restore purchase | Not real | UI shells only |
 
 ## Excluded Scope

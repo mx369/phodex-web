@@ -2331,7 +2331,12 @@ button {
 
 .archived-page {
   display: grid;
+  gap: 12px;
   min-height: 100%;
+}
+
+.archived-page__note {
+  max-width: 320px;
 }
 
 .archived-list {

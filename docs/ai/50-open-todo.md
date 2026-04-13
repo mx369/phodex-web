@@ -74,24 +74,6 @@ Likely files:
 Done when:
 - Thread surfaces show real structured execution data where Codex provides it.
 
-### P1. Resolve thread delete UX honestly
-
-Status: open
-
-Why:
-- The UI offers delete even though the current backend cannot actually delete threads.
-
-Main work:
-- Either remove delete from the UI or redesign it as an archive-only action with accurate copy.
-- Update acceptance docs accordingly.
-
-Likely files:
-- `apps/web/src/App.vue`
-- `docs/page-function-acceptance.md`
-
-Done when:
-- The UI no longer promises destructive delete that does not exist.
-
 ### P2. Decide what to do with purchases, voice, and attachments
 
 Status: open
@@ -114,6 +96,5 @@ Done when:
 
 ## Blockers And Caveats
 
-- `thread:delete` is blocked by current Codex app-server capability.
 - Subscription purchase and restore are still shell-level; do not mark them complete without real backing behavior.
 - Historical source-audit docs still contain upstream QR/E2EE notes. Treat them as source reference, not current product target.

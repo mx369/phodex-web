@@ -227,13 +227,6 @@ export function createAppClient() {
     });
   }
 
-  function deleteThread(threadId: string) {
-    send({
-      type: "thread:delete",
-      threadId,
-    });
-  }
-
   function toggleArchiveThread(thread: ThreadRecord) {
     send({
       type: "thread:archive",
@@ -292,7 +285,6 @@ export function createAppClient() {
       selectThread,
       clearThreadSelection,
       renameThread,
-      deleteThread,
       toggleArchiveThread,
     sendComposer,
     resumeDraft,

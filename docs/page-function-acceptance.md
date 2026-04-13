@@ -11,6 +11,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Collapsed the unauthenticated path to `onboarding -> email OTP`.
 - Removed user-facing E2EE copy from onboarding, turn empty, about, and paywall surfaces.
 - Replaced the fixed-width `app-surface` / `app-sheet` shell with a full-page `app-shell` + `mobile-page` structure.
+- Removed permanent-delete affordances from the UI and replaced archived-page copy with honest restore-only guidance.
 
 ## Result Legend
 
@@ -40,10 +41,10 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Turn Empty | `Home Empty -> Open chats -> New Chat` | not isolated again after the shell pass | legacy_evidence | `.artifacts/qa-43-turn-empty-email-only.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after shell pass | full-page mobile page render, updated feature copy | pass | `.artifacts/qa-50-paywall-mobile-page.png` |
-| Sidebar Drawer | menu button from authenticated state after source-parity pass | drawer render, local/worktree/about shortcuts, thread list, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-53-sidebar-page-parity.png` |
+| Sidebar Drawer | menu button from authenticated state after delete-UX cleanup | drawer render, local/worktree/about shortcuts, thread list without delete affordances, connection footer, settings/archive/disconnect actions | pass | `.artifacts/qa-54-sidebar-no-delete.png` |
 | Turn View | send real prompt on clean thread | not rerun in this pass | legacy_evidence | `.artifacts/qa-27-turn-response.png` |
 | Settings | authenticated `?page=settings` after shell pass | dedicated mobile page render, settings cards, archive/about/paywall navigation | pass | `.artifacts/qa-48-settings-mobile-page.png` |
-| Archived | authenticated `?page=archived` after shell pass | dedicated mobile page render, archived list shell, restore/delete actions present | pass | `.artifacts/qa-51-archived-mobile-page.png` |
+| Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
 ## Interaction Flows
 
@@ -53,7 +54,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 ## Known Product Limitations Verified Or Still In Effect
 
-- `thread:delete` is intentionally unsupported by the Codex app-server bridge and currently toasts an error instead of deleting.
+- Permanent thread delete is intentionally absent because the Codex app-server bridge does not support it.
 - Subscription purchase and restore are still shell-level only.
 
 ## Notes

@@ -18,7 +18,6 @@ type ShellPageState = "settings" | "archived" | "about" | "paywall";
 
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
-  | { kind: "delete-thread"; threadId: string; title: string }
   | { kind: "archive-group"; projectLabel: string; liveCount: number };
 
 const verificationCode = ref("");
@@ -446,8 +445,6 @@ const dialogTitle = computed(() => {
   switch (dialogState.value?.kind) {
     case "rename-thread":
       return "Rename chat";
-    case "delete-thread":
-      return `Delete "${dialogState.value.title}"?`;
     case "archive-group":
       return `Archive "${dialogState.value.projectLabel}"?`;
     default:
@@ -458,8 +455,6 @@ const dialogBody = computed(() => {
   switch (dialogState.value?.kind) {
     case "rename-thread":
       return "Update the thread title shown in the sidebar and top navigation.";
-    case "delete-thread":
-      return "This removes the conversation from the local relay snapshot.";
     case "archive-group":
       return `All ${dialogState.value.liveCount} live chats in this project group will move to Archived Chats.`;
     default:
@@ -470,8 +465,6 @@ const dialogConfirmLabel = computed(() => {
   switch (dialogState.value?.kind) {
     case "rename-thread":
       return "Save";
-    case "delete-thread":
-      return "Delete";
     case "archive-group":
       return "Archive";
     default:
@@ -623,14 +616,6 @@ function handleRenameThread(threadId: string, currentTitle: string) {
   };
 }
 
-function handleDeleteThread(thread: ThreadRecord) {
-  dialogState.value = {
-    kind: "delete-thread",
-    threadId: thread.id,
-    title: thread.title,
-  };
-}
-
 function handleArchiveGroup(projectLabel: string) {
   const group = threadGroups.value.find((entry) => entry.label === projectLabel);
   if (!group) {
@@ -695,12 +680,6 @@ function confirmDialogAction() {
     if (nextTitle) {
       client.renameThread(dialogState.value.threadId, nextTitle);
     }
-    closeDialog();
-    return;
-  }
-
-  if (dialogState.value.kind === "delete-thread") {
-    client.deleteThread(dialogState.value.threadId);
     closeDialog();
     return;
   }
@@ -1191,6 +1170,9 @@ function readShellPageState(): ShellPageState | null {
 
                     <template v-else-if="activePanel === 'archived'">
                       <section class="archived-page">
+                        <p class="settings-copy archived-page__note">
+                          Permanent delete is unavailable in the current Codex bridge. Archived chats can only be restored.
+                        </p>
                         <div v-if="archivedThreads.length" class="archived-list">
                           <article v-for="thread in archivedThreads" :key="thread.id" class="archived-row">
                             <div>
@@ -1200,7 +1182,6 @@ function readShellPageState(): ShellPageState | null {
                             </div>
                             <div class="archived-row__actions">
                               <button class="archived-row__action" @click="client.toggleArchiveThread(thread)">Restore</button>
-                              <button class="archived-row__action archived-row__action--danger" @click="handleDeleteThread(thread)">Delete</button>
                             </div>
                           </article>
                         </div>
@@ -1391,7 +1372,6 @@ function readShellPageState(): ShellPageState | null {
                               <button class="icon-button icon-button--tiny" @click.stop="client.toggleArchiveThread(thread)">
                                 {{ thread.state === "archived" ? "↺" : "⌁" }}
                               </button>
-                              <button class="icon-button icon-button--tiny" @click.stop="handleDeleteThread(thread)">−</button>
                             </div>
                           </button>
                         </section>
