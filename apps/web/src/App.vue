@@ -9,6 +9,8 @@ import { createAppClient, state } from "./lib/client";
 type AppIconName =
   | "archive"
   | "arrow-down"
+  | "arrow-up"
+  | "bolt"
   | "check"
   | "chevron-down"
   | "close"
@@ -18,8 +20,11 @@ type AppIconName =
   | "info"
   | "menu"
   | "plus"
+  | "relay"
   | "settings"
   | "restore"
+  | "stop"
+  | "terminal"
   | "worktree";
 
 type AppIconSpec = {
@@ -51,6 +56,13 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   "arrow-down": {
     lines: [{ x1: 12, y1: 6.5, x2: 12, y2: 17.5 }],
     polylines: ["7.5 13 12 17.5 16.5 13"],
+  },
+  "arrow-up": {
+    lines: [{ x1: 12, y1: 17.5, x2: 12, y2: 6.5 }],
+    polylines: ["7.5 11 12 6.5 16.5 11"],
+  },
+  bolt: {
+    paths: ["M13.5 3.75 6.75 12.25H11l-1 8 7.25-8h-4.25z"],
   },
   check: {
     polylines: ["5.5 12.5 10 17 18.5 8.5"],
@@ -94,6 +106,13 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
       { x1: 6, y1: 12, x2: 18, y2: 12 },
     ],
   },
+  relay: {
+    circles: [{ cx: 12, cy: 15.75, r: 1.4 }],
+    paths: [
+      "M8.5 12.75a5 5 0 0 1 7 0",
+      "M5.75 9.75a8.75 8.75 0 0 1 12.5 0",
+    ],
+  },
   settings: {
     circles: [{ cx: 12, cy: 12, r: 2.5 }],
     lines: [
@@ -114,6 +133,16 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
     ],
     paths: ["M6 8.5v7.25A2.25 2.25 0 0 0 8.25 18h7.5A2.25 2.25 0 0 0 18 15.75V8.5"],
     polylines: ["9.25 7.5 12 4.75 14.75 7.5"],
+  },
+  stop: {
+    paths: ["M8 8h8v8H8z"],
+  },
+  terminal: {
+    lines: [
+      { x1: 13.5, y1: 17.25, x2: 18.5, y2: 17.25 },
+      { x1: 11, y1: 6.75, x2: 19, y2: 6.75 },
+    ],
+    polylines: ["5.5 8 9.5 12 5.5 16"],
   },
   worktree: {
     circles: [
@@ -241,31 +270,31 @@ const onboardingScreens = [
     subtitle: "Everything runs on your Mac. Your phone is the remote.",
     features: [
       {
-        icon: "⚡",
+        icon: "bolt",
         tone: "yellow",
         title: "Fast mode",
         subtitle: "Lower-latency turns for quick interactions",
       },
       {
-        icon: "⑂",
+        icon: "worktree",
         tone: "green",
         title: "Git from your phone",
         subtitle: "Commit, push, pull, and switch branches",
       },
       {
-        icon: "⌁",
+        icon: "relay",
         tone: "cyan",
         title: "Live relay sync",
         subtitle: "Replies stream from the desktop session in real time",
       },
       {
-        icon: "✎",
+        icon: "edit",
         tone: "purple",
         title: "Queued drafts",
         subtitle: "Write the next prompt while the current run is still streaming",
       },
       {
-        icon: "△",
+        icon: "terminal",
         tone: "orange",
         title: "Plans, skills and /commands",
         subtitle: "Use plan mode, slash commands, and file mentions from the mobile shell",
@@ -275,7 +304,7 @@ const onboardingScreens = [
   {
     kind: "step",
     step: "Step 1",
-    icon: "⌘",
+    icon: "terminal",
     title: "Install Codex CLI",
     subtitle: "The AI coding agent that lives in your terminal. Remodex connects to it from your iPhone.",
     command: "npm install -g @openai/codex@latest",
@@ -283,7 +312,7 @@ const onboardingScreens = [
   {
     kind: "step",
     step: "Step 2",
-    icon: "↔",
+    icon: "relay",
     title: "Install the Bridge",
     subtitle: "A lightweight relay that connects your Mac to your iPhone.",
     command: "npm install -g remodex@latest",
@@ -291,7 +320,7 @@ const onboardingScreens = [
   {
     kind: "step",
     step: "Step 3",
-    icon: "@",
+    icon: "arrow-up",
     title: "Start Remodex",
     subtitle: "Run this on your Mac, then continue here with email verification.",
     command: "remodex up",
@@ -1696,7 +1725,7 @@ function handleScrollToLatest() {
                         class="onboarding-feature-row"
                       >
                         <div class="onboarding-feature-row__icon" :class="`onboarding-feature-row__icon--${feature.tone}`">
-                          {{ feature.icon }}
+                          <AppIcon :name="feature.icon" />
                         </div>
                         <div>
                           <strong>{{ feature.title }}</strong>
@@ -1710,7 +1739,7 @@ function handleScrollToLatest() {
                 <template v-else>
                   <div class="onboarding-flow__content onboarding-flow__content--step">
                     <span class="section-label section-label--light">{{ currentOnboardingScreen.step }}</span>
-                    <div class="onboarding-step-icon">{{ currentOnboardingScreen.icon }}</div>
+                    <div class="onboarding-step-icon"><AppIcon :name="currentOnboardingScreen.icon" /></div>
                     <h2>{{ currentOnboardingScreen.title }}</h2>
                     <p>{{ currentOnboardingScreen.subtitle }}</p>
                     <div class="onboarding-command-card">{{ currentOnboardingScreen.command }}</div>
@@ -2052,7 +2081,7 @@ function handleScrollToLatest() {
                           </article>
                         </div>
                         <div v-else class="archived-empty">
-                          <span class="archived-empty__icon">▣</span>
+                          <span class="archived-empty__icon"><AppIcon name="archive" /></span>
                           <strong>No archived chats</strong>
                           <p class="settings-copy">Archived conversations will appear here after you move a chat out of the main thread list.</p>
                         </div>
@@ -2623,13 +2652,23 @@ function handleScrollToLatest() {
                             <button
                               v-if="currentThread?.state === 'running'"
                               class="composer-circle composer-circle--dark"
+                              type="button"
+                              aria-label="Stop run"
                               @click="client.stopRun(currentThread.id)"
                             >
-                              ■
+                              <AppIcon name="stop" />
                             </button>
                             <button
                               class="send-cta send-cta--circle"
+                              type="button"
                               :disabled="isCurrentThreadPendingCreate"
+                              :aria-label="
+                                isCurrentThreadPendingCreate
+                                  ? 'Starting'
+                                  : currentThread?.state === 'running'
+                                    ? 'Queue draft'
+                                    : 'Send'
+                              "
                               :title="
                                 isCurrentThreadPendingCreate
                                   ? 'Starting'
@@ -2639,7 +2678,7 @@ function handleScrollToLatest() {
                               "
                               @click="handleSend"
                             >
-                              {{ currentThread?.state === "running" ? "+" : "↑" }}
+                              <AppIcon :name="currentThread?.state === 'running' ? 'plus' : 'arrow-up'" aria-hidden="true" />
                             </button>
                           </div>
                         </div>

@@ -112,6 +112,7 @@ After login, wait for the shell to render a stable home state before taking scre
 - Re-snapshot after any click that changes the page tree.
 - Do not reuse a screenshot if the URL, page title, or visible heading does not match the intended state.
 - Keep filenames explicit and page-specific.
+- For shared-control polish passes, compare the captured result against `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md` and explicitly check paired button heights, radius consistency, icon consistency, and helper-button sizing in the mobile viewport.
 
 ## Interaction Rules
 

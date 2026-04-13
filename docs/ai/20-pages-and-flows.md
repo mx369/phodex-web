@@ -6,14 +6,14 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Page | Current status | Real behavior today | Main gaps |
 | --- | --- | --- | --- |
-| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists, and now routes directly into Email OTP | Not pixel-perfect; copy/layout still approximate |
+| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists, routes directly into Email OTP, and now uses the shared SVG icon language instead of unicode placeholder glyphs | Not pixel-perfect; copy/layout still approximate |
 | Bootstrap failure | Shell | Rendered and navigable with preview-only subscription copy | No real purchase or restore flow |
 | Subscription gate | Shell | Plan selection UI and navigation exist with preview-only purchase copy | No real purchase or restore flow |
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly, and OTP delivery now uses live Resend when configured | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
-| Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats through a real project-picker sheet, create fresh project folders from a folder name or full path, and open about/settings from the shell drawer | Refresh-style affordances and final source parity polish are still missing |
-| Turn empty | Partial | Real selected thread, embedded empty-timeline block, backed composer, and an immediate local "starting chat" state while `thread/start` resolves | Structured-input replacement state and final micro-spacing/polish are still missing |
-| Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, a visible composer work-state band, and source-informed internal timeline scrolling with a latest-jump button | Running-empty / pinned-plan-empty branches, queued steer/pause semantics, and toolbar/sheet affordances still differ from source |
+| Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats through a real project-picker sheet, create fresh project folders from a folder name or full path, open about/settings from the shell drawer, and now sit on a tighter shared control-size / radius scale | Refresh-style affordances and final source parity polish are still missing |
+| Turn empty | Partial | Real selected thread, embedded empty-timeline block, backed composer, and an immediate local "starting chat" state while `thread/start` resolves; the composer controls now share the same button ladder as the rest of the shell | Structured-input replacement state and final micro-spacing/polish are still missing |
+| Turn with messages | Partial | Real streamed chat bridge, richer command/file/tool/system activity cards, a visible composer work-state band, source-informed internal timeline scrolling with a latest-jump button, and a normalized send/stop/latest-jump control scale | Running-empty / pinned-plan-empty branches, queued steer/pause semantics, and toolbar/sheet affordances still differ from source |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
 | Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
@@ -54,9 +54,11 @@ This file is the UI and flow reference. Read it when you need page-level status 
 - Do not add fake status bars or dynamic islands.
 - Do not reintroduce QR-pairing screens or encryption marketing because of the original app.
 - Treat the current shell as a full-page mobile surface, not a centered faux-device card.
+- If you change shared controls, color roles, font scale, radius scale, or icon language, update `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md` in the same change.
 - If changing page structure, update this file and the screenshot evidence when the behavior changes.
 
 ## Deep References
 
 - `/Users/young/mx/tmp/phodex-web/docs/remodex-source-audit.md`
 - `/Users/young/mx/tmp/phodex-web/docs/remodex-page-matrix.md`
+- `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`

@@ -1,6 +1,6 @@
 # Page And Function Acceptance
 
-Date: 2026-04-13
+Date: 2026-04-14
 Runtime: `https://localhost:3443`
 Transport: Bun HTTPS + WSS relay to local Codex app-server
 Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automation` wrapper
@@ -23,6 +23,8 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Added a persisted local rename fallback so drawer row rename remains functional even when Codex thread-name sync does not round-trip.
 - Extended the drawer create sheet so users can type a fresh folder name or paste an absolute path for the next chat cwd without leaving the mobile shell.
 - Reworked the drawer create sheet for long project lists so the custom path area stays above the list, the project list scrolls internally, and the footer CTA remains visible in the mobile viewport.
+- Added `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md` and normalized the shared control ladder so dialog footers, drawer actions, composer controls, and latest-jump affordances use a smaller, more consistent mobile scale.
+- Replaced the remaining onboarding and archived-empty unicode glyphs with the shared SVG icon system so root-flow and shell surfaces now follow the same icon language.
 
 ## Result Legend
 
@@ -35,7 +37,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | --- | --- | --- | --- | --- |
 | Loading Splash | app boot while `loadingSession` | not isolated in this pass | legacy_evidence | existing splash branch only |
 | Onboarding Welcome | fresh unauthenticated load | initial render, CTA | pass | `.artifacts/qa-32-onboarding-welcome-email-only.png` |
-| Onboarding Features | onboarding CTA | feature page render, CTA | pass | `.artifacts/qa-33-onboarding-features-email-only.png` |
+| Onboarding Features | onboarding CTA | feature page render, CTA, and SVG icon tiles instead of unicode placeholder glyphs | pass | `.artifacts/qa-33-onboarding-features-email-only.png`, `.artifacts/qa-cdp/qa-92-onboarding-icons-ui-standards.png` |
 | Onboarding Step 1 | onboarding CTA | install step render, CTA | pass | `.artifacts/qa-34-onboarding-step1-email-only.png` |
 | Install Warning Alert | Step 1 continue | warning modal render, continue path | pass | `.artifacts/qa-35-onboarding-install-warning-email-only.png` |
 | Onboarding Step 2 | warning continue | relay step render, CTA | pass | `.artifacts/qa-36-onboarding-step2-email-only.png` |
@@ -52,8 +54,8 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Turn Empty | clean authenticated chat after empty-state parity pass | embedded empty-timeline block, source-closer guidance copy, composer visible, no voice/attachment/Fast/Plan placeholders | pass | `.artifacts/qa-71-turn-empty-timeline-block.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only pass | full-page mobile page render, preview-only purchase controls, updated feature copy | pass | `.artifacts/qa-60-paywall-preview-only.png` |
-| Sidebar Drawer | authenticated session after the drawer parity pass | drawer render, SVG icon system, explicit create sheet, project-group `+` preselection, folder-name and absolute-path cwd creation, real worktree start path, row rename action, connection footer, settings/archive/disconnect actions, and long-list create-sheet overflow handling | pass | `.artifacts/qa-76-drawer-open.png`, `.artifacts/qa-77-drawer-create-sheet.png`, `.artifacts/qa-78-drawer-worktree-created.png`, `.artifacts/qa-80-drawer-rename-fixed.png`, `.artifacts/qa-81-drawer-custom-folder-input.png`, `.artifacts/qa-82-drawer-custom-absolute-path.png`, `.artifacts/qa-cdp/qa-86-drawer-create-sheet-scrollable.png` |
-| Turn View | authenticated existing threads after richer-thread-surface, work-state, scroll-state, and composer-polish passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, pinned-plan surface, internal timeline scrolling, visible latest-jump button, return-to-bottom behavior, and a custom model picker instead of the native browser dropdown | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png`, `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-cdp/qa-87-turn-scroll-black-centered.png`, `.artifacts/qa-cdp/qa-83-model-picker-open.png`, `.artifacts/qa-cdp/qa-84-model-picker-mini-selected.png` |
+| Sidebar Drawer | authenticated session after the drawer parity and UI-standards passes | drawer render, SVG icon system, explicit create sheet, project-group `+` preselection, folder-name and absolute-path cwd creation, real worktree start path, row rename action, connection footer, settings/archive/disconnect actions, long-list create-sheet overflow handling, and normalized shared button sizing/radius inside the drawer surfaces | pass | `.artifacts/qa-76-drawer-open.png`, `.artifacts/qa-77-drawer-create-sheet.png`, `.artifacts/qa-78-drawer-worktree-created.png`, `.artifacts/qa-80-drawer-rename-fixed.png`, `.artifacts/qa-81-drawer-custom-folder-input.png`, `.artifacts/qa-82-drawer-custom-absolute-path.png`, `.artifacts/qa-cdp/qa-86-drawer-create-sheet-scrollable.png`, `.artifacts/qa-cdp/qa-88-drawer-ui-standards.png`, `.artifacts/qa-cdp/qa-89-create-sheet-ui-standards.png` |
+| Turn View | authenticated existing threads after richer-thread-surface, work-state, scroll-state, composer-polish, and UI-standards passes | turn toolbar chips, real command/file/tool/subagent activity cards, queued-draft work-state band, pinned-plan surface, internal timeline scrolling, visible latest-jump button, return-to-bottom behavior, a custom model picker instead of the native browser dropdown, and normalized send/stop/latest-jump control sizes in the mobile composer | pass | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png`, `.artifacts/qa-73-turn-scroll-bottom.png`, `.artifacts/qa-cdp/qa-87-turn-scroll-black-centered.png`, `.artifacts/qa-cdp/qa-90-thread-controls-ui-standards.png`, `.artifacts/qa-cdp/qa-91-latest-jump-ui-standards.png`, `.artifacts/qa-cdp/qa-83-model-picker-open.png`, `.artifacts/qa-cdp/qa-84-model-picker-mini-selected.png` |
 | Settings | authenticated `?page=settings` after control-trim pass | dedicated mobile page render, settings cards, backed runtime defaults only, and Pro-preview copy/navigation | pass | `.artifacts/qa-62-settings-runtime-trimmed.png` |
 | Archived | authenticated `?page=archived` after delete-UX cleanup | dedicated mobile page render, restore-only list, and honest no-delete copy | pass | `.artifacts/qa-55-archived-restore-only.png` |
 
@@ -64,6 +66,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 - Drawer parity pass: the authenticated shell was rerun after replacing glyph icons with SVG icons, adding the shared create sheet, validating a real worktree creation path, and rechecking rename through the drawer row actions.
 - Custom cwd pass: the same drawer flow was rerun with a plain folder name and an absolute path to verify that the server creates the requested local project directory and starts the new chat from that cwd.
 - Drawer overflow pass: the same create sheet was rerun with a long project list to verify that the custom path area stays above the list, the list itself scrolls, and the footer actions remain visible in the mobile viewport.
+- UI standards pass: onboarding features, the drawer shell, the create sheet footer, the turn composer controls, and the latest-jump affordance were rerun after introducing a shared control-size / radius / icon standard for the mobile shell.
 - Placeholder-removal pass: turn empty, settings, paywall, bootstrap failure, and subscription gate were rerun after removing voice/attachment/Fast/Plan affordances and marking purchases preview-only.
 - Richer-thread-surface pass: turn view was rerun against a live Todo-maintenance thread after remapping Codex execution items into structured activity cards.
 - Composer-work-state pass: a clean test thread was used to verify queued draft visibility/actionability and a real `/plan` thread was used to verify pinned-plan rendering above the composer.
@@ -80,4 +83,5 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 - Acceptance docs now treat only onboarding, subscription gate, bootstrap failure, and email OTP as in-scope unauthenticated pages.
 - The authenticated shell evidence now reflects the full-page mobile-page layout rather than the old centered card plus overlay-sheet structure.
+- Shared control sizing, radius, icon usage, and surface roles are now documented in `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`.
 - The screenshots listed above are real CDP captures from the running Bun relay on this machine.

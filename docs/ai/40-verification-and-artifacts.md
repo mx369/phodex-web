@@ -20,6 +20,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Verification Expectations
 
 - UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
+- Shared-control / polish changes: check `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`, then verify the real mobile viewport for paired button height consistency, radius-scale consistency, icon-style consistency, and floating-helper sizing.
 - Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
@@ -32,6 +33,7 @@ Read this file when you need to verify a change or continue from prior evidence.
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance.md`
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance-runbook.md`
   - `/Users/young/mx/tmp/phodex-web/docs/page-function-acceptance.md`
+  - `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`
 
 ## Commit Discipline
 
