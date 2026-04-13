@@ -7,17 +7,17 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Page | Current status | Real behavior today | Main gaps |
 | --- | --- | --- | --- |
 | Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, install warning modal exists, and now routes directly into Email OTP | Not pixel-perfect; copy/layout still approximate |
-| Bootstrap failure | Shell | Rendered and navigable | Subscription restore is not real |
-| Subscription gate | Shell | Plan selection UI and navigation exist | No real purchase or restore flow |
+| Bootstrap failure | Shell | Rendered and navigable with preview-only subscription copy | No real purchase or restore flow |
+| Subscription gate | Shell | Plan selection UI and navigation exist with preview-only purchase copy | No real purchase or restore flow |
 | Email OTP | Real | Request code, verify code, and dev bypass all work; onboarding now lands here directly | Still a web-auth surface, not source-equal mobile UI |
 | Home empty | Partial | Real connection state drives content inside the full-page mobile shell with source-closer header chips and trusted Mac card | Final spacing and disconnected-state parity still differ from upstream |
 | Sidebar | Partial | Real threads render; select, rename, archive, create local/worktree chats, and open about/settings from the shell drawer | Project picker sheet and refresh-style affordances are still missing |
-| Turn empty | Partial | Real selected thread and composer | Not source-equal visually |
+| Turn empty | Partial | Real selected thread and composer; voice and attachment placeholders are now absent | Not source-equal visually |
 | Turn with messages | Partial | Real streamed chat bridge | Richer upstream message/tool surfaces still missing |
 | Settings | Partial | Real setting patches persist in a dedicated mobile page | Visual and information architecture parity still differ |
 | Archived chats | Partial | Real archived list and restore render in a dedicated mobile page with restore-only copy | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Static explanatory content exists in a dedicated mobile page | Not a full upstream information architecture |
-| Paywall | Shell | Plan selection UI exists in a dedicated mobile page | No RevenueCat or StoreKit behavior |
+| Paywall | Shell | Plan selection UI exists in a dedicated mobile page with preview-only purchase controls | No RevenueCat or StoreKit behavior |
 
 ## Flow Inventory
 
@@ -34,7 +34,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Rename thread | Real | Uses Codex thread name update |
 | Archive thread | Real | Uses Codex archive/unarchive |
 | Delete thread | Unavailable | UI intentionally omits permanent delete because the backend cannot support it |
-| Purchase / restore purchase | Not real | UI shells only |
+| Purchase / restore purchase | Preview only | UI shells only; no transaction or restore behavior is wired |
 
 ## Excluded Scope
 

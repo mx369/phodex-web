@@ -13,8 +13,8 @@ All screenshots in this file were captured from real browser renders through the
 | Onboarding Step 2 | Same session, continued past the install warning | `.artifacts/qa-36-onboarding-step2-email-only.png` |
 | Onboarding Step 3 | Same session, clicked through to the final setup step | `.artifacts/qa-37-onboarding-step3-email-only.png` |
 | Email OTP | Fresh unauthenticated session loaded at `/?flow=email-otp` | `.artifacts/qa-38-email-otp-email-only.png` |
-| Subscription Gate | Fresh unauthenticated session loaded at `/?flow=subscription-gate` | `.artifacts/qa-39-subscription-gate-email-only.png` |
-| Bootstrap Failure | Fresh unauthenticated session loaded at `/?flow=bootstrap-failure` | `.artifacts/qa-40-bootstrap-failure-email-only.png` |
+| Subscription Gate | Fresh unauthenticated session loaded at `/?flow=subscription-gate` after the preview-only purchase copy pass | `.artifacts/qa-57-subscription-preview-only.png` |
+| Bootstrap Failure | Fresh unauthenticated session loaded at `/?flow=bootstrap-failure` after the preview-only purchase copy pass | `.artifacts/qa-56-bootstrap-preview-only.png` |
 | Email OTP Requested | Same email session after requesting a code | `.artifacts/qa-41-email-otp-requested-email-only.png` |
 
 ## Authenticated Shell
@@ -22,11 +22,11 @@ All screenshots in this file were captured from real browser renders through the
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
 | Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
-| Turn Empty | Same authenticated session, tapped `Open chats`, then `New Chat` | `.artifacts/qa-43-turn-empty-email-only.png` |
+| Turn Empty | Same authenticated session, opened a clean chat after placeholder removal in the composer | `.artifacts/qa-58-turn-empty-no-placeholders.png` |
 | Sidebar Open | Same authenticated session, opened the drawer after the delete-UX cleanup | `.artifacts/qa-54-sidebar-no-delete.png` |
-| Settings | Authenticated session reloaded at `/?page=settings` after the shell refactor | `.artifacts/qa-48-settings-mobile-page.png` |
+| Settings | Authenticated session reloaded at `/?page=settings` after the Pro preview copy pass | `.artifacts/qa-59-settings-pro-preview.png` |
 | About | Authenticated session reloaded at `/?page=about` after the shell refactor | `.artifacts/qa-49-about-mobile-page.png` |
-| Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the shell refactor | `.artifacts/qa-50-paywall-mobile-page.png` |
+| Paywall Shell | Authenticated session reloaded at `/?page=paywall` after the preview-only purchase control pass | `.artifacts/qa-60-paywall-preview-only.png` |
 | Archived Chats | Authenticated session reloaded at `/?page=archived` after the delete-UX cleanup | `.artifacts/qa-55-archived-restore-only.png` |
 
 ## Notes
@@ -34,4 +34,5 @@ All screenshots in this file were captured from real browser renders through the
 - The unauthenticated capture set now reflects the current product scope: onboarding, subscription gate, bootstrap failure, and email OTP.
 - The authenticated capture set now reflects the full-page mobile shell and dedicated mobile pages for settings, about, paywall, and archived.
 - Sidebar and archived evidence now reflect the restore-only delete policy: no destructive delete affordance is shown.
+- Subscription and paywall evidence now reflect preview-only purchase controls, and turn-empty evidence reflects the composer without voice/attachment placeholders.
 - QR scanner, camera permission, scan error, and bridge-recovery pages are intentionally absent because those flows are excluded from the current product.

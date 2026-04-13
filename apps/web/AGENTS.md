@@ -20,7 +20,7 @@ Read this file before editing anything under `apps/web`.
 
 - The UI now uses a full-page mobile shell with dedicated mobile-page routes for settings/about/paywall/archived.
 - `Email OTP`, `new chat`, `send`, `stream`, `stop`, `queue`, `resume draft`, `rename`, and `archive` are wired.
-- `voice`, `purchase`, and richer turn/tool surfaces remain partial or shell-level.
+- Purchase remains preview-only, and richer turn/tool surfaces still remain partial.
 
 ## Required Reads By Task
 

@@ -137,10 +137,6 @@ const subscriptionGateFeatures = [
     subtitle: "Replies stream from the desktop session in real time",
   },
   {
-    title: "Voice mode",
-    subtitle: "Speech-to-text transcription for your messages",
-  },
-  {
     title: "Subagents",
     subtitle: "Delegate complex tasks to specialized sub-agents",
   },
@@ -154,7 +150,6 @@ const paywallFeatures = [
   "Fast mode",
   "Git from your phone",
   "Live relay sync",
-  "Voice mode with speech-to-text",
   "Subagents",
   "$skills, /commands & @file mentions",
   "Hosted relay included",
@@ -892,7 +887,7 @@ function readShellPageState(): ShellPageState | null {
                     <div class="root-auth-screen__hero-icon">!</div>
                     <span class="section-label section-label--light">Bootstrap Failure</span>
                     <h2>Couldn’t load subscription status</h2>
-                    <p>Remodex couldn’t confirm your Pro access yet. Check your connection, retry, or restore your App Store purchases.</p>
+                    <p>Remodex couldn’t confirm your Pro access yet. Check your connection, retry, or continue with email while purchases stay preview-only in this local build.</p>
                   </div>
 
                   <button class="primary-cta primary-cta--dark" @click="switchRootFlow('subscription-gate')">Retry</button>
@@ -917,7 +912,7 @@ function readShellPageState(): ShellPageState | null {
                     <img :src="remodexAppLogo" alt="" class="root-auth-screen__logo" />
                     <span class="section-label section-label--light">Subscription Gate</span>
                     <h2>Unlock the app to connect your iPhone to Codex running on your Mac.</h2>
-                    <p>Remodex is subscription-only. Unlock the app to connect your iPhone to Codex running on your Mac.</p>
+                    <p>Purchase and restore are preview-only in this local build. Continue with email to keep testing the relay flow.</p>
                   </div>
 
                   <div class="gate-plan-scroll">
@@ -947,7 +942,6 @@ function readShellPageState(): ShellPageState | null {
                   <button class="primary-cta primary-cta--dark" @click="switchRootFlow('email-otp')">Continue with Email</button>
                   <div class="root-auth-screen__links">
                     <button class="root-auth-screen__link" @click="switchRootFlow('email-otp')">Use Email OTP</button>
-                    <button class="root-auth-screen__link" @click="switchRootFlow('bootstrap-failure')">Restore Purchases</button>
                     <button class="root-auth-screen__link" @click="openExternal('https://example.com/privacy')">Privacy</button>
                     <button class="root-auth-screen__link" @click="openExternal('https://example.com/terms')">Terms</button>
                   </div>
@@ -1093,13 +1087,13 @@ function readShellPageState(): ShellPageState | null {
                           <span>Status</span>
                           <strong>{{ state.snapshot.connection.state === "connected" ? "Bridge connected" : "Awaiting bridge" }}</strong>
                         </div>
-                        <p class="settings-copy">Connect a ChatGPT account on iPhone to unlock voice and account-aware features.</p>
+                        <p class="settings-copy">Account-aware extras remain deferred in this local build.</p>
                       </section>
 
                       <section class="settings-card">
                         <span class="section-label">Remodex Pro</span>
-                        <p class="settings-copy">Open the Pro paywall to choose a monthly or yearly plan.</p>
-                        <button class="primary-cta primary-cta--compact" @click="openPanel('paywall')">Upgrade to Pro</button>
+                        <p class="settings-copy">Open the Pro preview. Purchase and restore remain disabled in this local build.</p>
+                        <button class="primary-cta primary-cta--compact" @click="openPanel('paywall')">Open Pro Preview</button>
                       </section>
 
                       <section class="settings-card">
@@ -1256,13 +1250,13 @@ function readShellPageState(): ShellPageState | null {
                           </button>
                         </div>
 
-                        <button class="primary-cta">Unlock Remodex Pro</button>
+                        <button class="primary-cta" disabled>Purchase Preview Only</button>
 
                         <div class="paywall-footer">
-                          <p class="settings-copy">Recurring Billing. Cancel anytime.</p>
+                          <p class="settings-copy">Purchase, restore, and manage are preview-only in this local build.</p>
                           <div class="paywall-footer__links">
-                            <button class="root-auth-screen__link">Restore Purchase</button>
-                            <button class="root-auth-screen__link">Manage</button>
+                            <button class="root-auth-screen__link" disabled>Restore Preview</button>
+                            <button class="root-auth-screen__link" disabled>Manage Preview</button>
                             <button class="root-auth-screen__link">Privacy</button>
                             <button class="root-auth-screen__link">Terms</button>
                           </div>
@@ -1578,7 +1572,6 @@ function readShellPageState(): ShellPageState | null {
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
-                            <button class="pill pill--button pill--icon">＋</button>
                             <select v-model="state.ui.selectedModel" class="phone-select">
                               <option v-for="model in MODELS" :key="model">{{ model }}</option>
                             </select>
@@ -1599,7 +1592,6 @@ function readShellPageState(): ShellPageState | null {
                           </div>
 
                           <div class="phone-composer__toolbar-right">
-                            <button class="composer-circle composer-circle--ghost" title="Voice shell placeholder">◉</button>
                             <button
                               v-if="currentThread?.state === 'running'"
                               class="composer-circle composer-circle--dark"

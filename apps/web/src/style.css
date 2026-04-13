@@ -1571,12 +1571,6 @@ button {
   border: 0;
 }
 
-.pill--icon {
-  width: 30px;
-  padding: 0;
-  justify-content: center;
-}
-
 .pill--active {
   background: var(--orange-soft);
   color: var(--orange);
@@ -1617,11 +1611,6 @@ button {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-}
-
-.composer-circle--ghost {
-  background: rgba(18, 18, 18, 0.05);
-  color: var(--muted-strong);
 }
 
 .composer-circle--dark {
@@ -2263,6 +2252,12 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.paywall-card button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .about-diagram {

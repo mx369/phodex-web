@@ -30,8 +30,7 @@ Implemented but incomplete:
 Not yet source-equal or still shell-level:
 
 - Pixel parity across screens.
-- Real subscription purchase or restore flows.
-- Voice and attachments.
+- Real subscription purchase or restore flows; current paywall/gate surfaces are preview-only.
 - Many upstream interaction details such as swipe actions, context menus, richer approval flows, and deeper tool/file surfaces.
 
 Explicitly excluded by current product direction:

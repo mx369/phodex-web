@@ -22,7 +22,7 @@ Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/p
 
 - UI is not pixel-perfect.
 - The full-page mobile shell is in place, but page-by-page parity is still incomplete.
-- QR scanning, voice, purchases, restore purchase, and several source-app interactions are still shells or simulations.
+- QR scanning is excluded, purchases stay preview-only, and several source-app interactions are still incomplete.
 - Message detail surfaces such as richer tool/run/file cards are not fully mapped from the upstream app yet.
 
 ## Task Router

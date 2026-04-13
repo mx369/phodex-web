@@ -42,7 +42,7 @@ Why:
 - Several surfaces currently imply richer implementation than the backend actually provides.
 
 Main work:
-- Audit `runEvents`, `fileChanges`, `codeBlock`, `subagentCount`, `unreadCount`, voice button, and attachment button behavior.
+- Audit `runEvents`, `fileChanges`, `codeBlock`, `subagentCount`, and `unreadCount` behavior.
 - Either implement the backing behavior or visibly demote/remove the placeholder.
 - Ensure the UI does not over-claim capabilities.
 
@@ -74,27 +74,7 @@ Likely files:
 Done when:
 - Thread surfaces show real structured execution data where Codex provides it.
 
-### P2. Decide what to do with purchases, voice, and attachments
-
-Status: open
-
-Why:
-- These areas are currently shell-level or placeholder-level and need an explicit product decision.
-
-Questions to resolve:
-- Keep as shells for later?
-- Remove until there is real backing behavior?
-- Implement a narrower first version?
-
-Likely files:
-- `apps/web/src/App.vue`
-- `docs/ai/20-pages-and-flows.md`
-- `docs/ai/10-current-state.md`
-
-Done when:
-- Each area is either implemented, intentionally removed, or explicitly deferred with no misleading UI.
-
 ## Blockers And Caveats
 
-- Subscription purchase and restore are still shell-level; do not mark them complete without real backing behavior.
+- Subscription purchase and restore are intentionally preview-only; do not mark them complete without real backing behavior.
 - Historical source-audit docs still contain upstream QR/E2EE notes. Treat them as source reference, not current product target.
