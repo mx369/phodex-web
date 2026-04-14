@@ -94,6 +94,10 @@ export interface QueuedDraft {
   id: string;
   text: string;
   createdAt: string;
+  model?: string;
+  planArmed?: boolean;
+  fastMode?: boolean;
+  accessMode?: AccessMode;
 }
 
 export interface ThreadRecord {

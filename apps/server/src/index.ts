@@ -156,6 +156,8 @@ let codexConnectionState: RelayConnection["state"] = "connecting";
 let codexLastSyncAt: string | null = null;
 let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
+let codexSupportsServiceTier = true;
+let serviceTierUnsupportedToastSent = false;
 
 const tls = ensureLocalTls();
 
@@ -529,6 +531,10 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
         id: randomUUID(),
         text,
         createdAt: new Date().toISOString(),
+        model: event.model,
+        planArmed: event.planArmed,
+        fastMode: event.fastMode,
+        accessMode: event.accessMode,
       });
       thread.queuedDrafts = local.queuedDrafts;
       thread.state = "running";
@@ -549,13 +555,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
     broadcastThreadToAllUsers(thread.id);
     broadcastSnapshotsToAllUsers();
 
-    const turnResponse = await codexRequest("turn/start", {
-      threadId: thread.id,
-      input: [{ type: "text", text }],
-      model: normalizeModel(event.model),
-      approvalPolicy: mapApprovalPolicy(event.accessMode),
-      sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
-    });
+    const turnResponse = await startTurn(thread, text, event, user.profile.id);
     const turnId = readString(turnResponse?.turn?.id);
     if (turnId) {
       activeTurns.set(thread.id, {
@@ -599,11 +599,43 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
     type: "message:send",
     threadId,
     text: draft.text,
-    model: "GPT-5.4",
-    planArmed: false,
-    fastMode: false,
-    accessMode: "full-access",
+    model: draft.model ?? "GPT-5.4",
+    planArmed: draft.planArmed ?? false,
+    fastMode: draft.fastMode ?? false,
+    accessMode: draft.accessMode ?? "full-access",
   });
+}
+
+async function startTurn(
+  thread: ThreadRecord,
+  text: string,
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  userId: string
+) {
+  const baseParams = {
+    threadId: thread.id,
+    input: [{ type: "text", text }],
+    model: normalizeModel(event.model),
+    approvalPolicy: mapApprovalPolicy(event.accessMode),
+    sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
+  };
+
+  try {
+    return await codexRequest("turn/start", {
+      ...baseParams,
+      ...(event.fastMode && codexSupportsServiceTier ? { serviceTier: "fast" as const } : {}),
+    });
+  } catch (error) {
+    if (event.fastMode && codexSupportsServiceTier && shouldRetryTurnStartWithoutServiceTier(error)) {
+      codexSupportsServiceTier = false;
+      if (!serviceTierUnsupportedToastSent) {
+        serviceTierUnsupportedToastSent = true;
+        sendToast(userId, "info", "Fast mode is unavailable on this Mac bridge yet. This run was sent normally.");
+      }
+      return await codexRequest("turn/start", baseParams);
+    }
+    throw error;
+  }
 }
 
 function handleDraftRemove(userId: string, threadId: string, draftId: string) {
@@ -684,6 +716,8 @@ function connectCodexSocket() {
   codexSocket = socket;
 
   socket.addEventListener("open", () => {
+    codexSupportsServiceTier = true;
+    serviceTierUnsupportedToastSent = false;
     void codexRequest(
       "initialize",
       {
@@ -2235,6 +2269,22 @@ function normalizeModel(model: string) {
     return "o4-mini";
   }
   return normalized || "gpt-5.4";
+}
+
+function shouldRetryTurnStartWithoutServiceTier(error: unknown) {
+  const code = (error as Error & { code?: unknown })?.code;
+  if (code !== -32600 && code !== -32602) {
+    return false;
+  }
+
+  const message = readErrorMessage(error).toLowerCase();
+  return message.includes("servicetier")
+    || message.includes("service tier")
+    || message.includes("unknown field")
+    || message.includes("unexpected field")
+    || message.includes("unrecognized field")
+    || message.includes("invalid param")
+    || message.includes("invalid params");
 }
 
 function mapApprovalPolicy(accessMode: "read-only" | "on-request" | "full-access") {

@@ -1166,6 +1166,10 @@ function modelOptionCopy(model: string) {
   }
 }
 
+function speedOptionCopy(fastMode: boolean) {
+  return fastMode ? "Lower latency using Codex Fast Mode." : "Balanced latency for standard turns.";
+}
+
 function closeModelPicker() {
   modelPickerOpen.value = false;
 }
@@ -1179,6 +1183,11 @@ function toggleModelPicker() {
 
 function selectModel(model: string) {
   state.ui.selectedModel = model;
+  closeModelPicker();
+}
+
+function selectFastMode(fastMode: boolean) {
+  state.ui.fastMode = fastMode;
   closeModelPicker();
 }
 
@@ -2696,26 +2705,30 @@ function handleScrollToLatest() {
                               <button
                                 class="model-picker__trigger"
                                 type="button"
-                                aria-haspopup="listbox"
+                                aria-haspopup="menu"
                                 :aria-expanded="modelPickerOpen"
-                                aria-label="Select model"
+                                aria-label="Select model and speed"
                                 :disabled="isCurrentThreadPendingCreate"
                                 @click="toggleModelPicker"
                               >
+                                <span v-if="state.ui.fastMode" class="model-picker__tier" aria-hidden="true">
+                                  <AppIcon name="bolt" />
+                                </span>
                                 <strong class="model-picker__trigger-label">{{ state.ui.selectedModel }}</strong>
                                 <AppIcon name="chevron-down" />
                               </button>
 
                               <transition name="composer-picker">
-                                <div v-if="modelPickerOpen" class="model-picker__menu" role="listbox" aria-label="Model options">
+                                <div v-if="modelPickerOpen" class="model-picker__menu" role="menu" aria-label="Model and speed options">
+                                  <span class="model-picker__section-label">Model</span>
                                   <button
                                     v-for="model in MODELS"
                                     :key="model"
                                     class="model-picker__option"
                                     :class="{ 'model-picker__option--active': state.ui.selectedModel === model }"
                                     type="button"
-                                    role="option"
-                                    :aria-selected="state.ui.selectedModel === model"
+                                    role="menuitemradio"
+                                    :aria-checked="state.ui.selectedModel === model"
                                     @click="selectModel(model)"
                                   >
                                     <span class="model-picker__copy">
@@ -2725,6 +2738,51 @@ function handleScrollToLatest() {
                                     <span
                                       class="model-picker__status"
                                       :class="{ 'model-picker__status--visible': state.ui.selectedModel === model }"
+                                      aria-hidden="true"
+                                    >
+                                      <AppIcon name="check" />
+                                    </span>
+                                  </button>
+
+                                  <div class="model-picker__divider" aria-hidden="true"></div>
+                                  <span class="model-picker__section-label">Speed</span>
+
+                                  <button
+                                    class="model-picker__option"
+                                    :class="{ 'model-picker__option--active': !state.ui.fastMode }"
+                                    type="button"
+                                    role="menuitemradio"
+                                    :aria-checked="!state.ui.fastMode"
+                                    @click="selectFastMode(false)"
+                                  >
+                                    <span class="model-picker__copy">
+                                      <strong>Normal</strong>
+                                      <span>{{ speedOptionCopy(false) }}</span>
+                                    </span>
+                                    <span
+                                      class="model-picker__status"
+                                      :class="{ 'model-picker__status--visible': !state.ui.fastMode }"
+                                      aria-hidden="true"
+                                    >
+                                      <AppIcon name="check" />
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    class="model-picker__option"
+                                    :class="{ 'model-picker__option--active': state.ui.fastMode }"
+                                    type="button"
+                                    role="menuitemradio"
+                                    :aria-checked="state.ui.fastMode"
+                                    @click="selectFastMode(true)"
+                                  >
+                                    <span class="model-picker__copy">
+                                      <strong>Fast</strong>
+                                      <span>{{ speedOptionCopy(true) }}</span>
+                                    </span>
+                                    <span
+                                      class="model-picker__status"
+                                      :class="{ 'model-picker__status--visible': state.ui.fastMode }"
                                       aria-hidden="true"
                                     >
                                       <AppIcon name="check" />

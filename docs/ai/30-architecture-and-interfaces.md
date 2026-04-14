@@ -87,7 +87,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Codex `thread/read` on this workstation's current app-server build may return only user/assistant history for completed turns even when the live run emitted tool activity. Phodex now backfills `apply_patch`-driven file summaries from the session JSONL and reconciles the selected thread's current git diff as a compatibility fallback.
 - Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
 - Pinned plans and queued drafts now surface above the composer, but structured-input replacement and deeper toolbar/sheet behaviors are still client-side parity gaps.
-- `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.
+- `fastMode` now maps to `turn/start.serviceTier="fast"` when the local Codex bridge accepts that field; if the bridge rejects `serviceTier` with `invalid params`, the server retries without it and remembers the limitation for the current bridge session.
+- Queued drafts now preserve their send-time runtime metadata (`model`, `planArmed`, `fastMode`, `accessMode`) so a resumed draft replays the same run configuration instead of silently falling back to defaults.
 - `on-request` sandbox writable roots are now derived from each thread's actual repo/worktree cwd instead of always falling back to the default app root.
 
 ## Invariants

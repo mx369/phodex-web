@@ -117,6 +117,7 @@ Phodex rule:
 - In the composer action cluster, send and stop should share the same circular `30-32px` outer geometry; state changes should come from fill, border, and elevation instead of switching the container shape.
 - The collapsed mobile composer should default to a compact `2`-row writing height unless a richer structured-input state explicitly needs more space.
 - In the chat composer, the send control should visually downshift when the textarea is empty; the strong forward-action accent belongs only to a genuinely sendable state.
+- Runtime speed selection should live inside the existing model/runtime picker; when `Fast` is active, signal it with a compact bolt badge on that trigger instead of adding a disconnected extra button.
 
 ### Icons
 
