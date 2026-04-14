@@ -495,6 +495,13 @@ const isCurrentThreadPendingCreate = computed(() =>
 );
 const liveThreads = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived"));
 const floatingToasts = computed(() => state.ui.toasts.filter((toast) => toast.tone === "error"));
+const currentPendingRunFeedback = computed(() => {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending || pending.threadId !== currentThread.value?.id) {
+    return null;
+  }
+  return pending;
+});
 const threadGroups = computed(() => {
   const groups = new Map<string, ThreadRecord[]>();
   const search = state.ui.search.trim().toLowerCase();
@@ -734,6 +741,31 @@ const turnEmptyCopy = computed(() =>
     ? "The relay is asking Codex to start a fresh thread. The composer will unlock as soon as it lands."
     : "Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands."
 );
+const pendingRunStatus = computed(() => {
+  const pending = currentPendingRunFeedback.value;
+  if (!pending || !currentThread.value) {
+    return null;
+  }
+  if (currentThread.value.state !== "running") {
+    return {
+      title: "Sending to your Mac",
+      detail: "The relay accepted the run and is waiting for the desktop session to acknowledge it.",
+      label: "Syncing",
+    };
+  }
+  return pending.promptAcknowledged
+    ? {
+        title: "Waiting for first output",
+        detail: "Your prompt landed. Codex has not emitted the first command, tool call, or reply yet.",
+        label: "Running",
+      }
+    : {
+        title: "Sending to your Mac",
+        detail: "The relay accepted the run, but the thread has not echoed your prompt into the timeline yet.",
+        label: "Running",
+      };
+});
+const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
 const showScrollToLatestButton = computed(() => Boolean(currentThread.value?.messages.length && !isScrolledToBottom.value));
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
@@ -2388,7 +2420,7 @@ function handleScrollToLatest() {
                     @scroll.passive="handleConversationScroll"
                   >
                     <div class="phone-conversation__inner">
-                      <template v-if="currentThread && currentThread.messages.length">
+                      <template v-if="currentThread && showConversationContent">
                         <article
                           v-for="message in currentThread.messages"
                           :key="message.id"
@@ -2469,6 +2501,52 @@ function handleScrollToLatest() {
                                 <strong>{{ change.path }}</strong>
                                 <em>+{{ change.additions }} -{{ change.deletions }}</em>
                               </div>
+                            </div>
+                          </div>
+                        </article>
+
+                        <article
+                          v-if="currentPendingRunFeedback && !currentPendingRunFeedback.promptAcknowledged"
+                          class="phone-message phone-message--user phone-message--pending"
+                        >
+                          <div class="phone-message__meta">
+                            <span>You</span>
+                            <span>Pending</span>
+                            <span>chat</span>
+                          </div>
+
+                          <div class="phone-message__card">
+                            <div class="phone-message__copy">
+                              <p
+                                v-for="paragraph in splitParagraphs(currentPendingRunFeedback.prompt)"
+                                :key="`pending-run-${paragraph}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                            </div>
+                          </div>
+                        </article>
+
+                        <article v-if="pendingRunStatus" class="phone-message phone-message--system phone-message--pending">
+                          <div class="phone-message__meta">
+                            <span>System</span>
+                            <span>Live</span>
+                            <span>activity</span>
+                          </div>
+
+                          <div class="phone-message__card">
+                            <div class="message-card-stack">
+                              <article class="message-card message-card--amber message-card--pending-run">
+                                <div class="message-card__head">
+                                  <div>
+                                    <span class="section-label">Run Starting</span>
+                                    <strong>{{ pendingRunStatus.title }}</strong>
+                                  </div>
+                                  <span class="message-card__status">{{ pendingRunStatus.label }}</span>
+                                </div>
+
+                                <p class="message-card__detail">{{ pendingRunStatus.detail }}</p>
+                              </article>
                             </div>
                           </div>
                         </article>

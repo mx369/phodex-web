@@ -47,6 +47,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - When Codex `thread/read` omits completed tool items, the server now falls back to the thread session JSONL plus the live git worktree state to restore diff chips and file-change summaries for the selected thread.
 - Completion banner payloads are still synthesized after run completion, but the web shell suppresses normal success banners and only surfaces failures through floating error toasts.
 - The web client now inserts a local pending-thread placeholder as soon as `thread:create` is sent, then removes it when the server snapshot or thread update for the real thread arrives.
+- The web client now also inserts a local pending-run placeholder immediately after `message:send`, so the submitted prompt stays visible until the server echoes the first live item for that turn.
 - `thread:create` now resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that default.
 - Local chat creation now `mkdir -p`s the requested cwd when it does not exist, so the drawer can create a fresh project folder before starting Codex there.
 - Worktree chats still resolve the selected Git project root first, then run `git worktree add` under `~/.codex/worktrees/<repo>/...` before starting the Codex thread from the new worktree path.

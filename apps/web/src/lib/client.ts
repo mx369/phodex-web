@@ -28,6 +28,12 @@ type PendingThreadCreate = {
   previousSelectedThreadId: string | null;
   timeoutId: number;
 };
+type PendingRunFeedback = {
+  threadId: string;
+  prompt: string;
+  startedAt: string;
+  promptAcknowledged: boolean;
+};
 
 const SESSION_STORAGE_KEY = "phodex.session";
 const PENDING_THREAD_PREFIX = "pending-thread:";
@@ -65,6 +71,7 @@ export const state = reactive({
     devCode: null as string | null,
     authStatus: "",
     toasts: [] as UiToast[],
+    pendingRunFeedback: null as PendingRunFeedback | null,
   },
 });
 
@@ -190,6 +197,7 @@ export function createAppClient() {
     state.ui.composerText = "";
     state.ui.devCode = null;
     state.ui.settingsOpen = false;
+    state.ui.pendingRunFeedback = null;
     pushToast("info", "Signed out.");
   }
 
@@ -371,6 +379,7 @@ function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
     case "snapshot":
       applySnapshot(event.snapshot);
+      reconcilePendingRunFeedback();
       resolvePendingThreadCreate(event.snapshot.selectedThreadId);
       if (pendingSendAfterThreadCreate && event.snapshot.selectedThreadId) {
         const thread = event.snapshot.threads.find((entry) => entry.id === event.snapshot.selectedThreadId);
@@ -385,6 +394,7 @@ function handleServerEvent(event: ServerEvent) {
         return;
       }
       upsertThread(event.thread);
+      reconcilePendingRunFeedback(event.thread.id);
       state.snapshot.selectedThreadId = event.selectedThreadId;
       resolvePendingThreadCreate(event.selectedThreadId);
       if (pendingSendAfterThreadCreate && event.selectedThreadId === event.thread.id && event.thread.messages.length === 0) {
@@ -401,6 +411,7 @@ function handleServerEvent(event: ServerEvent) {
         thread.messages.push(event.message);
         thread.lastActivityAt = event.message.createdAt;
       }
+      syncPendingRunFeedbackFromMessage(event.threadId, event.message.role, event.message.text);
       break;
     }
     case "message:delta": {
@@ -410,6 +421,7 @@ function handleServerEvent(event: ServerEvent) {
         message.text += event.delta;
         message.isStreaming = true;
       }
+      clearPendingRunFeedback(event.threadId);
       break;
     }
     case "message:finished": {
@@ -418,6 +430,7 @@ function handleServerEvent(event: ServerEvent) {
       if (message) {
         message.isStreaming = false;
       }
+      clearPendingRunFeedback(event.threadId);
       break;
     }
     case "banner":
@@ -557,6 +570,58 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   }
 }
 
+function beginPendingRunFeedback(threadId: string, prompt: string) {
+  state.ui.pendingRunFeedback = {
+    threadId,
+    prompt,
+    startedAt: new Date().toISOString(),
+    promptAcknowledged: false,
+  };
+}
+
+function clearPendingRunFeedback(threadId?: string) {
+  if (!state.ui.pendingRunFeedback) {
+    return;
+  }
+  if (!threadId || state.ui.pendingRunFeedback.threadId === threadId) {
+    state.ui.pendingRunFeedback = null;
+  }
+}
+
+function reconcilePendingRunFeedback(threadId?: string) {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending || !state.snapshot) {
+    return;
+  }
+  if (threadId && pending.threadId !== threadId) {
+    return;
+  }
+  const thread = state.snapshot.threads.find((entry) => entry.id === pending.threadId);
+  if (!thread || thread.state !== "running") {
+    state.ui.pendingRunFeedback = null;
+  }
+}
+
+function syncPendingRunFeedbackFromMessage(threadId: string, role: string, text: string) {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending || pending.threadId !== threadId) {
+    return;
+  }
+
+  if (role === "user" && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pending.prompt)) {
+    pending.promptAcknowledged = true;
+    return;
+  }
+
+  if (role !== "user") {
+    clearPendingRunFeedback(threadId);
+  }
+}
+
+function normalizePendingRunPrompt(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 function findThread(threadId: string) {
   return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
 }
@@ -573,7 +638,9 @@ function flushComposer(threadId: string) {
     return false;
   }
 
-  send({
+  const thread = findThread(threadId);
+  const willQueueDraft = thread?.state === "running";
+  const sent = send({
     type: "message:send",
     threadId,
     text,
@@ -582,6 +649,12 @@ function flushComposer(threadId: string) {
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
   });
+  if (!sent) {
+    return false;
+  }
+  if (!willQueueDraft) {
+    beginPendingRunFeedback(threadId, text);
+  }
   state.ui.composerText = "";
   return true;
 }

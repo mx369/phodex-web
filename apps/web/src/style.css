@@ -1390,6 +1390,11 @@ button {
   box-shadow: 0 14px 30px rgba(18, 18, 18, 0.18);
 }
 
+.phone-message--pending.phone-message--user .phone-message__card {
+  background: linear-gradient(180deg, rgba(30, 30, 30, 0.96) 0%, rgba(18, 18, 18, 0.94) 100%);
+  box-shadow: 0 12px 26px rgba(18, 18, 18, 0.14);
+}
+
 .message-emphasis {
   margin: 0 0 10px;
   color: var(--orange);
@@ -1468,6 +1473,15 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.message-card--pending-run .message-card__status {
+  background: rgba(239, 142, 85, 0.14);
+  color: #b55f1f;
+}
+
+.message-card--pending-run .message-card__detail {
+  margin-top: 2px;
 }
 
 .message-card__detail,
