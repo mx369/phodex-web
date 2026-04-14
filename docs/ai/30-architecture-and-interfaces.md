@@ -44,6 +44,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications now map richer Codex execution items into structured thread cards.
+- When Codex `thread/read` omits completed tool items, the server now falls back to the thread session JSONL plus the live git worktree state to restore diff chips and file-change summaries for the selected thread.
 - Completion banners are synthesized after run completion.
 - The web client now inserts a local pending-thread placeholder as soon as `thread:create` is sent, then removes it when the server snapshot or thread update for the real thread arrives.
 - `thread:create` now resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that default.
@@ -82,6 +83,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
 - The current message mapper now covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the resulting UI is still a simplified card system.
+- Codex `thread/read` on this workstation's current app-server build may return only user/assistant history for completed turns even when the live run emitted tool activity. Phodex now backfills `apply_patch`-driven file summaries from the session JSONL and reconciles the selected thread's current git diff as a compatibility fallback.
 - Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
 - Pinned plans and queued drafts now surface above the composer, but structured-input replacement and deeper toolbar/sheet behaviors are still client-side parity gaps.
 - `fastMode` and `planArmed` remain inert compatibility fields on the client/server boundary and should not drive visible UI until real backing behavior exists.

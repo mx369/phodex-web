@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -78,6 +78,15 @@ type ActiveTurnState = {
 type ThreadListResponse = {
   data: any[];
   nextCursor: string | null;
+};
+
+type SessionTurnHistoryFallback = {
+  fileChanges: FileChangeSummary[];
+};
+
+type SessionHistoryFallback = {
+  turns: Map<string, SessionTurnHistoryFallback>;
+  totalDiff: DiffStats;
 };
 
 type OtpMailConfig = {
@@ -1056,9 +1065,20 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
   const threadId = readString(rawThread?.id) || randomUUID();
   const existing = threadCache.get(threadId);
   const local = ensureThreadLocal(threadId);
+  const repoLabel = readString(rawThread?.cwd) || readString(rawThread?.path) || existing?.repoLabel || DEFAULT_THREAD_CWD;
+  const sessionFallback = includeTurns
+    ? readSessionHistoryFallback(readString(rawThread?.path), repoLabel)
+    : null;
+  const gitDiff = includeTurns ? readThreadDiffFromGit(repoLabel) : null;
+  const fallbackDiff = includeTurns
+    ? gitDiff ?? (hasDiffStats(sessionFallback?.totalDiff) ? sessionFallback!.totalDiff : local.diff)
+    : local.diff;
+  if (includeTurns) {
+    local.diff = fallbackDiff;
+  }
   const mappedMessages = includeTurns && Array.isArray(rawThread?.turns)
     ? dedupeMessages([
-        ...mapTurnsToMessages(rawThread.turns),
+        ...mapTurnsToMessages(rawThread.turns, sessionFallback?.turns),
         ...(activeTurns.has(threadId) ? (existing?.messages.filter((message) => message.isStreaming) ?? []) : []),
       ])
     : existing?.messages ?? [];
@@ -1068,7 +1088,7 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
     title: local.customTitle || deriveThreadTitle(rawThread),
     preview: readString(rawThread?.preview) || existing?.preview || "Start a new remote coding pass.",
     projectLabel: deriveProjectLabel(rawThread),
-    repoLabel: readString(rawThread?.cwd) || readString(rawThread?.path) || existing?.repoLabel || DEFAULT_THREAD_CWD,
+    repoLabel,
     branch: readString(rawThread?.gitInfo?.branch) || existing?.branch || "main",
     state: deriveThreadState(readString(rawThread?.status?.type), threadId, archived),
     lastActivityAt: toIsoFromEpoch(rawThread?.updatedAt) ?? toIsoFromEpoch(rawThread?.createdAt) ?? existing?.lastActivityAt ?? new Date().toISOString(),
@@ -1076,23 +1096,46 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
     subagentCount: 0,
     isWorktree: isWorktreeThread(rawThread),
     isForked: Boolean(rawThread?.forkedFromId),
-    diff: local.diff,
+    diff: fallbackDiff,
     queuedDrafts: local.queuedDrafts,
     messages: mappedMessages,
   } satisfies ThreadRecord;
 }
 
-function mapTurnsToMessages(turns: any[]) {
+function mapTurnsToMessages(turns: any[], fallbackTurns = new Map<string, SessionTurnHistoryFallback>()) {
   const messages: ThreadMessage[] = [];
   for (const turn of turns) {
     const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
     const turnMode = deriveTurnModeFromItems(Array.isArray(turn?.items) ? turn.items : []);
+    const turnMessages: ThreadMessage[] = [];
     for (const item of Array.isArray(turn?.items) ? turn.items : []) {
       const message = mapLiveItemToMessage(item, createdAt, "history", turnMode);
       if (message) {
-        messages.push(message);
+        turnMessages.push(message);
       }
     }
+    const turnId = readString(turn?.id);
+    const fallback = turnId ? fallbackTurns.get(turnId) : null;
+    if (fallback?.fileChanges.length && !turnMessages.some((message) => message.fileChanges?.length)) {
+      const changeSummary = summarizeFileChanges(fallback.fileChanges);
+      turnMessages.push({
+        id: turnId ? `${turnId}-session-file-change` : randomUUID(),
+        role: "system",
+        kind: "status",
+        text: "",
+        createdAt: toIsoFromEpoch(turn?.completedAt) ?? createdAt,
+        cards: [
+          {
+            type: "status",
+            title: changeSummary.title,
+            detail: changeSummary.detail,
+            tone: "blue",
+          },
+        ],
+        fileChanges: fallback.fileChanges,
+      } satisfies ThreadMessage);
+    }
+    messages.push(...turnMessages);
   }
   return messages;
 }
@@ -1564,6 +1607,240 @@ function gitSpawnSync(args: string[], cwd: string) {
     ok: true as const,
     stdout: (result.stdout || "").trim(),
   };
+}
+
+function readSessionHistoryFallback(sessionPath: string, cwd: string): SessionHistoryFallback | null {
+  if (!sessionPath || !sessionPath.endsWith(".jsonl") || !existsSync(sessionPath)) {
+    return null;
+  }
+
+  try {
+    const turns = new Map<string, SessionTurnHistoryFallback>();
+    let activeTurnId = "";
+    for (const line of readFileSync(sessionPath, "utf8").split("\n")) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      let entry: any;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (entry?.type === "event_msg") {
+        const eventType = readString(entry?.payload?.type);
+        if (eventType === "task_started") {
+          activeTurnId = readString(entry?.payload?.turn_id);
+          if (activeTurnId && !turns.has(activeTurnId)) {
+            turns.set(activeTurnId, { fileChanges: [] });
+          }
+          continue;
+        }
+
+        if (eventType === "task_complete" && readString(entry?.payload?.turn_id) === activeTurnId) {
+          activeTurnId = "";
+        }
+        continue;
+      }
+
+      if (!activeTurnId || entry?.type !== "response_item") {
+        continue;
+      }
+
+      const payload = entry?.payload;
+      if (readString(payload?.type) !== "custom_tool_call" || readString(payload?.name) !== "apply_patch") {
+        continue;
+      }
+
+      const fallback = turns.get(activeTurnId) ?? { fileChanges: [] };
+      fallback.fileChanges = mergeFileChangeSummaries(
+        fallback.fileChanges,
+        parseApplyPatchFileChanges(readString(payload?.input), cwd)
+      );
+      turns.set(activeTurnId, fallback);
+    }
+
+    const allFileChanges = [...turns.values()].flatMap((entry) => entry.fileChanges);
+    return {
+      turns,
+      totalDiff: summarizeDiffStats(allFileChanges),
+    } satisfies SessionHistoryFallback;
+  } catch {
+    return null;
+  }
+}
+
+function readThreadDiffFromGit(cwd: string): DiffStats | null {
+  const existingDir = cwd ? findNearestExistingDirectory(cwd) : null;
+  if (!existingDir) {
+    return null;
+  }
+
+  const insideRepo = gitSpawnSync(["rev-parse", "--is-inside-work-tree"], existingDir);
+  if (!insideRepo.ok || insideRepo.stdout !== "true") {
+    return null;
+  }
+
+  const diffResult = gitSpawnSync(["diff", "--numstat", "--find-renames", "--no-ext-diff", "HEAD"], existingDir);
+  if (!diffResult.ok) {
+    return null;
+  }
+
+  const diff = diffResult.stdout.split("\n").reduce(
+    (stats, line) => {
+      const [additions, deletions] = line.split("\t");
+      if (/^\d+$/.test(additions || "")) {
+        stats.additions += Number(additions);
+      }
+      if (/^\d+$/.test(deletions || "")) {
+        stats.deletions += Number(deletions);
+      }
+      return stats;
+    },
+    { additions: 0, deletions: 0 } satisfies DiffStats
+  );
+
+  const untrackedResult = gitSpawnSync(["ls-files", "--others", "--exclude-standard"], existingDir);
+  if (untrackedResult.ok) {
+    for (const relativePath of untrackedResult.stdout.split("\n").filter(Boolean)) {
+      diff.additions += countReadableFileLines(resolve(existingDir, relativePath));
+    }
+  }
+
+  return diff;
+}
+
+function parseApplyPatchFileChanges(patch: string, cwd: string) {
+  const fileChanges: FileChangeSummary[] = [];
+  let currentChange: FileChangeSummary | null = null;
+
+  const pushCurrentChange = () => {
+    if (currentChange) {
+      fileChanges.push(currentChange);
+      currentChange = null;
+    }
+  };
+
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("*** Update File: ")) {
+      pushCurrentChange();
+      currentChange = {
+        action: "Edited",
+        path: normalizePatchDisplayPath(line.slice("*** Update File: ".length), cwd),
+        additions: 0,
+        deletions: 0,
+      };
+      continue;
+    }
+
+    if (line.startsWith("*** Add File: ")) {
+      pushCurrentChange();
+      currentChange = {
+        action: "Created",
+        path: normalizePatchDisplayPath(line.slice("*** Add File: ".length), cwd),
+        additions: 0,
+        deletions: 0,
+      };
+      continue;
+    }
+
+    if (line.startsWith("*** Delete File: ")) {
+      pushCurrentChange();
+      currentChange = {
+        action: "Deleted",
+        path: normalizePatchDisplayPath(line.slice("*** Delete File: ".length), cwd),
+        additions: 0,
+        deletions: 0,
+      };
+      continue;
+    }
+
+    if (line.startsWith("*** Move to: ") && currentChange) {
+      currentChange = {
+        ...currentChange,
+        action: "Moved",
+        path: `${currentChange.path} -> ${normalizePatchDisplayPath(line.slice("*** Move to: ".length), cwd)}`,
+      };
+      continue;
+    }
+
+    if (!currentChange || !line) {
+      continue;
+    }
+
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      currentChange.additions += 1;
+      continue;
+    }
+
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      currentChange.deletions += 1;
+    }
+  }
+
+  pushCurrentChange();
+  return mergeFileChangeSummaries([], fileChanges);
+}
+
+function normalizePatchDisplayPath(rawPath: string, cwd: string) {
+  const trimmed = rawPath.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const normalizedCwd = cwd ? normalizeComparablePath(cwd) : "";
+  const absolutePath = isAbsolute(trimmed)
+    ? normalizeComparablePath(trimmed)
+    : normalizeComparablePath(resolve(cwd || DEFAULT_THREAD_CWD, trimmed));
+  const relativePath = normalizedCwd ? relative(normalizedCwd, absolutePath) : trimmed;
+  return relativePath && !relativePath.startsWith("..") ? relativePath || basename(absolutePath) : trimmed;
+}
+
+function mergeFileChangeSummaries(existing: FileChangeSummary[], incoming: FileChangeSummary[]) {
+  const merged = new Map<string, FileChangeSummary>();
+  for (const change of [...existing, ...incoming]) {
+    const key = `${change.action}:${change.path}`;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...change });
+      continue;
+    }
+    current.additions += change.additions;
+    current.deletions += change.deletions;
+  }
+  return [...merged.values()];
+}
+
+function summarizeDiffStats(fileChanges: FileChangeSummary[]) {
+  return fileChanges.reduce(
+    (stats, change) => {
+      stats.additions += change.additions;
+      stats.deletions += change.deletions;
+      return stats;
+    },
+    { additions: 0, deletions: 0 } satisfies DiffStats
+  );
+}
+
+function hasDiffStats(diff: DiffStats | null | undefined) {
+  return Boolean(diff && (diff.additions > 0 || diff.deletions > 0));
+}
+
+function countReadableFileLines(filePath: string) {
+  try {
+    return readFileSync(filePath, "utf8").split("\n").length;
+  } catch {
+    return 0;
+  }
+}
+
+function normalizeComparablePath(filePath: string) {
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return resolve(filePath);
+  }
 }
 
 function dedupeMessages(messages: ThreadMessage[]) {
