@@ -11,6 +11,9 @@
   -moz-osx-font-smoothing: grayscale;
   --font-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --font-size-display-xl: 28px;
+  --font-size-display-lg: 24px;
+  --font-size-title: 18px;
   --font-size-body: 14px;
   --font-size-body-strong: 15px;
   --font-size-support: 11px;
@@ -430,15 +433,15 @@ button {
 
 .app-dialog-card h3 {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.05;
+  font-size: var(--font-size-title);
+  line-height: 1.1;
   letter-spacing: -0.04em;
 }
 
 .app-dialog-card p {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 13px;
+  font-size: var(--font-size-label);
   line-height: 1.55;
 }
 
@@ -492,7 +495,7 @@ button {
 
 .thread-create-sheet__targets-head span:last-child {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-support);
   font-weight: 600;
 }
 
@@ -503,7 +506,7 @@ button {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 13px;
+  padding: 11px 12px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2);
   background: var(--surface-subtle);
@@ -521,7 +524,7 @@ button {
 .thread-create-sheet__mode strong,
 .thread-create-sheet__target strong {
   display: block;
-  font-size: var(--font-size-body-strong);
+  font-size: var(--font-size-body);
   line-height: 1.33;
 }
 
@@ -529,7 +532,7 @@ button {
 .thread-create-sheet__target p,
 .thread-create-sheet__target span {
   color: var(--muted);
-  font-size: var(--font-size-label);
+  font-size: var(--font-size-support);
   line-height: 1.45;
 }
 
@@ -562,8 +565,8 @@ button {
 
 .thread-create-sheet__target-icon {
   display: inline-grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border-radius: var(--radius-1);
   background: var(--surface-raised-strong);
@@ -593,7 +596,7 @@ button {
 .thread-create-sheet__preview strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: var(--font-size-label);
   line-height: 1.4;
 }
 
@@ -1013,7 +1016,7 @@ button {
 
 .auth-mobile__sheet-head h2 {
   margin: 8px 0 10px;
-  font-size: 28px;
+  font-size: var(--font-size-display-lg);
   line-height: 1.02;
   letter-spacing: -0.05em;
 }
@@ -1022,7 +1025,7 @@ button {
 .auth-mobile__status {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -1670,25 +1673,25 @@ button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
-  gap: 12px;
-  width: min(100%, 388px);
+  gap: 10px;
+  width: min(100%, 376px);
   margin: 6px auto 0;
-  padding: 12px 0 20px;
+  padding: 8px 0 18px;
 }
 
 .turn-empty-state__marker {
-  width: 10px;
-  margin-top: 18px;
+  width: 8px;
+  margin-top: 16px;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(92, 109, 255, 0.32), rgba(18, 18, 18, 0.08));
 }
 
 .turn-empty-state__card {
   display: grid;
-  gap: 12px;
-  padding: 18px 18px 16px;
+  gap: 10px;
+  padding: 16px 16px 14px;
   border: 1px solid rgba(18, 18, 18, 0.05);
-  border-radius: 28px;
+  border-radius: 24px;
   background: rgba(255, 255, 255, 0.76);
   box-shadow: 0 16px 34px rgba(18, 18, 18, 0.06);
   backdrop-filter: blur(22px);
@@ -1696,16 +1699,16 @@ button {
 
 .turn-empty-state__card h2 {
   margin: 0;
-  font-size: 27px;
-  line-height: 1.08;
+  font-size: 22px;
+  line-height: 1.12;
   letter-spacing: -0.05em;
 }
 
 .turn-empty-state__card p {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 13px;
-  line-height: 1.58;
+  font-size: 12px;
+  line-height: 1.52;
 }
 
 .turn-empty-state__chips {
@@ -1717,8 +1720,8 @@ button {
 .turn-empty-state__chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.05);
   color: var(--muted-strong);
@@ -1728,13 +1731,13 @@ button {
 
 .home-empty-state {
   display: grid;
-  gap: 20px;
+  gap: 16px;
   place-content: start center;
   min-height: 100%;
-  width: min(100%, 280px);
+  width: min(100%, 272px);
   margin: 0 auto;
   justify-items: center;
-  padding: 4px 0 52px;
+  padding: 2px 0 44px;
   text-align: center;
 }
 
@@ -1781,18 +1784,18 @@ button {
 }
 
 .home-empty-state__logo {
-  width: 88px;
-  height: 88px;
-  border-radius: 22px;
-  box-shadow: 0 20px 42px rgba(18, 18, 18, 0.16);
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  box-shadow: 0 16px 34px rgba(18, 18, 18, 0.14);
 }
 
 .home-status-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 16px;
+  min-height: 30px;
+  padding: 0 14px;
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
@@ -1825,9 +1828,9 @@ button {
   display: grid;
   gap: 8px;
   width: 100%;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid rgba(18, 18, 18, 0.06);
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(18, 18, 18, 0.035);
   box-shadow: none;
 }
@@ -1860,7 +1863,7 @@ button {
 }
 
 .home-empty-state__trusted strong {
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: -0.02em;
 }
 
@@ -1868,8 +1871,8 @@ button {
 .home-empty-state__copy {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.5;
   max-width: 100%;
 }
 
@@ -1881,7 +1884,7 @@ button {
   padding: 0;
   background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -1937,8 +1940,8 @@ button {
 .composer-work-state {
   display: grid;
   gap: 8px;
-  margin: 0 2px 8px;
-  padding: 10px;
+  margin: 0 2px 6px;
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius-4);
   background: rgba(255, 255, 255, 0.72);
@@ -1948,8 +1951,8 @@ button {
 
 .plan-accessory {
   display: grid;
-  gap: 6px;
-  padding: 14px 15px;
+  gap: 5px;
+  padding: 12px 13px;
   border-radius: var(--radius-3);
   background: rgba(255, 255, 255, 0.82);
 }
@@ -1965,7 +1968,7 @@ button {
 }
 
 .plan-accessory strong {
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .plan-accessory__head {
@@ -1978,8 +1981,8 @@ button {
 .plan-accessory__tone {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.08);
   color: var(--muted-strong);
@@ -1990,8 +1993,8 @@ button {
 .plan-accessory p {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .queued-drafts {
@@ -2011,20 +2014,20 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  min-height: 26px;
+  min-width: 24px;
+  min-height: 24px;
   padding: 0 9px;
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.08);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .queued-draft {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 12px 13px;
+  gap: 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-3);
   border: 1px solid rgba(18, 18, 18, 0.05);
   background: rgba(255, 255, 255, 0.82);
@@ -2036,7 +2039,7 @@ button {
 
 .queued-draft strong {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -2848,7 +2851,7 @@ button {
 
 .mobile-page__topbar strong {
   text-align: center;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
@@ -2894,8 +2897,8 @@ button {
 .settings-card,
 .paywall-card {
   display: grid;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid rgba(18, 18, 18, 0.05);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.78);
@@ -2942,29 +2945,29 @@ button {
 
 .settings-hero-title {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.04;
+  font-size: var(--font-size-display-lg);
+  line-height: 1.08;
   letter-spacing: -0.05em;
 }
 
 .settings-copy {
   margin: 0;
   color: var(--muted-strong);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-support);
+  line-height: 1.5;
 }
 
 .paywall-header {
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
   text-align: center;
 }
 
 .paywall-header__logo {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
 }
 
 .paywall-feature-list,
@@ -2977,8 +2980,8 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 4px;
-  font-size: 13px;
+  padding: 0 2px;
+  font-size: 12px;
 }
 
 .paywall-feature-row__dot {
@@ -2994,7 +2997,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 15px 16px;
+  padding: 13px 14px;
   border-radius: 18px;
   background: rgba(18, 18, 18, 0.04);
   color: var(--text);
@@ -3014,7 +3017,7 @@ button {
 }
 
 .paywall-plan-row strong {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .paywall-plan-row p {
@@ -3024,7 +3027,7 @@ button {
 }
 
 .paywall-plan-row > span {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -3128,12 +3131,12 @@ button {
 }
 
 .archived-empty {
-  min-height: 300px;
+  min-height: 260px;
   display: grid;
   place-content: center;
   justify-items: center;
   gap: 10px;
-  padding: 28px 20px;
+  padding: 24px 18px;
   text-align: center;
 }
 
@@ -3154,7 +3157,7 @@ button {
 }
 
 .archived-empty strong {
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: -0.02em;
 }
 
@@ -3216,19 +3219,19 @@ button {
 .paywall-point {
   display: grid;
   gap: 4px;
-  padding: 14px;
+  padding: 12px;
   border-radius: 18px;
   background: rgba(18, 18, 18, 0.04);
 }
 
 .paywall-point strong {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .paywall-point span {
   color: var(--muted-strong);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .settings-sheet {
@@ -3242,7 +3245,7 @@ button {
 }
 
 .settings-sheet__card {
-  padding: 20px 18px 18px;
+  padding: 18px 16px 16px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-4);
   background: var(--glass-strong);
@@ -3260,7 +3263,7 @@ button {
 
 .settings-sheet__head h2 {
   margin: 6px 0 0;
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1;
   letter-spacing: -0.05em;
 }
@@ -3275,7 +3278,7 @@ button {
 }
 
 .settings-toggle span {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 

@@ -47,11 +47,17 @@ Phodex rule:
 
 - Sans family: system-first stack only.
 - Mono family: `JetBrains Mono` only for code, command output, paths, and machine-like metadata.
-- Default body: `14/22`.
-- Dense body or button text: `15/20`.
-- Labels: `12/16`.
-- Meta only: `11/14`.
+- Type ladder:
+  - `display-xl 28/30`: only onboarding/auth hero headlines
+  - `display-lg 24/28`: page-level and major empty-state titles
+  - `title 18/22`: sheets, dialogs, and dense card titles
+  - `body-strong 15/20`: high-emphasis body copy and user message text
+  - `body 14/22`: default reading copy
+  - `label 12/16`: chips, labels, and helper controls
+  - `support 11/14`: secondary explanatory copy
+  - `meta 10/12`: eyebrow labels and machine metadata
 - Supportive copy inside drawers, cards, helper rows, and footer metadata should usually stay at `10-11px`, not compete with the primary title.
+- After auth, avoid oversized prompts: routine empty states, settings/paywall/about headers, and create-sheet guidance should usually top out at `24px`, and dense dialogs should usually top out at `18px`.
 - Keep weights to `400 / 500 / 700`.
 - Limit a single surface to at most `4-5` visible text sizes.
 
@@ -146,6 +152,9 @@ The shared CSS variables should follow these families:
 - Typography:
   - `--font-sans`
   - `--font-mono`
+  - `--font-size-display-xl`
+  - `--font-size-display-lg`
+  - `--font-size-title`
   - `--font-size-body`
   - `--font-size-body-strong`
   - `--font-size-support`
@@ -207,6 +216,7 @@ Before calling a UI pass done:
 - No paired action row uses different button heights.
 - No floating helper button looks like a large disk with a tiny inner icon.
 - No composer primary action looks visually detached from the toolbar baseline or stranded inside surplus blank space.
+- No routine in-product prompt surface uses hero-scale typography when a `display-lg` or `title` token would do.
 - No popover or menu introduces a larger type scale than the surface around it unless it is a true heading.
 - No secondary helper text or connection metadata is visually louder than the primary action on the same surface.
 - No control row mixes multiple icon-container treatments without a semantic reason.
