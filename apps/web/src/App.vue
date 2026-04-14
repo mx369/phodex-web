@@ -234,6 +234,7 @@ const dialogInput = ref("");
 const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
+const conversationInnerEl = ref<HTMLElement | null>(null);
 const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
 const isScrolledToBottom = ref(true);
 const isUserScrolling = ref(false);
@@ -241,20 +242,23 @@ const autoScrollCooldownUntil = ref<number | null>(null);
 const previousConversationHeight = ref(0);
 const assistantAnchorState = ref<{ threadId: string | null; previousAssistantId: string | null } | null>(null);
 
-const TURN_BOTTOM_THRESHOLD = 12;
+const TURN_BOTTOM_THRESHOLD = 24;
 const TURN_USER_SCROLL_COOLDOWN_MS = 250;
 const TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD = 1;
-const TURN_SCROLL_COALESCE_MS = 16;
 const TURN_RECOVERY_DELAYS_MS = [0, 16, 50, 100] as const;
+const TURN_BOTTOM_SETTLE_DELAYS_MS = [0, 16, 48, 96] as const;
+const TURN_SMOOTH_BOTTOM_SETTLE_DELAYS_MS = [180, 260, 340] as const;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const WHEEL_SCROLL_END_DEBOUNCE_MS = 140;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 
-let followBottomTimer: number | null = null;
+let followBottomFrame: number | null = null;
 let wheelScrollEndTimer: number | null = null;
-let timelineSyncTimer: number | null = null;
+let timelineSyncFrame: number | null = null;
 let programmaticScrollUntil = 0;
 let recoveryTimers: number[] = [];
+let bottomSettleTimers: number[] = [];
+let conversationResizeObserver: ResizeObserver | null = null;
 
 const onboardingScreens = [
   {
@@ -459,6 +463,9 @@ onBeforeUnmount(() => {
   clearWheelScrollEndTimer();
   clearTimelineSyncTimer();
   clearRecoveryTimers();
+  clearBottomSettleTimers();
+  conversationResizeObserver?.disconnect();
+  conversationResizeObserver = null;
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -927,6 +934,7 @@ watch(
     clearWheelScrollEndTimer();
     clearTimelineSyncTimer();
     clearRecoveryTimers();
+    clearBottomSettleTimers();
 
     isUserScrolling.value = false;
     autoScrollCooldownUntil.value = null;
@@ -956,6 +964,32 @@ watch(
     previousConversationHeight.value = conversationScrollEl.value?.scrollHeight ?? 0;
     isScrolledToBottom.value = isConversationPinnedToBottom();
     scheduleRecoverySnaps(nextThreadId);
+  },
+  { flush: "post" }
+);
+
+watch(
+  () => conversationInnerEl.value,
+  (nextEl, previousEl) => {
+    if (previousEl) {
+      conversationResizeObserver?.unobserve(previousEl);
+    }
+
+    if (!nextEl || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    if (!conversationResizeObserver) {
+      conversationResizeObserver = new ResizeObserver(() => {
+        const nextHeight = conversationScrollEl.value?.scrollHeight ?? 0;
+        if (Math.abs(nextHeight - previousConversationHeight.value) < TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD) {
+          return;
+        }
+        queueTimelineScrollSync();
+      });
+    }
+
+    conversationResizeObserver.observe(nextEl);
   },
   { flush: "post" }
 );
@@ -1506,11 +1540,13 @@ function readShellPageState(): ShellPageState | null {
 }
 
 function queueTimelineScrollSync() {
-  clearTimelineSyncTimer();
-  timelineSyncTimer = window.setTimeout(() => {
-    timelineSyncTimer = null;
+  if (timelineSyncFrame !== null) {
+    return;
+  }
+  timelineSyncFrame = window.requestAnimationFrame(() => {
+    timelineSyncFrame = null;
     void syncTimelineScrollAfterMutation();
-  }, TURN_SCROLL_COALESCE_MS);
+  });
 }
 
 async function syncTimelineScrollAfterMutation() {
@@ -1584,6 +1620,14 @@ function latestAssistantMessage(thread: ThreadRecord | null) {
   return [...thread.messages].reverse().find((message) => message.role === "assistant") ?? null;
 }
 
+function maxConversationScrollTop(scrollEl: HTMLElement) {
+  return Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+}
+
+function conversationBottomGap(scrollEl: HTMLElement) {
+  return Math.max(0, maxConversationScrollTop(scrollEl) - scrollEl.scrollTop);
+}
+
 function isAutomaticScrollingPaused(now = Date.now()) {
   if (isUserScrolling.value) {
     return true;
@@ -1596,23 +1640,23 @@ function isConversationPinnedToBottom() {
   if (!scrollEl) {
     return true;
   }
-  return scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - TURN_BOTTOM_THRESHOLD;
+  return conversationBottomGap(scrollEl) <= TURN_BOTTOM_THRESHOLD;
 }
 
 function scheduleFollowBottomScroll() {
-  if (followBottomTimer !== null) {
+  if (followBottomFrame !== null) {
     return;
   }
-  followBottomTimer = window.setTimeout(() => {
-    followBottomTimer = null;
+  followBottomFrame = window.requestAnimationFrame(() => {
+    followBottomFrame = null;
     scrollConversationToBottom("auto", PROGRAMMATIC_SCROLL_LOCK_MS);
-  }, TURN_SCROLL_COALESCE_MS);
+  });
 }
 
 function clearFollowBottomTimer() {
-  if (followBottomTimer !== null) {
-    window.clearTimeout(followBottomTimer);
-    followBottomTimer = null;
+  if (followBottomFrame !== null) {
+    window.cancelAnimationFrame(followBottomFrame);
+    followBottomFrame = null;
   }
 }
 
@@ -1624,9 +1668,9 @@ function clearWheelScrollEndTimer() {
 }
 
 function clearTimelineSyncTimer() {
-  if (timelineSyncTimer !== null) {
-    window.clearTimeout(timelineSyncTimer);
-    timelineSyncTimer = null;
+  if (timelineSyncFrame !== null) {
+    window.cancelAnimationFrame(timelineSyncFrame);
+    timelineSyncFrame = null;
   }
 }
 
@@ -1637,17 +1681,48 @@ function clearRecoveryTimers() {
   recoveryTimers = [];
 }
 
+function clearBottomSettleTimers() {
+  for (const timer of bottomSettleTimers) {
+    window.clearTimeout(timer);
+  }
+  bottomSettleTimers = [];
+}
+
+function scheduleBottomSettleCorrections(delays: readonly number[]) {
+  clearBottomSettleTimers();
+  bottomSettleTimers = delays.map((delay) =>
+    window.setTimeout(() => {
+      const scrollEl = conversationScrollEl.value;
+      if (!scrollEl) {
+        return;
+      }
+      const targetTop = maxConversationScrollTop(scrollEl);
+      if (targetTop - scrollEl.scrollTop > 0.5) {
+        scrollEl.scrollTop = targetTop;
+      }
+      previousConversationHeight.value = scrollEl.scrollHeight;
+      isScrolledToBottom.value = isConversationPinnedToBottom();
+    }, delay)
+  );
+}
+
 function scrollConversationToBottom(behavior: ScrollBehavior = "auto", lockDurationMs = PROGRAMMATIC_SCROLL_LOCK_MS) {
   const scrollEl = conversationScrollEl.value;
   if (!scrollEl) {
     return;
   }
   programmaticScrollUntil = Date.now() + lockDurationMs;
-  scrollEl.scrollTo({
-    top: scrollEl.scrollHeight,
-    behavior,
-  });
+  const targetTop = maxConversationScrollTop(scrollEl);
+  if (behavior === "auto") {
+    scrollEl.scrollTop = targetTop;
+  } else {
+    scrollEl.scrollTo({
+      top: targetTop,
+      behavior,
+    });
+  }
   previousConversationHeight.value = scrollEl.scrollHeight;
+  scheduleBottomSettleCorrections(behavior === "smooth" ? TURN_SMOOTH_BOTTOM_SETTLE_DELAYS_MS : TURN_BOTTOM_SETTLE_DELAYS_MS);
   window.setTimeout(() => {
     isScrolledToBottom.value = isConversationPinnedToBottom();
   }, 0);
@@ -2442,7 +2517,7 @@ function handleScrollToLatest() {
                     @wheel.passive="handleConversationWheel"
                     @scroll.passive="handleConversationScroll"
                   >
-                    <div class="phone-conversation__inner">
+                    <div ref="conversationInnerEl" class="phone-conversation__inner">
                       <template v-if="currentThread && showConversationContent">
                         <article
                           v-for="message in currentThread.messages"
