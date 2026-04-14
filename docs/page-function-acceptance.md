@@ -47,7 +47,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 | Onboarding Step 3 | step CTA | start-remodex copy and final CTA render | pass | `.artifacts/qa-37-onboarding-step3-email-only.png` |
 | Subscription Gate | `?flow=subscription-gate` | plan cards, email CTA, preview-only purchase copy, legal shell | pass | `.artifacts/qa-57-subscription-preview-only.png` |
 | Bootstrap Failure | `?flow=bootstrap-failure` | failure card, retry/email CTA shell, preview-only purchase copy, legal shell | pass | `.artifacts/qa-56-bootstrap-preview-only.png` |
-| Email OTP | `?flow=email-otp` and request-code state | initial render, request-code state, dev/backdoor shell, and tightened auth-sheet prompt scale | pass | `.artifacts/qa-38-email-otp-email-only.png`, `.artifacts/qa-41-email-otp-requested-email-only.png`, `.artifacts/qa-cdp/qa-106-email-otp-typography-tightened.png` |
+| Email OTP | `?flow=email-otp` and request-code state | initial render, request-code state, and tightened auth-sheet prompt scale without any backdoor affordance | pass | `.artifacts/qa-38-email-otp-email-only.png`, `.artifacts/qa-41-email-otp-requested-email-only.png`, `.artifacts/qa-cdp/qa-106-email-otp-typography-tightened.png`, `.artifacts/current-audit/email-otp-no-backdoor-initial.png`, `.artifacts/current-audit/email-otp-requested-no-backdoor.png` |
 
 ## Authenticated Pages
 
@@ -64,7 +64,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 ## Interaction Flows
 
-- OTP login: pass in a real browser flow; repeatable QA still uses the backdoor code `424242`, and the current server build now prefers live Resend delivery for request-code before falling back to the local mailbox.
+- OTP login: pass in a real browser flow; acceptance now depends on a real emailed OTP code and no longer uses a static bypass or local-mailbox fallback.
 - Shell/navigation pass: home, sidebar, settings, about, paywall, and archived pages were rerun after the mobile-page refactor, with home/sidebar rerun again after the latest source-parity pass.
 - Drawer parity pass: the authenticated shell was rerun after replacing glyph icons with SVG icons, adding the shared create sheet, validating a real worktree creation path, and rechecking rename through the drawer row actions.
 - Custom cwd pass: the same drawer flow was rerun with a plain folder name and an absolute path to verify that the server creates the requested local project directory and starts the new chat from that cwd.

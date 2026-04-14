@@ -2,7 +2,7 @@ export type AccessMode = "read-only" | "on-request" | "full-access";
 export type ThreadState = "idle" | "running" | "queued" | "archived";
 export type MessageRole = "user" | "assistant" | "system";
 export type MessageKind = "chat" | "plan" | "status";
-export type DeliveryMode = "smtp" | "resend" | "local-mailbox" | "backdoor";
+export type DeliveryMode = "smtp" | "resend";
 export type ThreadCreateMode = "local" | "worktree";
 
 export interface DiffStats {
@@ -160,15 +160,11 @@ export interface AppSnapshot {
   settings: AppSettings;
   connection: RelayConnection;
   banner: CompletionBanner | null;
-  devAuthBypassEnabled: boolean;
-  staticBackdoorCode: string | null;
 }
 
 export interface RequestCodeResponse {
   ok: true;
   delivery: DeliveryMode;
-  devAuthBypassEnabled: boolean;
-  staticBackdoorCode: string | null;
   expiresInMs: number;
 }
 
@@ -176,13 +172,6 @@ export interface VerifyCodeResponse {
   ok: true;
   session: AuthSession;
   snapshot: AppSnapshot;
-}
-
-export interface DevCodeResponse {
-  ok: true;
-  email: string;
-  code: string | null;
-  staticBackdoorCode: string | null;
 }
 
 export type ClientEvent =

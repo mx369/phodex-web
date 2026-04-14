@@ -6,7 +6,6 @@ import type {
   AuthSession,
   ClientEvent,
   DeliveryMode,
-  DevCodeResponse,
   RequestCodeResponse,
   ServerEvent,
   ThreadCreateMode,
@@ -50,9 +49,7 @@ export const state = reactive({
   auth: {
     phase: "idle" as AuthPhase,
     email: "",
-    delivery: "local-mailbox" as DeliveryMode,
-    devAuthBypassEnabled: false,
-    staticBackdoorCode: null as string | null,
+    delivery: "resend" as DeliveryMode,
   },
   session: null as AuthSession | null,
   snapshot: null as AppSnapshot | null,
@@ -68,7 +65,6 @@ export const state = reactive({
     accessMode: "full-access" as AccessMode,
     sidebarOpen: false,
     settingsOpen: false,
-    devCode: null as string | null,
     authStatus: "",
     toasts: [] as UiToast[],
     pendingRunFeedback: null as PendingRunFeedback | null,
@@ -124,12 +120,7 @@ export function createAppClient() {
       });
       state.auth.phase = "requested";
       state.auth.delivery = response.delivery;
-      state.auth.devAuthBypassEnabled = response.devAuthBypassEnabled;
-      state.auth.staticBackdoorCode = response.staticBackdoorCode;
-      state.ui.authStatus =
-        response.delivery === "local-mailbox"
-          ? "Email delivery is in local dev mode, so the OTP stayed in the local mailbox."
-          : "Verification code sent. Check your inbox for the Phodex email.";
+      state.ui.authStatus = "Verification code sent. Check your inbox for the Phodex email.";
       pushToast("success", "Verification code ready.");
     } catch (error) {
       pushToast("error", readErrorMessage(error));
@@ -157,8 +148,6 @@ export function createAppClient() {
       state.session = response.session;
       writeStoredSession(response.session);
       state.auth.phase = "authenticated";
-      state.auth.staticBackdoorCode = response.snapshot.staticBackdoorCode;
-      state.auth.devAuthBypassEnabled = response.snapshot.devAuthBypassEnabled;
       applySnapshot(response.snapshot);
       connectSocket();
       pushToast("success", "Connected to the secure relay.");
@@ -171,31 +160,12 @@ export function createAppClient() {
     }
   }
 
-  async function loadDevCode() {
-    if (!state.auth.devAuthBypassEnabled) {
-      return;
-    }
-
-    try {
-      const response = await fetchJson<DevCodeResponse>(
-        `/api/auth/dev-code?email=${encodeURIComponent(state.auth.email.trim().toLowerCase())}`,
-        { method: "GET" }
-      );
-      state.ui.devCode = response.code;
-      state.auth.staticBackdoorCode = response.staticBackdoorCode;
-      pushToast("info", "Loaded local backdoor data.");
-    } catch (error) {
-      pushToast("error", readErrorMessage(error));
-    }
-  }
-
   function logout() {
     disconnectSocket();
     clearSession();
     state.snapshot = null;
     state.auth.phase = "idle";
     state.ui.composerText = "";
-    state.ui.devCode = null;
     state.ui.settingsOpen = false;
     state.ui.pendingRunFeedback = null;
     pushToast("info", "Signed out.");
@@ -308,7 +278,6 @@ export function createAppClient() {
       restoreSession,
       requestCode,
       verifyCode,
-      loadDevCode,
       logout,
       createThread,
       createThreadAndSend,
@@ -454,8 +423,6 @@ function handleServerEvent(event: ServerEvent) {
 
 function applySnapshot(snapshot: AppSnapshot) {
   state.snapshot = snapshot;
-  state.auth.devAuthBypassEnabled = snapshot.devAuthBypassEnabled;
-  state.auth.staticBackdoorCode = snapshot.staticBackdoorCode;
   updateConnectionState(snapshot.connection.state);
 }
 

@@ -11,7 +11,6 @@ import type {
   ClientEvent,
   CompletionBanner,
   DeliveryMode,
-  DevCodeResponse,
   DiffStats,
   FileChangeSummary,
   QueuedDraft,
@@ -117,8 +116,6 @@ const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
 const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const DEV_AUTH_BYPASS = process.env.PHODEX_DEV_AUTH_BYPASS !== "false";
-const STATIC_BACKDOOR_CODE = process.env.PHODEX_BACKDOOR_CODE ?? "424242";
 const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
 const AUTH_ENV_FALLBACK_FILE =
@@ -142,6 +139,7 @@ const DEV_ORIGINS = new Set([
 
 let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const legacyOtpCodesPruned = pruneLegacyOtpCodes();
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
@@ -223,20 +221,8 @@ const server = Bun.serve<SocketData>({
       return withCors(req, await handleVerifyCode(req));
     }
 
-    if (url.pathname === "/api/auth/dev-code" && req.method === "GET") {
-      if (!DEV_AUTH_BYPASS) {
-        return withCors(req, json({ ok: false, error: "Not found" }, 404));
-      }
-
-      const email = normalizeEmail(url.searchParams.get("email") ?? "");
-      const record = email ? persisted.otpCodes[email] : null;
-      const body: DevCodeResponse = {
-        ok: true,
-        email,
-        code: record && !otpExpired(record.expiresAt) ? record.code : null,
-        staticBackdoorCode: STATIC_BACKDOOR_CODE,
-      };
-      return withCors(req, json(body));
+    if (url.pathname.startsWith("/api/")) {
+      return withCors(req, json({ ok: false, error: "Not found" }, 404));
     }
 
     return withCors(req, serveStatic(url.pathname));
@@ -270,10 +256,10 @@ if (OTP_MAIL_CONFIG) {
     `[phodex] OTP email delivery via Resend (${OTP_MAIL_CONFIG.sourceLabel}) from ${OTP_MAIL_CONFIG.authEmailFrom}`
   );
 } else {
-  console.log(`[phodex] OTP email delivery using local mailbox fallback`);
+  console.warn(`[phodex] OTP email delivery is unavailable until Resend credentials are configured`);
 }
-if (DEV_AUTH_BYPASS) {
-  console.log(`[phodex] Dev auth bypass enabled. Static backdoor code: ${STATIC_BACKDOOR_CODE}`);
+if (legacyOtpCodesPruned) {
+  schedulePersist();
 }
 
 process.on("SIGINT", shutdownCodexBridge);
@@ -286,13 +272,17 @@ async function handleRequestCode(req: Request) {
     return json({ ok: false, error: "A valid email is required." }, 400);
   }
 
+  if (!OTP_MAIL_CONFIG) {
+    return json({ ok: false, error: "OTP email delivery is not configured on this relay." }, 503);
+  }
+
   const user = ensureUser(email);
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
-  let delivery: DeliveryMode;
+  const delivery: DeliveryMode = "resend";
 
   try {
-    delivery = await deliverCode(email, code);
+    await deliverCode(email, code);
   } catch (error) {
     console.error(`[phodex] failed to deliver OTP for ${email}`, error);
     return json({ ok: false, error: "Unable to send verification code right now." }, 502);
@@ -308,16 +298,10 @@ async function handleRequestCode(req: Request) {
   const response: RequestCodeResponse = {
     ok: true,
     delivery,
-    devAuthBypassEnabled: DEV_AUTH_BYPASS,
-    staticBackdoorCode: DEV_AUTH_BYPASS ? STATIC_BACKDOOR_CODE : null,
     expiresInMs: OTP_TTL_MS,
   };
 
-  if (delivery === "local-mailbox") {
-    console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} code=${code}`);
-  } else {
-    console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} expiresAt=${expiresAt}`);
-  }
+  console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} expiresAt=${expiresAt}`);
   return json(response);
 }
 
@@ -330,10 +314,9 @@ async function handleVerifyCode(req: Request) {
   }
 
   const record = persisted.otpCodes[email];
-  const validDynamicCode = record && !otpExpired(record.expiresAt) && record.code === code;
-  const validBackdoorCode = DEV_AUTH_BYPASS && code === STATIC_BACKDOOR_CODE;
+  const validDynamicCode = record && record.delivery === "resend" && !otpExpired(record.expiresAt) && record.code === code;
 
-  if (!validDynamicCode && !validBackdoorCode) {
+  if (!validDynamicCode) {
     return json({ ok: false, error: "Invalid or expired code." }, 401);
   }
 
@@ -1360,8 +1343,6 @@ function snapshotForUser(userId: string): AppSnapshot {
     settings: user.settings,
     connection: buildConnection(),
     banner: user.banner,
-    devAuthBypassEnabled: DEV_AUTH_BYPASS,
-    staticBackdoorCode: DEV_AUTH_BYPASS ? STATIC_BACKDOOR_CODE : null,
   };
 }
 
@@ -2469,7 +2450,7 @@ function normalizeEmail(value: unknown) {
 
 async function deliverCode(email: string, code: string): Promise<DeliveryMode> {
   if (!OTP_MAIL_CONFIG) {
-    return "local-mailbox";
+    throw new Error("OTP email delivery is not configured on this relay.");
   }
 
   const payload = renderOtpEmail(code);
@@ -2496,6 +2477,17 @@ async function deliverCode(email: string, code: string): Promise<DeliveryMode> {
   }
 
   return "resend";
+}
+
+function pruneLegacyOtpCodes() {
+  let changed = false;
+  for (const [email, record] of Object.entries(persisted.otpCodes)) {
+    if (record.delivery !== "resend" || otpExpired(record.expiresAt)) {
+      delete persisted.otpCodes[email];
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function resolveOtpMailConfig(): OtpMailConfig | null {

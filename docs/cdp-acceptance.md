@@ -12,16 +12,16 @@ All screenshots in this file were captured from real browser renders through the
 | Install Warning Alert | Same session, clicked `Continue` on step 1 | `.artifacts/qa-35-onboarding-install-warning-email-only.png` |
 | Onboarding Step 2 | Same session, continued past the install warning | `.artifacts/qa-36-onboarding-step2-email-only.png` |
 | Onboarding Step 3 | Same session, clicked through to the final setup step | `.artifacts/qa-37-onboarding-step3-email-only.png` |
-| Email OTP | Fresh unauthenticated session loaded at `/?flow=email-otp`; rerun after tightening the auth-sheet prompt scale | `.artifacts/qa-38-email-otp-email-only.png`, `.artifacts/qa-cdp/qa-106-email-otp-typography-tightened.png` |
+| Email OTP | Fresh unauthenticated session loaded at `/?flow=email-otp`; rerun after tightening the auth-sheet prompt scale and removing all OTP backdoor UI | `.artifacts/qa-38-email-otp-email-only.png`, `.artifacts/qa-cdp/qa-106-email-otp-typography-tightened.png`, `.artifacts/current-audit/email-otp-no-backdoor-initial.png` |
 | Subscription Gate | Fresh unauthenticated session loaded at `/?flow=subscription-gate` after the preview-only purchase copy pass | `.artifacts/qa-57-subscription-preview-only.png` |
 | Bootstrap Failure | Fresh unauthenticated session loaded at `/?flow=bootstrap-failure` after the preview-only purchase copy pass | `.artifacts/qa-56-bootstrap-preview-only.png` |
-| Email OTP Requested | Same email session after requesting a code | `.artifacts/qa-41-email-otp-requested-email-only.png` |
+| Email OTP Requested | Same email session after requesting a code, with no backdoor controls or static-code surface remaining | `.artifacts/qa-41-email-otp-requested-email-only.png`, `.artifacts/current-audit/email-otp-requested-no-backdoor.png` |
 
 ## Authenticated Shell
 
 | Page | How it was reached | Screenshot |
 | --- | --- | --- |
-| Home Empty | Real auth flow with email OTP backdoor, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
+| Home Empty | Real auth flow with email OTP, then waited for the connected home state after the latest page-parity pass | `.artifacts/qa-52-home-page-parity.png` |
 | Turn Empty | Same authenticated session, opened a clean chat after the empty-timeline, typography-tightening, and brandless-shell passes | `.artifacts/qa-71-turn-empty-timeline-block.png`, `.artifacts/qa-cdp/qa-104-turn-empty-final-typography-tightened.png`, `.artifacts/qa-cdp/qa-109-home-shell-brandless.png` |
 | Turn View Activity Surfaces | Same authenticated session, reopened the active Todo-maintenance thread after the richer-thread-surface pass and reran a clean temp-repo diff regression to confirm the history fallback keeps the top diff chip plus file-change rows after `turn/completed` | `.artifacts/qa-64-richer-thread-surfaces-viewport.png`, `.artifacts/qa-65-richer-thread-surfaces-bottom-viewport.png`, `.artifacts/qa-cdp/qa-116-diff-thread-surface-restored.png`, `.artifacts/qa-cdp/qa-117-drawer-thread-diff-meta-restored.png` |
 | Turn View Work-State Band | Same authenticated session, created a clean test thread and verified queued-draft and pinned-plan accessory states above the composer | `.artifacts/qa-68-work-state-band.png`, `.artifacts/qa-69-queued-draft-band-bottom.png`, `.artifacts/qa-70-plan-band-bottom.png` |

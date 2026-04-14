@@ -7,7 +7,7 @@ This file contains durable product overrides that should be read early and treat
 - Do not implement QR-code login.
 - Do not implement camera-based pairing.
 - The only allowed login path is email verification code.
-- A local dev backdoor for OTP is allowed for local validation.
+- Do not ship OTP backdoors, static bypass codes, or dev-only auth lookup endpoints.
 
 ## Security Scope
 

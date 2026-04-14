@@ -6,7 +6,7 @@ ECDP="${ECDP:-$HOME/.codex/skills/electron-cdp-automation/scripts/electron_cdp.s
 SESSION="${PHODEX_CDP_SESSION:-phodex-qa}"
 BASE_URL="${PHODEX_CDP_URL:-https://localhost:3443}"
 EMAIL="${PHODEX_QA_EMAIL:-qa-cdp@local.dev}"
-CODE="${PHODEX_QA_CODE:-424242}"
+CODE="${PHODEX_QA_CODE:-}"
 OUTDIR="${PHODEX_CDP_OUTDIR:-$ROOT_DIR/.artifacts/qa-cdp}"
 
 usage() {
@@ -66,6 +66,10 @@ open_page() {
 }
 
 login() {
+  if [[ -z "$CODE" ]]; then
+    echo "PHODEX_QA_CODE is required. Request a real OTP email first." >&2
+    exit 1
+  fi
   ensure_session
   ecdpcmd open "$BASE_URL/?flow=email-otp" >/dev/null
   ecdpcmd wait 500 >/dev/null

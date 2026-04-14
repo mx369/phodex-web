@@ -13,7 +13,7 @@ This file is the level-1 handoff and status summary. It is intentionally broader
 
 Implemented and real:
 
-- Email code request, live Resend delivery when mail config is available, verify, and local dev backdoor code.
+- Email code request, live Resend delivery when mail config is available, and OTP verify.
 - HTTPS bootstrap and WSS relay session sync.
 - Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt.
 - Conversation send/stream/stop flow.

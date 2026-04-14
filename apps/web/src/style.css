@@ -834,30 +834,6 @@ button {
   line-height: 1.55;
 }
 
-.root-auth-screen__backdoor {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.root-auth-screen__backdoor-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 12px;
-}
-
-.root-auth-screen__backdoor-row strong {
-  color: white;
-  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
-  font-size: 13px;
-}
-
 .root-auth-screen__card .primary-cta,
 .root-auth-screen__card .ghost-cta {
   margin-top: 0;
@@ -1038,33 +1014,6 @@ button {
 
 .auth-mobile__status {
   margin-top: 12px;
-}
-
-.auth-mobile__backdoor {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 16px;
-  border: 1px solid rgba(239, 142, 85, 0.14);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 245, 239, 0.98), rgba(255, 241, 233, 0.82));
-}
-
-.auth-mobile__backdoor-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.auth-mobile__backdoor-row span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.auth-mobile__backdoor-row strong {
-  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
-  font-size: 14px;
 }
 
 .input-label {

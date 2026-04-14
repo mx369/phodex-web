@@ -1753,28 +1753,9 @@ function handleScrollToLatest() {
                     <button class="primary-cta primary-cta--dark" :disabled="state.ui.verifyingCode" @click="handleVerifyCode">
                       {{ state.ui.verifyingCode ? "Verifying…" : "Continue into relay" }}
                     </button>
-
-                    <button
-                      v-if="state.auth.devAuthBypassEnabled"
-                      class="ghost-cta ghost-cta--dark"
-                      @click="client.loadDevCode()"
-                    >
-                      Read local backdoor data
-                    </button>
                   </template>
 
                   <p v-if="state.ui.authStatus" class="root-auth-screen__status">{{ state.ui.authStatus }}</p>
-
-                  <div v-if="state.ui.devCode || state.auth.staticBackdoorCode" class="root-auth-screen__backdoor">
-                    <div class="root-auth-screen__backdoor-row">
-                      <span>Latest OTP</span>
-                      <strong>{{ state.ui.devCode ?? "Pending" }}</strong>
-                    </div>
-                    <div class="root-auth-screen__backdoor-row">
-                      <span>Static backdoor</span>
-                      <strong>{{ state.auth.staticBackdoorCode ?? "Disabled" }}</strong>
-                    </div>
-                  </div>
 
                   <button class="root-auth-screen__text-link" @click="restartOnboarding">Show setup flow again</button>
                 </div>

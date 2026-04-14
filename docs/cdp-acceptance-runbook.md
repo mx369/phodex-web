@@ -12,7 +12,7 @@ Authenticated `page=` states now render as dedicated full-page mobile surfaces, 
 
 - Clear local browser state in a hidden session
 - Open `https://localhost:3443`
-- Log in with `qa-cdp@local.dev` and the backdoor code `424242`
+- Log in with `qa-cdp@local.dev` and a real OTP code supplied from email
 - Jump to a root-flow state with `?flow=...`
 - Jump to an authenticated page with `?page=...`
 - Take screenshots
@@ -61,7 +61,7 @@ If you need the onboarding flow, clear local state first and open `https://local
 3. Open the base app URL.
 4. Capture onboarding screenshots from a clean state.
 5. Open `?flow=email-otp`.
-6. Log in as `qa-cdp@local.dev` using code `424242`.
+6. Log in as `qa-cdp@local.dev` using a real OTP code from email.
 7. Open `?page=about`, `?page=paywall`, and any other authenticated pages you need.
 8. Use snapshot refs or selector-driven `evaluate` calls for controls that are not addressable by URL alone.
 9. Re-snapshot after every rerender, modal, or navigation.
@@ -89,17 +89,18 @@ For browser-state reset, use the hidden session and clear origin storage before 
 
 ## Login Flow
 
-The app accepts the static backdoor code `424242` in development.
-If the server has Resend configured, `Send verification code` will also issue a real OTP email; the runbook still uses the backdoor path so screenshots remain repeatable and inbox access is not required.
+The app no longer exposes any static backdoor code or local auth lookup endpoint.
+Before running the login sequence, request a real OTP email and export it into `PHODEX_QA_CODE`.
 
 Recommended login path:
 
 ```bash
+export PHODEX_QA_CODE="123456"
 "$ECDP" open 'https://localhost:3443/?flow=email-otp' --session phodex-qa
 "$ECDP" evaluate "(() => { const input = document.querySelector('#email'); if (!input) throw new Error('email input missing'); input.value = 'qa-cdp@local.dev'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); })()" --session phodex-qa
 "$ECDP" evaluate "(() => { const button = [...document.querySelectorAll('button')].find((item) => /Send verification code/i.test(item.textContent || '')); if (!button) throw new Error('send button missing'); button.click(); })()" --session phodex-qa
 "$ECDP" wait-for-text 'Continue into relay' --timeout 10000 --session phodex-qa
-"$ECDP" evaluate "(() => { const input = document.querySelector('#code'); if (!input) throw new Error('code input missing'); input.value = '424242'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); })()" --session phodex-qa
+"$ECDP" evaluate "(() => { const input = document.querySelector('#code'); if (!input) throw new Error('code input missing'); input.value = '$PHODEX_QA_CODE'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); })()" --session phodex-qa
 "$ECDP" evaluate "(() => { const button = [...document.querySelectorAll('button')].find((item) => /Continue into relay/i.test(item.textContent || '')); if (!button) throw new Error('continue button missing'); button.click(); })()" --session phodex-qa
 ```
 
@@ -143,7 +144,7 @@ Capture at least these states in one acceptance pass:
 
 ## Failure Handling
 
-- If login fails, verify the code is `424242` and the session was reset first.
+- If login fails, verify `PHODEX_QA_CODE` matches the latest emailed OTP and the session was reset first.
 - If a page opens but shows the wrong state, re-open it with the correct `flow=` or `page=` query param.
 - If a screenshot is blurry or clipped, re-run after checking the hidden session is still on `https://localhost:3443`.
 - If a long sheet hides its input or footer actions, treat it as a real regression even if the controls exist in the DOM.

@@ -11,14 +11,15 @@ Read this file before editing anything under `apps/server`.
 
 - Keep HTTPS and WSS on Bun-native primitives. Do not introduce third-party HTTP or websocket server stacks.
 - Keep the bridge connected to the real local Codex CLI service.
-- Preserve the local OTP dev bypass unless the task explicitly removes it.
+- Do not add OTP backdoors, static bypass codes, or local dev-only auth shortcuts.
 - Do not claim thread deletion works; Codex app-server does not currently expose it.
 - Do not add QR login or camera pairing support.
 - Do not add end-to-end encryption on top of HTTPS/WSS.
 
 ## Current Truth
 
-- Real endpoints exist for health, bootstrap, OTP issue/verify, and dev-code lookup.
+- Real endpoints exist for health, bootstrap, OTP issue, and OTP verify.
+- OTP auth now requires real email delivery; no dev-code lookup or static bypass remains.
 - The websocket bridge relays snapshots and live thread/message updates.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
 - Richer upstream message mapping is still incomplete.
