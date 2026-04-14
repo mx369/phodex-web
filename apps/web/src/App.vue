@@ -2606,7 +2606,7 @@ function handleScrollToLatest() {
                           class="phone-composer__input"
                           :disabled="isCurrentThreadPendingCreate"
                           :placeholder="composerPlaceholder"
-                          rows="3"
+                          rows="2"
                         ></textarea>
 
                         <div class="phone-composer__toolbar">
