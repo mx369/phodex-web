@@ -2190,12 +2190,8 @@ function handleScrollToLatest() {
                   <transition name="drawer">
                     <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
                       <div class="phone-drawer__head">
-                        <div class="drawer-brand">
+                        <div class="drawer-brand" :aria-label="homeStatusLabel">
                           <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
-                          <div class="drawer-brand__copy">
-                            <span class="section-label">{{ homeStatusLabel }}</span>
-                            <strong class="drawer-brand__title">Remodex</strong>
-                          </div>
                         </div>
                         <button class="icon-button" aria-label="Close menu" @click="closeSidebar">
                           <AppIcon name="close" />
@@ -2363,8 +2359,7 @@ function handleScrollToLatest() {
                       <AppIcon name="menu" />
                     </button>
 
-                    <div class="phone-topbar__title" :class="{ 'phone-topbar__title--home': !currentThread }">
-                      <span class="section-label">{{ currentThread?.projectLabel ?? "Remodex" }}</span>
+                    <div class="phone-topbar__title">
                       <strong>{{ currentThread?.title ?? "Home" }}</strong>
                     </div>
 
