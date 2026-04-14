@@ -1118,11 +1118,17 @@ button {
 
 .primary-cta:disabled,
 .ghost-cta:disabled,
-.model-picker__trigger:disabled {
+.model-picker__trigger:disabled,
+.send-cta:disabled {
   cursor: default;
   transform: none;
-  opacity: 0.48;
   box-shadow: none;
+}
+
+.primary-cta:disabled,
+.ghost-cta:disabled,
+.model-picker__trigger:disabled {
+  opacity: 0.48;
 }
 
 .primary-cta {
@@ -2295,10 +2301,7 @@ button {
   min-height: var(--control-h-tool);
   padding: 0 16px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, var(--orange) 0%, #ffb07e 100%);
-  color: white;
   font-weight: 700;
-  box-shadow: 0 12px 24px rgba(239, 142, 85, 0.2);
 }
 
 .send-cta--circle {
@@ -2309,7 +2312,29 @@ button {
   height: 32px;
   padding: 0;
   border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+.send-cta--ready {
+  background: linear-gradient(135deg, var(--orange) 0%, #ffb07e 100%);
+  color: white;
   box-shadow: 0 8px 18px rgba(239, 142, 85, 0.18);
+}
+
+.send-cta--queue {
+  background: #181818;
+  color: white;
+  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.14);
+}
+
+.send-cta--idle {
+  border-color: rgba(18, 18, 18, 0.05);
+  background: rgba(18, 18, 18, 0.04);
+  color: rgba(18, 18, 18, 0.34);
+}
+
+.send-cta--idle:disabled {
+  opacity: 1;
 }
 
 .send-cta--circle::before,

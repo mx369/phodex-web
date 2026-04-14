@@ -609,6 +609,23 @@ const composerPlaceholder = computed(() => {
     ? "Write a follow-up while this run is still streaming..."
     : "Ask anything... @files, $skills, /commands";
 });
+const composerHasText = computed(() => Boolean(state.ui.composerText.trim()));
+const composerSendDisabled = computed(() => isCurrentThreadPendingCreate.value || !composerHasText.value);
+const composerSendTone = computed(() => {
+  if (composerSendDisabled.value) {
+    return "idle";
+  }
+  return currentThread.value?.state === "running" ? "queue" : "ready";
+});
+const composerSendTitle = computed(() => {
+  if (isCurrentThreadPendingCreate.value) {
+    return "Starting";
+  }
+  if (!composerHasText.value) {
+    return "Compose first";
+  }
+  return currentThread.value?.state === "running" ? "Queue" : "Send";
+});
 const homeStatusLabel = computed(() => {
   switch (state.snapshot?.connection.state) {
     case "connected":
@@ -2666,22 +2683,19 @@ function handleScrollToLatest() {
                             </button>
                             <button
                               class="send-cta send-cta--circle"
+                              :class="`send-cta--${composerSendTone}`"
                               type="button"
-                              :disabled="isCurrentThreadPendingCreate"
+                              :disabled="composerSendDisabled"
                               :aria-label="
                                 isCurrentThreadPendingCreate
                                   ? 'Starting'
-                                  : currentThread?.state === 'running'
-                                    ? 'Queue draft'
-                                    : 'Send'
+                                  : !composerHasText
+                                    ? 'Compose something first'
+                                    : currentThread?.state === 'running'
+                                      ? 'Queue draft'
+                                      : 'Send'
                               "
-                              :title="
-                                isCurrentThreadPendingCreate
-                                  ? 'Starting'
-                                  : currentThread?.state === 'running'
-                                    ? 'Queue'
-                                    : 'Send'
-                              "
+                              :title="composerSendTitle"
                               @click="handleSend"
                             >
                               <AppIcon :name="currentThread?.state === 'running' ? 'plus' : 'arrow-up'" aria-hidden="true" />
