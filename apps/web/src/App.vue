@@ -218,7 +218,6 @@ type AppDialogState =
 type TurnAutoScrollMode = "followBottom" | "anchorAssistantResponse" | "manual";
 
 const verificationCode = ref("");
-const dismissedBannerId = ref<string | null>(null);
 const rootFlowState = ref<RootFlowState>(readRootFlowState());
 const pendingShellPage = ref<ShellPageState | null>(readShellPageState());
 const ONBOARDING_STORAGE_KEY = "phodex.onboarding-seen";
@@ -495,13 +494,7 @@ const isCurrentThreadPendingCreate = computed(() =>
   Boolean(currentThread.value?.id.startsWith("pending-thread:"))
 );
 const liveThreads = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived"));
-const visibleBanner = computed(() => {
-  const banner = state.snapshot?.banner;
-  if (!banner) {
-    return null;
-  }
-  return banner.id === dismissedBannerId.value ? null : banner;
-});
+const floatingToasts = computed(() => state.ui.toasts.filter((toast) => toast.tone === "error"));
 const threadGroups = computed(() => {
   const groups = new Map<string, ThreadRecord[]>();
   const search = state.ui.search.trim().toLowerCase();
@@ -1323,10 +1316,6 @@ function closePanel() {
   }
 
   shellPageStack.value = [];
-}
-
-function dismissBanner() {
-  dismissedBannerId.value = state.snapshot?.banner?.id ?? null;
 }
 
 function closeDialog() {
@@ -2369,19 +2358,6 @@ function handleScrollToLatest() {
                     <span v-else class="phone-topbar__spacer" aria-hidden="true"></span>
                   </header>
 
-                  <transition name="banner">
-                    <div v-if="visibleBanner" class="phone-banner">
-                      <div>
-                        <span class="section-label">Run Complete</span>
-                        <strong>{{ visibleBanner.title }}</strong>
-                        <p>{{ visibleBanner.subtitle }}</p>
-                      </div>
-                      <button class="icon-button icon-button--tiny" aria-label="Dismiss banner" @click="dismissBanner">
-                        <AppIcon name="close" />
-                      </button>
-                    </div>
-                  </transition>
-
                   <section v-if="currentThread" class="turn-toolbar">
                     <div class="turn-toolbar__inner">
                       <div class="turn-toolbar__strip">
@@ -2860,7 +2836,7 @@ function handleScrollToLatest() {
 
               <div class="toast-stack">
                 <div
-                  v-for="toast in state.ui.toasts"
+                  v-for="toast in floatingToasts"
                   :key="toast.id"
                   class="toast-card"
                   :class="`toast-card--${toast.tone}`"
