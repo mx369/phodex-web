@@ -51,6 +51,7 @@ Phodex rule:
 - Dense body or button text: `15/20`.
 - Labels: `12/16`.
 - Meta only: `11/14`.
+- Supportive copy inside drawers, cards, helper rows, and footer metadata should usually stay at `10-11px`, not compete with the primary title.
 - Keep weights to `400 / 500 / 700`.
 - Limit a single surface to at most `4-5` visible text sizes.
 
@@ -106,6 +107,19 @@ Phodex rule:
 - Floating helper buttons may be visually smaller than `44px`, but must preserve an effective `44px` hit region.
 - Dense mobile sheets should prefer `44px` paired buttons over mixing a tall primary and a short ghost button.
 
+### Icons
+
+- Radix, Carbon, and modern mobile systems all benefit from a single icon language rather than mixing filled, outlined, and ad hoc glyphs.
+- The problem is usually not "which icon set" but inconsistent stroke weight, inconsistent optical size, and inconsistent container treatment.
+
+Phodex rule:
+
+- Use one stroke-first SVG system across the app.
+- Default stroke weight should stay visually around `1.9`.
+- Standard icon sizes should come from `13 / 15 / 16`.
+- If one shortcut in a control cluster uses a small icon tile, adjacent shortcuts in the same cluster should use the same treatment.
+- Do not mix naked inline icons, white tiles, and circular icon buttons in the same control row unless the semantic role is actually different.
+
 ## Phodex Visual Direction
 
 Phodex is not a generic B-end console and not a consumer-marketing app. Its visual language should feel like:
@@ -132,8 +146,14 @@ The shared CSS variables should follow these families:
   - `--font-mono`
   - `--font-size-body`
   - `--font-size-body-strong`
+  - `--font-size-support`
   - `--font-size-label`
   - `--font-size-meta`
+- Icons:
+  - `--icon-stroke`
+  - `--icon-size-sm`
+  - `--icon-size-md`
+  - `--icon-size-lg`
 - Radius:
   - `--radius-1`
   - `--radius-2`
@@ -169,6 +189,8 @@ The following components should conform first because they repeat throughout the
 - `icon-button`
 - `drawer-footer-pill`
 - `drawer-settings-bar`
+- `drawer-shortcut`
+- `drawer-status`
 - `model-picker__trigger`
 - `send-cta--circle`
 - `composer-circle`
@@ -183,6 +205,8 @@ Before calling a UI pass done:
 - No paired action row uses different button heights.
 - No floating helper button looks like a large disk with a tiny inner icon.
 - No popover or menu introduces a larger type scale than the surface around it unless it is a true heading.
+- No secondary helper text or connection metadata is visually louder than the primary action on the same surface.
+- No control row mixes multiple icon-container treatments without a semantic reason.
 - No screen mixes more than `5` radii values.
 - No new component uses raw hex or raw rgba if an existing token can represent it.
 - Dense overlays are tested with long content, internal scrolling, and visible footer actions.

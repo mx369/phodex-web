@@ -102,8 +102,8 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   },
   plus: {
     lines: [
-      { x1: 12, y1: 6, x2: 12, y2: 18 },
-      { x1: 6, y1: 12, x2: 18, y2: 12 },
+      { x1: 12, y1: 7.25, x2: 12, y2: 16.75 },
+      { x1: 7.25, y1: 12, x2: 16.75, y2: 12 },
     ],
   },
   relay: {
@@ -146,15 +146,15 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   },
   worktree: {
     circles: [
-      { cx: 7, cy: 5.5, r: 2 },
-      { cx: 17, cy: 9, r: 2 },
-      { cx: 17, cy: 17.5, r: 2 },
+      { cx: 7, cy: 5.75, r: 1.7 },
+      { cx: 17, cy: 9.25, r: 1.7 },
+      { cx: 17, cy: 17.25, r: 1.7 },
     ],
     lines: [
-      { x1: 7, y1: 7.5, x2: 7, y2: 12 },
+      { x1: 7, y1: 7.45, x2: 7, y2: 12 },
       { x1: 7, y1: 12, x2: 17, y2: 12 },
-      { x1: 17, y1: 11, x2: 17, y2: 7 },
-      { x1: 17, y1: 13, x2: 17, y2: 15.5 },
+      { x1: 17, y1: 11.1, x2: 17, y2: 7.55 },
+      { x1: 17, y1: 12.9, x2: 17, y2: 15.55 },
     ],
   },
 };
@@ -177,7 +177,7 @@ const AppIcon = defineComponent({
           viewBox: "0 0 24 24",
           fill: "none",
           stroke: "currentColor",
-          "stroke-width": "1.85",
+          "stroke-width": "1.92",
           "stroke-linecap": "round",
           "stroke-linejoin": "round",
           "aria-hidden": "true",
@@ -2209,15 +2209,21 @@ function handleScrollToLatest() {
                           :class="{ 'drawer-shortcut--active': !currentThread }"
                           @click="client.clearThreadSelection()"
                         >
-                          <AppIcon name="home" />
+                          <span class="drawer-shortcut__icon">
+                            <AppIcon name="home" />
+                          </span>
                           <span>Home</span>
                         </button>
                         <button class="drawer-shortcut" @click="startWorktreeChat">
-                          <AppIcon name="worktree" />
+                          <span class="drawer-shortcut__icon">
+                            <AppIcon name="worktree" />
+                          </span>
                           <span>New Worktree</span>
                         </button>
                         <button class="drawer-shortcut" @click="openPanel('about')">
-                          <AppIcon name="info" />
+                          <span class="drawer-shortcut__icon">
+                            <AppIcon name="info" />
+                          </span>
                           <span>About</span>
                         </button>
                       </div>
