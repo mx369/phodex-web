@@ -1202,6 +1202,20 @@ function handleDocumentKeyDown(event: KeyboardEvent) {
   }
 }
 
+function handleComposerKeyDown(event: KeyboardEvent) {
+  if (event.key !== "Enter") {
+    return;
+  }
+  if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+    return;
+  }
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  event.preventDefault();
+  handleSend();
+}
+
 function openSidebar() {
   closeModelPicker();
   state.ui.sidebarOpen = true;
@@ -2673,6 +2687,7 @@ function handleScrollToLatest() {
                           :disabled="isCurrentThreadPendingCreate"
                           :placeholder="composerPlaceholder"
                           rows="2"
+                          @keydown="handleComposerKeyDown"
                         ></textarea>
 
                         <div class="phone-composer__toolbar">
