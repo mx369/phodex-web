@@ -113,6 +113,7 @@ Phodex rule:
 - Floating helper buttons may be visually smaller than `44px`, but must preserve an effective `44px` hit region.
 - Dense mobile sheets should prefer `44px` paired buttons over mixing a tall primary and a short ghost button.
 - In the chat composer, the primary send action should sit on the bottom control baseline with the model/runtime picker, not float inside extra empty whitespace.
+- In the chat composer, send and stop controls should be visually centered within the toolbar row, inset slightly from the right edge, and stay around `30px` visually while preserving a larger hit area.
 - The collapsed mobile composer should default to a compact `2`-row writing height unless a richer structured-input state explicitly needs more space.
 - In the chat composer, the send control should visually downshift when the textarea is empty; the strong forward-action accent belongs only to a genuinely sendable state.
 
@@ -217,6 +218,7 @@ Before calling a UI pass done:
 - No paired action row uses different button heights.
 - No floating helper button looks like a large disk with a tiny inner icon.
 - No composer primary action looks visually detached from the toolbar baseline or stranded inside surplus blank space.
+- No composer send/stop control sits flush against the card edge or hangs below the model-picker centerline.
 - No empty composer shows the send control as if it were already actionable.
 - No routine in-product prompt surface uses hero-scale typography when a `display-lg` or `title` token would do.
 - No popover or menu introduces a larger type scale than the surface around it unless it is a true heading.
