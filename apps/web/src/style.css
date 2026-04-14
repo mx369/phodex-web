@@ -647,33 +647,33 @@ button {
   height: 36px;
 }
 
-.icon-button--dark {
+.icon-button.icon-button--dark {
   background: rgba(255, 255, 255, 0.08);
   color: white;
   box-shadow: none;
 }
 
-.input-label--dark {
+.input-label.input-label--dark {
   color: rgba(255, 255, 255, 0.72);
 }
 
-.input-field--dark {
+.input-field.input-field--dark {
   border-color: rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.06);
   color: white;
 }
 
-.input-field--dark::placeholder {
+.input-field.input-field--dark::placeholder {
   color: rgba(255, 255, 255, 0.34);
 }
 
-.primary-cta--dark {
+.primary-cta.primary-cta--dark {
   background: white;
   color: #0f0f0f;
   box-shadow: none;
 }
 
-.ghost-cta--dark {
+.ghost-cta.ghost-cta--dark {
   background: rgba(255, 255, 255, 0.08);
   color: white;
 }
