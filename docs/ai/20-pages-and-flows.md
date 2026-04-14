@@ -31,7 +31,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Drawer worktree create | Real | Worktree creation now makes a real git worktree under `~/.codex/worktrees/<repo>/...` before starting the new Codex thread |
 | Drawer custom project create | Real | The create sheet now accepts either a folder name or a full path: folder names create a fresh project under `~/.phodex-web/projects`, while absolute paths are used directly as the new local chat cwd |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |
-| Turn auto-scroll and scroll-to-latest | Real | Turn scrolling now happens inside the fixed mobile shell rather than on `body`, with follow-bottom, assistant anchoring, resize-aware bottom recovery, bottom-threshold tolerance, and a visible latest-jump button when the user leaves bottom |
+| Turn auto-scroll and scroll-to-latest | Real | Turn scrolling now happens inside the fixed mobile shell rather than on `body`, with a simple follow-bottom/manual split, bottom-threshold tolerance, a resize-aware next-frame follow when content grows, and a visible latest-jump button when the user leaves bottom |
 | Stop run | Real | Sends turn interrupt to local Codex |
 | Runtime speed selection | Real | The composer model menu now exposes `Normal / Fast`; `Fast` requests `turn/start.serviceTier="fast"` and gracefully falls back when the bridge does not support that field yet |
 | Queue while running | Real | Draft is stored locally, shown in queued list, and now keeps its send-time runtime settings so later resume stays aligned with the original request |

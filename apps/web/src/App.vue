@@ -215,7 +215,7 @@ type AppDialogState =
       useCustomCwd: boolean;
     };
 
-type TurnAutoScrollMode = "followBottom" | "anchorAssistantResponse" | "manual";
+type TurnAutoScrollMode = "followBottom" | "manual";
 
 const verificationCode = ref("");
 const rootFlowState = ref<RootFlowState>(readRootFlowState());
@@ -237,27 +237,11 @@ const conversationScrollEl = ref<HTMLElement | null>(null);
 const conversationInnerEl = ref<HTMLElement | null>(null);
 const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
 const isScrolledToBottom = ref(true);
-const isUserScrolling = ref(false);
-const autoScrollCooldownUntil = ref<number | null>(null);
-const previousConversationHeight = ref(0);
-const assistantAnchorState = ref<{ threadId: string | null; previousAssistantId: string | null } | null>(null);
 
 const TURN_BOTTOM_THRESHOLD = 24;
-const TURN_USER_SCROLL_COOLDOWN_MS = 250;
-const TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD = 1;
-const TURN_RECOVERY_DELAYS_MS = [0, 16, 50, 100] as const;
-const TURN_BOTTOM_SETTLE_DELAYS_MS = [0, 16, 48, 96] as const;
-const TURN_SMOOTH_BOTTOM_SETTLE_DELAYS_MS = [180, 260, 340] as const;
-const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
-const WHEEL_SCROLL_END_DEBOUNCE_MS = 140;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 
 let followBottomFrame: number | null = null;
-let wheelScrollEndTimer: number | null = null;
-let timelineSyncFrame: number | null = null;
-let programmaticScrollUntil = 0;
-let recoveryTimers: number[] = [];
-let bottomSettleTimers: number[] = [];
 let conversationResizeObserver: ResizeObserver | null = null;
 
 const onboardingScreens = [
@@ -459,11 +443,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   document.removeEventListener("keydown", handleDocumentKeyDown);
-  clearFollowBottomTimer();
-  clearWheelScrollEndTimer();
-  clearTimelineSyncTimer();
-  clearRecoveryTimers();
-  clearBottomSettleTimers();
+  clearFollowBottomFrame();
   conversationResizeObserver?.disconnect();
   conversationResizeObserver = null;
 });
@@ -930,40 +910,16 @@ const dialogConfirmDisabled = computed(() => {
 watch(
   () => currentThread.value?.id ?? null,
   async (nextThreadId) => {
-    clearFollowBottomTimer();
-    clearWheelScrollEndTimer();
-    clearTimelineSyncTimer();
-    clearRecoveryTimers();
-    clearBottomSettleTimers();
-
-    isUserScrolling.value = false;
-    autoScrollCooldownUntil.value = null;
-
-    if (assistantAnchorState.value?.threadId && nextThreadId && assistantAnchorState.value.threadId !== nextThreadId) {
-      assistantAnchorState.value = null;
-    }
-
-    autoScrollMode.value = assistantAnchorState.value ? "anchorAssistantResponse" : "followBottom";
-
-    if (assistantAnchorState.value && !assistantAnchorState.value.threadId && nextThreadId) {
-      assistantAnchorState.value = {
-        ...assistantAnchorState.value,
-        threadId: nextThreadId,
-      };
-    }
+    clearFollowBottomFrame();
+    autoScrollMode.value = "followBottom";
+    isScrolledToBottom.value = true;
 
     if (!nextThreadId) {
-      previousConversationHeight.value = 0;
-      isScrolledToBottom.value = true;
-      assistantAnchorState.value = null;
-      autoScrollMode.value = "followBottom";
       return;
     }
 
     await nextTick();
-    previousConversationHeight.value = conversationScrollEl.value?.scrollHeight ?? 0;
-    isScrolledToBottom.value = isConversationPinnedToBottom();
-    scheduleRecoverySnaps(nextThreadId);
+    scrollConversationToBottom();
   },
   { flush: "post" }
 );
@@ -981,35 +937,14 @@ watch(
 
     if (!conversationResizeObserver) {
       conversationResizeObserver = new ResizeObserver(() => {
-        const nextHeight = conversationScrollEl.value?.scrollHeight ?? 0;
-        if (Math.abs(nextHeight - previousConversationHeight.value) < TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD) {
-          return;
+        isScrolledToBottom.value = isConversationPinnedToBottom();
+        if (autoScrollMode.value === "followBottom") {
+          queueFollowBottomScroll();
         }
-        queueTimelineScrollSync();
       });
     }
 
     conversationResizeObserver.observe(nextEl);
-  },
-  { flush: "post" }
-);
-
-watch(
-  () => {
-    const thread = currentThread.value;
-    const lastMessage = thread?.messages.at(-1);
-    return [
-      thread?.id ?? "",
-      thread?.state ?? "",
-      thread?.messages.length ?? 0,
-      lastMessage?.id ?? "",
-      lastMessage?.text.length ?? 0,
-      lastMessage?.isStreaming ? 1 : 0,
-      lastMessage?.role ?? "",
-    ].join("|");
-  },
-  () => {
-    queueTimelineScrollSync();
   },
   { flush: "post" }
 );
@@ -1337,19 +1272,11 @@ async function handleVerifyCode() {
 }
 
 function handleSend() {
-  const activeThread = currentThread.value;
-  const shouldArmAssistantAnchor = activeThread ? activeThread.state !== "running" : true;
   if (!currentThread.value) {
     client.createThreadAndSend("Phodex Web", "local");
-    if (shouldArmAssistantAnchor) {
-      armAssistantAnchor(null);
-    }
     return;
   }
-  const didSend = client.sendComposer(currentThread.value.id);
-  if (didSend && shouldArmAssistantAnchor) {
-    armAssistantAnchor(currentThread.value.id);
-  }
+  client.sendComposer(currentThread.value.id);
 }
 
 function handleRenameThread(threadId: string, currentTitle: string) {
@@ -1539,100 +1466,12 @@ function readShellPageState(): ShellPageState | null {
   return null;
 }
 
-function queueTimelineScrollSync() {
-  if (timelineSyncFrame !== null) {
-    return;
-  }
-  timelineSyncFrame = window.requestAnimationFrame(() => {
-    timelineSyncFrame = null;
-    void syncTimelineScrollAfterMutation();
-  });
-}
-
-async function syncTimelineScrollAfterMutation() {
-  await nextTick();
-  const thread = currentThread.value;
-  const scrollEl = conversationScrollEl.value;
-  if (!thread || !scrollEl) {
-    return;
-  }
-
-  const previousHeight = previousConversationHeight.value;
-  const nextHeight = scrollEl.scrollHeight;
-  const wasPinnedToBottom = isScrolledToBottom.value || autoScrollMode.value !== "manual";
-  const shouldCorrectBottom =
-    wasPinnedToBottom &&
-    previousHeight > 0 &&
-    nextHeight > 0 &&
-    Math.abs(nextHeight - previousHeight) > TURN_CONTENT_HEIGHT_CORRECTION_THRESHOLD;
-
-  if (assistantAnchorState.value && thread.state !== "running" && !latestAssistantMessage(thread)) {
-    assistantAnchorState.value = null;
-    autoScrollMode.value = isConversationPinnedToBottom() ? "followBottom" : "manual";
-  }
-
-  if (assistantAnchorState.value && autoScrollMode.value === "anchorAssistantResponse") {
-    const latestAssistant = latestAssistantMessage(thread);
-    const anchorThreadId = assistantAnchorState.value.threadId ?? thread.id;
-    const hasNewAssistant =
-      anchorThreadId === thread.id &&
-      latestAssistant &&
-      latestAssistant.id !== assistantAnchorState.value.previousAssistantId;
-
-    if (hasNewAssistant && latestAssistant) {
-      scrollMessageToTop(latestAssistant.id, "smooth", 260);
-      assistantAnchorState.value = null;
-      autoScrollMode.value = "manual";
-      previousConversationHeight.value = nextHeight;
-      return;
-    }
-
-    if (!isAutomaticScrollingPaused()) {
-      scheduleFollowBottomScroll();
-    }
-    previousConversationHeight.value = nextHeight;
-    return;
-  }
-
-  if (autoScrollMode.value === "followBottom" && !isAutomaticScrollingPaused()) {
-    scheduleFollowBottomScroll();
-  } else if (shouldCorrectBottom && !isAutomaticScrollingPaused()) {
-    scheduleFollowBottomScroll();
-  }
-
-  previousConversationHeight.value = nextHeight;
-  isScrolledToBottom.value = isConversationPinnedToBottom();
-}
-
-function armAssistantAnchor(threadId: string | null) {
-  assistantAnchorState.value = {
-    threadId,
-    previousAssistantId: latestAssistantMessage(currentThread.value)?.id ?? null,
-  };
-  autoScrollMode.value = "anchorAssistantResponse";
-  autoScrollCooldownUntil.value = null;
-}
-
-function latestAssistantMessage(thread: ThreadRecord | null) {
-  if (!thread) {
-    return null;
-  }
-  return [...thread.messages].reverse().find((message) => message.role === "assistant") ?? null;
-}
-
 function maxConversationScrollTop(scrollEl: HTMLElement) {
   return Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
 }
 
 function conversationBottomGap(scrollEl: HTMLElement) {
   return Math.max(0, maxConversationScrollTop(scrollEl) - scrollEl.scrollTop);
-}
-
-function isAutomaticScrollingPaused(now = Date.now()) {
-  if (isUserScrolling.value) {
-    return true;
-  }
-  return autoScrollCooldownUntil.value !== null && now < autoScrollCooldownUntil.value;
 }
 
 function isConversationPinnedToBottom() {
@@ -1643,178 +1482,49 @@ function isConversationPinnedToBottom() {
   return conversationBottomGap(scrollEl) <= TURN_BOTTOM_THRESHOLD;
 }
 
-function scheduleFollowBottomScroll() {
+function queueFollowBottomScroll() {
+  if (autoScrollMode.value !== "followBottom") {
+    return;
+  }
   if (followBottomFrame !== null) {
     return;
   }
   followBottomFrame = window.requestAnimationFrame(() => {
     followBottomFrame = null;
-    scrollConversationToBottom("auto", PROGRAMMATIC_SCROLL_LOCK_MS);
+    if (autoScrollMode.value === "followBottom") {
+      scrollConversationToBottom();
+    }
   });
 }
 
-function clearFollowBottomTimer() {
+function clearFollowBottomFrame() {
   if (followBottomFrame !== null) {
     window.cancelAnimationFrame(followBottomFrame);
     followBottomFrame = null;
   }
 }
 
-function clearWheelScrollEndTimer() {
-  if (wheelScrollEndTimer !== null) {
-    window.clearTimeout(wheelScrollEndTimer);
-    wheelScrollEndTimer = null;
-  }
-}
-
-function clearTimelineSyncTimer() {
-  if (timelineSyncFrame !== null) {
-    window.cancelAnimationFrame(timelineSyncFrame);
-    timelineSyncFrame = null;
-  }
-}
-
-function clearRecoveryTimers() {
-  for (const timer of recoveryTimers) {
-    window.clearTimeout(timer);
-  }
-  recoveryTimers = [];
-}
-
-function clearBottomSettleTimers() {
-  for (const timer of bottomSettleTimers) {
-    window.clearTimeout(timer);
-  }
-  bottomSettleTimers = [];
-}
-
-function scheduleBottomSettleCorrections(delays: readonly number[]) {
-  clearBottomSettleTimers();
-  bottomSettleTimers = delays.map((delay) =>
-    window.setTimeout(() => {
-      const scrollEl = conversationScrollEl.value;
-      if (!scrollEl) {
-        return;
-      }
-      const targetTop = maxConversationScrollTop(scrollEl);
-      if (targetTop - scrollEl.scrollTop > 0.5) {
-        scrollEl.scrollTop = targetTop;
-      }
-      previousConversationHeight.value = scrollEl.scrollHeight;
-      isScrolledToBottom.value = isConversationPinnedToBottom();
-    }, delay)
-  );
-}
-
-function scrollConversationToBottom(behavior: ScrollBehavior = "auto", lockDurationMs = PROGRAMMATIC_SCROLL_LOCK_MS) {
+function scrollConversationToBottom() {
   const scrollEl = conversationScrollEl.value;
   if (!scrollEl) {
     return;
   }
-  programmaticScrollUntil = Date.now() + lockDurationMs;
   const targetTop = maxConversationScrollTop(scrollEl);
-  if (behavior === "auto") {
-    scrollEl.scrollTop = targetTop;
-  } else {
-    scrollEl.scrollTo({
-      top: targetTop,
-      behavior,
-    });
-  }
-  previousConversationHeight.value = scrollEl.scrollHeight;
-  scheduleBottomSettleCorrections(behavior === "smooth" ? TURN_SMOOTH_BOTTOM_SETTLE_DELAYS_MS : TURN_BOTTOM_SETTLE_DELAYS_MS);
-  window.setTimeout(() => {
-    isScrolledToBottom.value = isConversationPinnedToBottom();
-  }, 0);
-}
-
-function scrollMessageToTop(messageId: string, behavior: ScrollBehavior = "smooth", lockDurationMs = 260) {
-  const scrollEl = conversationScrollEl.value;
-  if (!scrollEl) {
-    return;
-  }
-  const target = scrollEl.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
-  if (!target) {
-    scrollConversationToBottom(behavior, lockDurationMs);
-    return;
-  }
-  programmaticScrollUntil = Date.now() + lockDurationMs;
-  scrollEl.scrollTo({
-    top: Math.max(0, target.offsetTop - 8),
-    behavior,
-  });
-  window.setTimeout(() => {
-    isScrolledToBottom.value = isConversationPinnedToBottom();
-  }, 0);
-}
-
-function scheduleRecoverySnaps(threadId: string) {
-  clearRecoveryTimers();
-  recoveryTimers = TURN_RECOVERY_DELAYS_MS.map((delay) =>
-    window.setTimeout(() => {
-      if (currentThread.value?.id !== threadId || autoScrollMode.value === "manual") {
-        return;
-      }
-      scrollConversationToBottom("auto", PROGRAMMATIC_SCROLL_LOCK_MS);
-    }, delay)
-  );
-}
-
-function beginUserScrollIntent() {
-  isUserScrolling.value = true;
-  if (autoScrollMode.value !== "anchorAssistantResponse") {
-    autoScrollMode.value = "manual";
-  }
-}
-
-function finishUserScrollIntent() {
-  clearWheelScrollEndTimer();
-  isUserScrolling.value = false;
-  autoScrollCooldownUntil.value = Date.now() + TURN_USER_SCROLL_COOLDOWN_MS;
-  if (autoScrollMode.value === "anchorAssistantResponse") {
-    return;
-  }
-  autoScrollMode.value = isConversationPinnedToBottom() ? "followBottom" : "manual";
-}
-
-function handleConversationPointerDown() {
-  beginUserScrollIntent();
-}
-
-function handleConversationPointerUp() {
-  finishUserScrollIntent();
-}
-
-function handleConversationWheel() {
-  beginUserScrollIntent();
-  clearWheelScrollEndTimer();
-  wheelScrollEndTimer = window.setTimeout(() => {
-    finishUserScrollIntent();
-  }, WHEEL_SCROLL_END_DEBOUNCE_MS);
+  scrollEl.scrollTop = targetTop;
+  isScrolledToBottom.value = true;
 }
 
 function handleConversationScroll() {
-  isScrolledToBottom.value = isConversationPinnedToBottom();
-  previousConversationHeight.value = conversationScrollEl.value?.scrollHeight ?? previousConversationHeight.value;
-
-  if (Date.now() < programmaticScrollUntil) {
-    return;
-  }
-
-  if (autoScrollMode.value === "anchorAssistantResponse") {
-    return;
-  }
-
-  if (!isScrolledToBottom.value && isUserScrolling.value) {
-    autoScrollMode.value = "manual";
-  }
+  const pinnedToBottom = isConversationPinnedToBottom();
+  isScrolledToBottom.value = pinnedToBottom;
+  autoScrollMode.value = pinnedToBottom ? "followBottom" : "manual";
 }
 
 function handleScrollToLatest() {
-  assistantAnchorState.value = null;
   autoScrollMode.value = "followBottom";
-  autoScrollCooldownUntil.value = null;
-  scrollConversationToBottom("smooth", 260);
+  isScrolledToBottom.value = true;
+  clearFollowBottomFrame();
+  scrollConversationToBottom();
 }
 </script>
 
@@ -2511,10 +2221,6 @@ function handleScrollToLatest() {
                   <section
                     ref="conversationScrollEl"
                     class="phone-conversation"
-                    @pointerdown="handleConversationPointerDown"
-                    @pointerup="handleConversationPointerUp"
-                    @pointercancel="handleConversationPointerUp"
-                    @wheel.passive="handleConversationWheel"
                     @scroll.passive="handleConversationScroll"
                   >
                     <div ref="conversationInnerEl" class="phone-conversation__inner">
