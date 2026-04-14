@@ -12,6 +12,7 @@ type AppIconName =
   | "arrow-up"
   | "bolt"
   | "check"
+  | "chevron-left"
   | "chevron-down"
   | "close"
   | "edit"
@@ -66,6 +67,9 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   },
   check: {
     polylines: ["5.5 12.5 10 17 18.5 8.5"],
+  },
+  "chevron-left": {
+    polylines: ["14.75 6.5 9.25 12 14.75 17.5"],
   },
   "chevron-down": {
     polylines: ["6.5 9.5 12 15 17.5 9.5"],
@@ -1629,7 +1633,9 @@ function handleScrollToLatest() {
               <section v-else-if="rootFlow === 'bootstrap-failure'" class="root-auth-screen">
                 <div class="root-auth-screen__backdrop root-auth-screen__backdrop--failure"></div>
                 <header class="root-auth-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('onboarding')">‹</button>
+                  <button class="icon-button icon-button--dark" aria-label="Back" @click="switchRootFlow('onboarding')">
+                    <AppIcon name="chevron-left" />
+                  </button>
                   <span>Subscription</span>
                   <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
@@ -1654,7 +1660,9 @@ function handleScrollToLatest() {
               <section v-else-if="rootFlow === 'subscription-gate'" class="root-auth-screen">
                 <div class="root-auth-screen__backdrop"></div>
                 <header class="root-auth-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('bootstrap-failure')">‹</button>
+                  <button class="icon-button icon-button--dark" aria-label="Back" @click="switchRootFlow('bootstrap-failure')">
+                    <AppIcon name="chevron-left" />
+                  </button>
                   <span>Remodex Pro</span>
                   <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
@@ -1702,7 +1710,9 @@ function handleScrollToLatest() {
               <section v-else class="root-auth-screen">
                 <div class="root-auth-screen__backdrop"></div>
                 <header class="root-auth-screen__topbar">
-                  <button class="icon-button icon-button--dark" @click="switchRootFlow('onboarding')">‹</button>
+                  <button class="icon-button icon-button--dark" aria-label="Back" @click="switchRootFlow('onboarding')">
+                    <AppIcon name="chevron-left" />
+                  </button>
                   <span>Email OTP</span>
                   <span class="root-auth-screen__topbar-spacer"></span>
                 </header>
@@ -1775,7 +1785,13 @@ function handleScrollToLatest() {
               <transition name="panel" mode="out-in">
                 <section v-if="activePanel" :key="activePanel" class="mobile-page" :class="`mobile-page--${activePanel}`">
                   <header class="mobile-page__topbar">
-                    <button class="mobile-page__nav" @click="closePanel">{{ panelCanGoBack ? "‹ Back" : "Done" }}</button>
+                    <button class="mobile-page__nav" :aria-label="panelCanGoBack ? 'Back' : 'Done'" @click="closePanel">
+                      <template v-if="panelCanGoBack">
+                        <AppIcon name="chevron-left" />
+                        <span>Back</span>
+                      </template>
+                      <span v-else>Done</span>
+                    </button>
                     <strong>{{ activePanelTitle }}</strong>
                     <span class="mobile-page__spacer"></span>
                   </header>

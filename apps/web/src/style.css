@@ -648,9 +648,16 @@ button {
 }
 
 .icon-button.icon-button--dark {
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(18px);
+}
+
+.icon-button.icon-button--dark .app-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .input-label.input-label--dark {
@@ -2899,14 +2906,22 @@ button {
 }
 
 .mobile-page__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   justify-self: start;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0;
   background: transparent;
   color: var(--blue);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.mobile-page__nav .app-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .mobile-page .primary-cta,
