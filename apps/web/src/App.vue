@@ -2669,7 +2669,7 @@ function handleScrollToLatest() {
                           <div class="phone-composer__toolbar-right">
                             <button
                               v-if="currentThread?.state === 'running'"
-                              class="composer-circle composer-circle--dark"
+                              class="composer-action composer-action--dark"
                               type="button"
                               aria-label="Stop run"
                               @click="client.stopRun(currentThread.id)"
@@ -2677,7 +2677,7 @@ function handleScrollToLatest() {
                               <AppIcon name="stop" />
                             </button>
                             <button
-                              class="send-cta send-cta--circle"
+                              class="send-cta composer-action composer-action--send"
                               :class="`send-cta--${composerSendTone}`"
                               type="button"
                               :disabled="composerSendDisabled"
