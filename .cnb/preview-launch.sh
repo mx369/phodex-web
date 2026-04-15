@@ -21,6 +21,25 @@ print_preview_origin() {
   fi
 }
 
+healthcheck() {
+  python3 - "$HEALTH_URL" <<'PY'
+import json
+import sys
+import urllib.request
+
+url = sys.argv[1]
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+try:
+    with opener.open(url, timeout=2) as response:
+        if response.status != 200:
+            raise SystemExit(1)
+        payload = json.load(response)
+        raise SystemExit(0 if payload.get("ok") else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+}
+
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
@@ -37,7 +56,7 @@ echo "$!" >"$PID_FILE"
 relay_pid="$!"
 
 for _ in $(seq 1 90); do
-  if curl --silent --fail --noproxy '*' "$HEALTH_URL" >/dev/null; then
+  if healthcheck; then
     print_preview_origin
     tail -n 20 "$LOG_FILE" || true
     exit 0
