@@ -25,6 +25,10 @@ Read this file when you need to verify a change or continue from prior evidence.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - State-machine fixes: test the full path, not just the isolated component.
+- Any real OTP validation must send a real email and complete login with the real code from that mailbox.
+- Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
+- Forbidden shortcuts for real acceptance: static codes, reading server persistence/state files, hidden dev endpoints, or any local bypass path.
+- If the mailbox-reading skill is unavailable or mailbox access fails, call out the validation as blocked rather than simulating success.
 
 ## Existing Evidence
 

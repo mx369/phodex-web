@@ -90,7 +90,9 @@ For browser-state reset, use the hidden session and clear origin storage before 
 ## Login Flow
 
 The app no longer exposes any static backdoor code or local auth lookup endpoint.
-Before running the login sequence, request a real OTP email and export it into `PHODEX_QA_CODE`.
+Before running the login sequence, request a real OTP email and use a mailbox-reading skill to fetch the latest OTP from the real inbox.
+If the current session cannot access that mailbox through the required skill, stop and report the verification blocker instead of falling back to any fake/local path.
+After retrieving the real code from email, export it into `PHODEX_QA_CODE`.
 
 Recommended login path:
 

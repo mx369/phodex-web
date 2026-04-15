@@ -49,6 +49,9 @@ This repository uses progressive disclosure for AI context. Do not ingest every 
 
 - Prefer a stable verification order: build, targeted checks, then real flow validation.
 - For UI changes, capture real browser output and compare against source-informed expectations.
+- Any real auth test must request a real OTP email and complete login with the real code from that email.
+- For OTP acceptance, use a mailbox-reading skill to fetch the verification code from the real inbox; do not substitute static codes, server-state inspection, or any local bypass path.
+- If the current session cannot read the mailbox with the required skill, state the verification gap explicitly instead of faking completion.
 - If something was not verified, say so explicitly.
 
 ## Deep Reads

@@ -31,3 +31,5 @@ Read this file before editing anything under `apps/web`.
 
 - Minimum: `bun run build:web`
 - For visual changes, also validate the real running page and capture fresh evidence if acceptance depends on appearance.
+- For any OTP-gated real-flow check, request a real OTP email and use a mailbox-reading skill to fetch the code before logging in.
+- Do not use static codes, server-state reads, or any local auth shortcut during real acceptance. If mailbox access is unavailable in the current session, report that as an explicit verification blocker.
