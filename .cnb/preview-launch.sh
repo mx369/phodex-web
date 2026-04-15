@@ -37,7 +37,7 @@ echo "$!" >"$PID_FILE"
 relay_pid="$!"
 
 for _ in $(seq 1 90); do
-  if curl --silent --fail "$HEALTH_URL" >/dev/null; then
+  if curl --silent --fail --noproxy '*' "$HEALTH_URL" >/dev/null; then
     print_preview_origin
     tail -n 20 "$LOG_FILE" || true
     exit 0
