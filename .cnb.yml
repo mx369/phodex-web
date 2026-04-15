@@ -1,7 +1,7 @@
 $:
   vscode:
     - docker:
-        image: cnbcool/default-dev-env:latest
+        build: .ide/Dockerfile
       services:
         - docker
         - name: vscode
