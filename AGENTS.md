@@ -31,6 +31,8 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 ## Execution
 
 - The main thread owns coordination, integration, and final acceptance.
+- Delegate in small units with clear acceptance criteria.
+- Delegation does not transfer final responsibility.
 - In fix loops: reproduce, fix, verify.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
 - Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
