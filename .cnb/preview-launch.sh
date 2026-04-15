@@ -5,6 +5,7 @@ LOG_DIR=".cnb"
 LOG_FILE="${LOG_DIR}/relay-preview.log"
 PID_FILE="${LOG_DIR}/relay-preview.pid"
 URL_FILE="${LOG_DIR}/relay-preview-url.txt"
+HEALTH_URL="${PHODEX_PREVIEW_HEALTH_URL:-http://127.0.0.1:8686/api/health}"
 
 mkdir -p "$LOG_DIR"
 
@@ -29,22 +30,26 @@ if [[ -f "$PID_FILE" ]]; then
   fi
 fi
 
-if command -v setsid >/dev/null 2>&1; then
-  setsid env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$LOG_FILE" 2>&1 </dev/null &
-else
-  nohup env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$LOG_FILE" 2>&1 </dev/null &
-fi
+printf '[phodex-preview] launching relay for %s\n' "$HEALTH_URL" >>"$LOG_FILE"
+nohup env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$LOG_FILE" 2>&1 </dev/null &
 
 echo "$!" >"$PID_FILE"
+relay_pid="$!"
 
 for _ in $(seq 1 90); do
-  if curl --silent --fail http://127.0.0.1:8686/api/health >/dev/null; then
+  if curl --silent --fail "$HEALTH_URL" >/dev/null; then
     print_preview_origin
     tail -n 20 "$LOG_FILE" || true
     exit 0
   fi
+  if ! kill -0 "$relay_pid" 2>/dev/null; then
+    printf '[phodex-preview] relay exited before healthcheck passed\n' >&2
+    cat "$LOG_FILE" >&2 || true
+    exit 1
+  fi
   sleep 1
 done
 
+printf '[phodex-preview] healthcheck timed out for %s\n' "$HEALTH_URL" >&2
 cat "$LOG_FILE" >&2 || true
 exit 1
