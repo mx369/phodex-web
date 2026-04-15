@@ -5,3 +5,4 @@ apps/server/data/
 .cnb/*.log
 .cnb/*.pid
 .cnb/*-url.txt
+.cnb/preview-metadata.json

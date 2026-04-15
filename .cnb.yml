@@ -2,6 +2,8 @@ $:
   vscode:
     - runner:
         cpus: 2
+      env:
+        CNB_WELCOME_CMD: bash .cnb/preview-launch.sh
       docker:
         build: .ide/Dockerfile
       services:
@@ -12,6 +14,6 @@ $:
           script:
             - bun install --frozen-lockfile
             - bun run build:web
-        - name: start-relay
+        - name: export-preview-meta
           script:
-            - bash .cnb/preview-launch.sh
+            - bash .cnb/export-preview-meta.sh

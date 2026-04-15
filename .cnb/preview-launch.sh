@@ -22,7 +22,8 @@ print_preview_origin() {
 }
 
 healthcheck() {
-  python3 - "$HEALTH_URL" <<'PY'
+  local target="$1"
+  python3 - "$target" <<'PY'
 import json
 import sys
 import urllib.request
@@ -40,6 +41,19 @@ except Exception:
 PY
 }
 
+build_health_targets() {
+  HEALTH_TARGETS=("$HEALTH_URL")
+  local container_ip=""
+
+  if [[ "$HEALTH_URL" == *"127.0.0.1"* ]]; then
+    HEALTH_TARGETS+=("${HEALTH_URL/127.0.0.1/localhost}")
+    container_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    if [[ -n "$container_ip" ]]; then
+      HEALTH_TARGETS+=("${HEALTH_URL/127.0.0.1/$container_ip}")
+    fi
+  fi
+}
+
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
@@ -54,13 +68,17 @@ nohup env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$LOG_FILE"
 
 echo "$!" >"$PID_FILE"
 relay_pid="$!"
+build_health_targets
 
 for _ in $(seq 1 90); do
-  if healthcheck; then
-    print_preview_origin
-    tail -n 20 "$LOG_FILE" || true
-    exit 0
-  fi
+  for target in "${HEALTH_TARGETS[@]}"; do
+    if healthcheck "$target"; then
+      printf '[phodex-preview] healthcheck passed via %s\n' "$target" >>"$LOG_FILE"
+      print_preview_origin
+      tail -n 20 "$LOG_FILE" || true
+      exit 0
+    fi
+  done
   if ! kill -0 "$relay_pid" 2>/dev/null; then
     printf '[phodex-preview] relay exited before healthcheck passed\n' >&2
     cat "$LOG_FILE" >&2 || true
