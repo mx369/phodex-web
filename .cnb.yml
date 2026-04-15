@@ -3,16 +3,13 @@ $:
     - docker:
         build: .ide/Dockerfile
       services:
+        - vscode
         - docker
-        - name: vscode
-          options:
-            onlyPreview: true
-            launch: env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview
-            keepAliveTimeout: 18h
-            daemon: true
-            backup: true
       stages:
         - name: install
           script:
             - bun install --frozen-lockfile
             - bun run build:web
+        - name: start-relay
+          script:
+            - bash .cnb/preview-launch.sh

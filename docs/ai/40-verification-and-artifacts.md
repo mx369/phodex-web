@@ -18,7 +18,9 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?secret=...`
-- CNB preview mode uses port `8686` and serves the web UI and relay from the same public origin.
+- CNB relay preview uses port `8686` and serves the web UI and relay from the same public origin.
+- For CNB machine traffic, derive the public preview origin from `CNB_VSCODE_PROXY_URI` by replacing `{{port}}` with `8686`.
+- Do not use CNB `jumpUrl` as a bridge target; it is a browser-facing entry and returns auth gating to direct non-browser requests.
 
 ## Verification Expectations
 
@@ -28,6 +30,7 @@ Read this file when you need to verify a change or continue from prior evidence.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - State-machine fixes: test the full path, not just the isolated component.
+- CNB relay changes: prefer a direct preview-origin validation over SSH tunnels when the target client is a local bridge or another daemon.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
 - Forbidden shortcuts for real acceptance: static codes, reading server persistence/state files, hidden dev endpoints, or any local bypass path.
