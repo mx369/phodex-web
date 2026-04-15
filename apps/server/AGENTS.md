@@ -4,8 +4,9 @@ Read this file before editing anything under `apps/server`.
 
 ## Scope
 
-- Main file: `src/index.ts`
-- This package owns Bun-native HTTPS/WSS transport, OTP auth, snapshot/bootstrap, persistence, and the local Codex app-server bridge.
+- Main files: `src/relay.ts` and `src/index.ts`
+- `src/relay.ts` owns the public HTTP/WSS relay, OTP auth, static web serving, and authenticated client sessions.
+- `src/index.ts` owns the local outbound bridge to the public relay plus the real local Codex app-server integration.
 
 ## Package Rules
 
@@ -18,9 +19,9 @@ Read this file before editing anything under `apps/server`.
 
 ## Current Truth
 
-- Real endpoints exist for health, bootstrap, OTP issue, and OTP verify.
-- OTP auth now requires real email delivery; no dev-code lookup or static bypass remains.
-- The websocket bridge relays snapshots and live thread/message updates.
+- Real endpoints exist for health, bootstrap, OTP issue, OTP verify, client relay websocket, and bridge websocket.
+- OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
+- The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
 - Richer upstream message mapping is still incomplete.
 

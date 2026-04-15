@@ -1,0 +1,13 @@
+$:
+  vscode:
+    - docker:
+        image: cnbcool/default-dev-env:latest
+      services:
+        - docker
+        - name: vscode
+          options:
+            onlyPreview: true
+            launch: bash .cnb/preview-launch.sh
+            keepAliveTimeout: 18h
+            daemon: false
+            backup: true

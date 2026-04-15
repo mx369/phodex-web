@@ -196,6 +196,45 @@ export type ClientEvent =
   | { type: "run:stop"; threadId: string }
   | { type: "settings:update"; patch: Partial<AppSettings> };
 
+export type BridgeDispatchEvent = Extract<
+  ClientEvent,
+  | { type: "thread:create" }
+  | { type: "thread:select" }
+  | { type: "thread:rename" }
+  | { type: "thread:archive" }
+  | { type: "message:send" }
+  | { type: "draft:resume" }
+  | { type: "draft:remove" }
+  | { type: "run:stop" }
+>;
+
+export type BridgeCommand =
+  | { type: "bridge:sync-all" }
+  | { type: "bridge:sync-thread"; threadId: string }
+  | {
+      type: "bridge:dispatch";
+      requestId: string;
+      userId: string;
+      selectedThreadId: string | null;
+      event: BridgeDispatchEvent;
+    };
+
+export type BridgeEvent =
+  | { type: "bridge:state"; threads: ThreadRecord[]; connection: RelayConnection }
+  | { type: "bridge:thread:updated"; thread: ThreadRecord }
+  | { type: "bridge:message:appended"; threadId: string; message: ThreadMessage }
+  | { type: "bridge:message:delta"; threadId: string; messageId: string; delta: string }
+  | { type: "bridge:message:finished"; threadId: string; messageId: string }
+  | { type: "bridge:presence"; connection: RelayConnection }
+  | { type: "bridge:banner"; banner: CompletionBanner | null }
+  | {
+      type: "bridge:user-patch";
+      userId: string;
+      selectedThreadId?: string | null;
+      banner?: CompletionBanner | null;
+    }
+  | { type: "bridge:toast"; tone: "info" | "success" | "error"; message: string; userId?: string };
+
 export type ServerEvent =
   | { type: "snapshot"; snapshot: AppSnapshot }
   | { type: "thread:updated"; thread: ThreadRecord; selectedThreadId: string | null }

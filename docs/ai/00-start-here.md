@@ -14,8 +14,8 @@ Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/p
 ## What Is Real Today
 
 - Email OTP sign-in is real.
-- HTTPS + WSS relay is real.
-- Local Codex app-server bridge is real.
+- Public HTTP + WSS relay is real.
+- Local outbound Codex app-server bridge is real.
 - Chat thread creation, message send, streaming reply, stop, queue, resume draft, rename, and archive are real.
 
 ## What Is Not Done

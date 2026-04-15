@@ -3,8 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "dev": "bun --watch src/relay.ts",
+    "start": "bun src/relay.ts",
+    "dev:relay": "bun --watch src/relay.ts",
+    "start:relay": "bun src/relay.ts",
+    "dev:bridge": "bun --watch src/index.ts",
+    "start:bridge": "bun src/index.ts"
   },
   "dependencies": {
     "@phodex/shared": "workspace:*"

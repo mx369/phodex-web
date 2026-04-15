@@ -8,14 +8,17 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Install: `bun install`
 - Web dev: `bun run dev:web`
 - Web build: `bun run build:web`
-- Server dev: `bun run dev:server`
-- Server start: `bun run start:server`
+- Relay dev: `bun run dev:relay`
+- Relay start: `bun run start:relay`
+- Bridge dev: `bun run dev:bridge`
+- Bridge start: `bun run start:bridge`
 
 ## Runtime Defaults
 
-- Local app URL: `https://localhost:3443`
-- Relay endpoint: `wss://localhost:3443/relay`
-- Self-signed TLS is expected locally.
+- Local/public relay URL: `http://localhost:3443`
+- Client relay endpoint: `ws://localhost:3443/relay`
+- Local bridge endpoint target: `ws://localhost:3443/bridge?secret=...`
+- CNB preview mode uses port `8686` and serves the web UI and relay from the same public origin.
 
 ## Verification Expectations
 

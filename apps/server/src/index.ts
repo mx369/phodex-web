@@ -8,6 +8,9 @@ import type {
   AppSettings,
   AppSnapshot,
   AuthSession,
+  BridgeCommand,
+  BridgeDispatchEvent,
+  BridgeEvent,
   ClientEvent,
   CompletionBanner,
   DeliveryMode,
@@ -67,6 +70,7 @@ type PendingCodexRequest = {
 };
 
 type ActiveTurnState = {
+  userId: string;
   threadId: string;
   turnId: string;
   assistantMessageId: string | null;
@@ -108,7 +112,7 @@ const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
 const appRoot = resolve(serverRoot, "../..");
 const dataDir = resolve(serverRoot, "data");
-const dataFile = resolve(dataDir, "state.json");
+const dataFile = process.env.PHODEX_STATE_FILE ?? resolve(dataDir, "bridge-state.json");
 const certDir = resolve(serverRoot, "certs");
 const distDir = resolve(appRoot, "apps/web/dist");
 
@@ -117,7 +121,10 @@ const PORT = Number(process.env.PHODEX_PORT ?? "3443");
 const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
-const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Local Codex bridge";
+const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
+const PUBLIC_RELAY_URL = process.env.PHODEX_RELAY_URL ?? "ws://127.0.0.1:3443";
+const BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET ?? "phodex-local-bridge";
+const BRIDGE_RECONNECT_MS = Number(process.env.PHODEX_BRIDGE_RECONNECT_MS ?? "1500");
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
@@ -141,6 +148,7 @@ let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const legacyOtpCodesPruned = pruneLegacyOtpCodes();
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
+const bridgeUsers = new Map<string, PersistedUser>();
 const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
 const pendingTurnModes = new Map<string, "chat" | "plan">();
@@ -150,120 +158,227 @@ const projectContextCache = new Map<string, ProjectContext>();
 let codexProcess: ChildProcessWithoutNullStreams | null = null;
 let codexSocket: WebSocket | null = null;
 let codexReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let relaySocket: WebSocket | null = null;
+let relayReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let codexConnectionState: RelayConnection["state"] = "connecting";
 let codexLastSyncAt: string | null = null;
 let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
 let serviceTierUnsupportedToastSent = false;
-
-const tls = ensureLocalTls();
-
 void ensureCodexBridge();
+connectRelaySocket();
 
-const server = Bun.serve<SocketData>({
-  hostname: HOST,
-  port: PORT,
-  tls,
-  async fetch(req, serverInstance) {
-    const url = new URL(req.url);
-    if (url.pathname === "/relay") {
-      const token = url.searchParams.get("token");
-      const session = token ? persisted.sessions[token] : null;
-      if (!token || !session || sessionExpired(session.expiresAt)) {
-        return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
-      }
-
-      const upgraded = serverInstance.upgrade(req, {
-        data: {
-          token,
-          userId: session.userId,
-        },
-      });
-      return upgraded ? undefined : withCors(req, json({ ok: false, error: "Upgrade failed" }, 400));
-    }
-
-    if (req.method === "OPTIONS") {
-      return withCors(req, new Response(null, { status: 204 }));
-    }
-
-    if (url.pathname === "/api/health") {
-      return withCors(
-        req,
-        json({
-          ok: true,
-          relay: RELAY_LABEL,
-          secure: true,
-          codex: {
-            state: codexConnectionState,
-            wsUrl: CODEX_WS_URL,
-            bin: CODEX_BIN || null,
-            managed: MANAGE_CODEX,
-          },
-          users: Object.keys(persisted.users).length,
-        })
-      );
-    }
-
-    if (url.pathname === "/api/bootstrap" && req.method === "GET") {
-      const session = authenticate(req);
-      if (!session) {
-        return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
-      }
-      return withCors(req, json(snapshotForUser(session.userId)));
-    }
-
-    if (url.pathname === "/api/auth/request-code" && req.method === "POST") {
-      return withCors(req, await handleRequestCode(req));
-    }
-
-    if (url.pathname === "/api/auth/verify-code" && req.method === "POST") {
-      return withCors(req, await handleVerifyCode(req));
-    }
-
-    if (url.pathname.startsWith("/api/")) {
-      return withCors(req, json({ ok: false, error: "Not found" }, 404));
-    }
-
-    return withCors(req, serveStatic(url.pathname));
-  },
-  websocket: {
-    open(ws) {
-      registerSocket(ws);
-      sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(ws.data.userId) });
-      publishPresenceToAllUsers();
-    },
-    message(ws, raw) {
-      try {
-        const message = JSON.parse(raw.toString()) as ClientEvent;
-        handleClientEvent(ws, message);
-      } catch {
-        sendEvent(ws, { type: "toast", tone: "error", message: "Invalid event payload." });
-      }
-    },
-    close(ws) {
-      unregisterSocket(ws);
-      publishPresenceToAllUsers();
-    },
-  },
-});
-
-console.log(`[phodex] HTTPS relay listening on https://localhost:${PORT}`);
-console.log(`[phodex] WSS endpoint ready at wss://localhost:${PORT}/relay`);
-console.log(`[phodex] Codex target ${CODEX_WS_URL}`);
-if (OTP_MAIL_CONFIG) {
-  console.log(
-    `[phodex] OTP email delivery via Resend (${OTP_MAIL_CONFIG.sourceLabel}) from ${OTP_MAIL_CONFIG.authEmailFrom}`
-  );
-} else {
-  console.warn(`[phodex] OTP email delivery is unavailable until Resend credentials are configured`);
-}
+console.log(`[phodex-bridge] Local bridge starting for ${PUBLIC_RELAY_URL}`);
+console.log(`[phodex-bridge] Codex target ${CODEX_WS_URL}`);
 if (legacyOtpCodesPruned) {
   schedulePersist();
 }
 
 process.on("SIGINT", shutdownCodexBridge);
 process.on("SIGTERM", shutdownCodexBridge);
+
+function buildBridgeSocketUrl() {
+  const url = new URL(PUBLIC_RELAY_URL);
+  if (url.protocol === "http:") {
+    url.protocol = "ws:";
+  } else if (url.protocol === "https:") {
+    url.protocol = "wss:";
+  }
+  url.pathname = "/bridge";
+  url.search = "";
+  url.searchParams.set("secret", BRIDGE_SECRET);
+  return url.toString();
+}
+
+function connectRelaySocket() {
+  if (relaySocket && (relaySocket.readyState === WebSocket.OPEN || relaySocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  clearRelayReconnectTimer();
+  const target = buildBridgeSocketUrl();
+  const socket = new WebSocket(target);
+  relaySocket = socket;
+
+  socket.addEventListener("open", () => {
+    console.log(`[phodex-bridge] Connected to relay ${target}`);
+    sendBridgeState();
+    publishPresenceToAllUsers();
+    void syncAllThreadsFromCodex().catch((error) => {
+      console.error(`[phodex-bridge] initial sync failed: ${readErrorMessage(error)}`);
+    });
+  });
+
+  socket.addEventListener("message", (event) => {
+    handleRelayMessage(typeof event.data === "string" ? event.data : event.data.toString());
+  });
+
+  socket.addEventListener("error", () => {
+    scheduleRelayReconnect();
+  });
+
+  socket.addEventListener("close", () => {
+    if (relaySocket === socket) {
+      relaySocket = null;
+    }
+    console.warn("[phodex-bridge] Relay connection closed.");
+    scheduleRelayReconnect();
+  });
+}
+
+function handleRelayMessage(raw: string) {
+  let command: BridgeCommand | null = null;
+  try {
+    command = JSON.parse(raw) as BridgeCommand;
+  } catch {
+    return;
+  }
+
+  if (!command) {
+    return;
+  }
+
+  switch (command.type) {
+    case "bridge:sync-all":
+      void syncAllThreadsFromCodex().catch((error) => {
+        console.error(`[phodex-bridge] sync-all failed: ${readErrorMessage(error)}`);
+      });
+      break;
+    case "bridge:sync-thread":
+      void syncThreadFromCodex(command.threadId, true).catch((error) => {
+        console.error(`[phodex-bridge] sync-thread failed: ${readErrorMessage(error)}`);
+      });
+      break;
+    case "bridge:dispatch":
+      void handleBridgeDispatch(command);
+      break;
+  }
+}
+
+async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bridge:dispatch" }>) {
+  const user = ensureBridgeUser(command.userId, command.selectedThreadId);
+  try {
+    switch (command.event.type) {
+      case "thread:create":
+        await handleThreadCreate(user, command.event);
+        return;
+      case "thread:select":
+        user.selectedThreadId = command.event.threadId;
+        sendUserPatch(user.profile.id, {
+          selectedThreadId: command.event.threadId,
+          banner: null,
+        });
+        await syncThreadFromCodex(command.event.threadId, true);
+        return;
+      case "thread:rename":
+        await handleThreadRename(user, command.event.threadId, command.event.title);
+        return;
+      case "thread:archive":
+        await handleThreadArchive(user, command.event.threadId);
+        return;
+      case "message:send":
+        await handleMessageSend(user, command.event);
+        return;
+      case "draft:resume":
+        await handleDraftResume(user, command.event.threadId, command.event.draftId);
+        return;
+      case "draft:remove":
+        handleDraftRemove(user.profile.id, command.event.threadId, command.event.draftId);
+        return;
+      case "run:stop":
+        await handleRunStop(user.profile.id, command.event.threadId);
+        return;
+    }
+  } catch (error) {
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+  }
+}
+
+function ensureBridgeUser(userId: string, selectedThreadId: string | null) {
+  let user = bridgeUsers.get(userId);
+  if (!user) {
+    user = {
+      profile: {
+        id: userId,
+        email: "",
+        displayName: "Operator",
+      },
+      settings: {
+        fontStyle: "system",
+        glassMode: true,
+        notifications: true,
+        reducedMotion: false,
+        compactSidebar: false,
+      },
+      selectedThreadId,
+      banner: null,
+    };
+    bridgeUsers.set(userId, user);
+  } else {
+    user.selectedThreadId = selectedThreadId;
+  }
+  return user;
+}
+
+function sendUserPatch(
+  userId: string,
+  patch: {
+    selectedThreadId?: string | null;
+    banner?: CompletionBanner | null;
+  }
+) {
+  const user = bridgeUsers.get(userId) ?? ensureBridgeUser(userId, patch.selectedThreadId ?? null);
+  if (Object.prototype.hasOwnProperty.call(patch, "selectedThreadId")) {
+    user.selectedThreadId = patch.selectedThreadId ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "banner")) {
+    user.banner = patch.banner ?? null;
+  }
+  sendBridgeEvent({
+    type: "bridge:user-patch",
+    userId,
+    ...patch,
+  });
+}
+
+function sendBridgeState() {
+  sendBridgeEvent({
+    type: "bridge:state",
+    threads: listBridgeThreads(),
+    connection: buildConnection(),
+  });
+}
+
+function listBridgeThreads() {
+  return [...threadCache.values()].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt));
+}
+
+function sendBridgeEvent(event: BridgeEvent) {
+  if (!relaySocket || relaySocket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  relaySocket.send(JSON.stringify(event));
+}
+
+function scheduleRelayReconnect() {
+  if (relayReconnectTimer) {
+    return;
+  }
+
+  relayReconnectTimer = setTimeout(() => {
+    relayReconnectTimer = null;
+    connectRelaySocket();
+  }, BRIDGE_RECONNECT_MS);
+}
+
+function clearRelayReconnectTimer() {
+  if (!relayReconnectTimer) {
+    return;
+  }
+  clearTimeout(relayReconnectTimer);
+  relayReconnectTimer = null;
+}
 
 async function handleRequestCode(req: Request) {
   const body = await safeJson(req);
@@ -434,7 +549,10 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
     const thread = mergeCodexThread(result.thread, false, false);
     threadCache.set(thread.id, thread);
     user.selectedThreadId = thread.id;
-    clearAllBanners();
+    sendUserPatch(user.profile.id, {
+      selectedThreadId: thread.id,
+      banner: null,
+    });
     schedulePersist();
     broadcastThreadToAllUsers(thread.id);
     broadcastSnapshotsToAllUsers();
@@ -485,6 +603,9 @@ async function handleThreadArchive(user: PersistedUser, threadId: string) {
     await codexRequest(isArchived ? "thread/unarchive" : "thread/archive", { threadId });
     if (!isArchived && user.selectedThreadId === threadId) {
       user.selectedThreadId = findFirstLiveThreadId(threadId);
+      sendUserPatch(user.profile.id, {
+        selectedThreadId: user.selectedThreadId,
+      });
     }
     schedulePersist();
     await syncAllThreadsFromCodex();
@@ -530,7 +651,10 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
     }
 
     user.selectedThreadId = thread.id;
-    clearAllBanners();
+    sendUserPatch(user.profile.id, {
+      selectedThreadId: thread.id,
+      banner: null,
+    });
     markThreadRunning(thread.id, text);
     const turnMode = deriveRequestedTurnMode(text, event.planArmed);
     pendingTurnModes.set(thread.id, turnMode);
@@ -542,6 +666,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
     const turnId = readString(turnResponse?.turn?.id);
     if (turnId) {
       activeTurns.set(thread.id, {
+        userId: user.profile.id,
         threadId: thread.id,
         turnId,
         assistantMessageId: null,
@@ -836,6 +961,7 @@ function handleTurnStarted(params: any) {
   thread.state = "running";
   thread.lastActivityAt = toIsoFromEpoch(params?.turn?.startedAt) ?? new Date().toISOString();
   activeTurns.set(threadId, {
+    userId: activeTurns.get(threadId)?.userId ?? "",
     threadId,
     turnId,
     assistantMessageId: null,
@@ -872,7 +998,7 @@ function handleItemStarted(params: any) {
   }
 
   appendMessage(threadId, message);
-  broadcastToAllUsers({ type: "message:appended", threadId, message });
+  sendBridgeEvent({ type: "bridge:message:appended", threadId, message });
   broadcastThreadToAllUsers(threadId);
 }
 
@@ -896,14 +1022,14 @@ function handleAgentMessageDelta(params: any) {
       isStreaming: true,
     };
     appendMessage(threadId, message);
-    broadcastToAllUsers({ type: "message:appended", threadId, message });
+    sendBridgeEvent({ type: "bridge:message:appended", threadId, message });
   }
 
   message.text += delta;
   message.isStreaming = true;
   thread.preview = message.text || thread.preview;
   thread.lastActivityAt = new Date().toISOString();
-  broadcastToAllUsers({ type: "message:delta", threadId, messageId, delta });
+  sendBridgeEvent({ type: "bridge:message:delta", threadId, messageId, delta });
 }
 
 function handleItemCompleted(params: any) {
@@ -930,7 +1056,7 @@ function handleItemCompleted(params: any) {
     if (liveMessage) {
       liveMessage.isStreaming = false;
     }
-    broadcastToAllUsers({ type: "message:finished", threadId, messageId: message.id });
+    sendBridgeEvent({ type: "bridge:message:finished", threadId, messageId: message.id });
   }
   broadcastThreadToAllUsers(threadId);
 }
@@ -958,6 +1084,7 @@ function handleTurnCompleted(params: any) {
     return;
   }
 
+  const completedTurn = activeTurns.get(threadId);
   activeTurns.delete(threadId);
   pendingTurnModes.delete(threadId);
   const thread = ensureThreadRecord(threadId);
@@ -971,12 +1098,11 @@ function handleTurnCompleted(params: any) {
     title: thread.title,
     subtitle: local.queuedDrafts.length > 0 ? "Run finished. One queued draft is ready." : "Run completed and synced.",
   };
-  for (const user of Object.values(persisted.users)) {
-    user.banner = banner;
+  if (completedTurn?.userId) {
+    sendUserPatch(completedTurn.userId, { banner });
   }
   schedulePersist();
   broadcastThreadToAllUsers(threadId);
-  broadcastBannersToAllUsers();
   void syncThreadFromCodex(threadId, true);
 }
 
@@ -997,7 +1123,7 @@ async function syncAllThreadsFromCodex() {
 
     const nextIds = new Set<string>();
     const selectedThreadIds = new Set(
-      Object.values(persisted.users)
+      [...bridgeUsers.values()]
         .map((user) => user.selectedThreadId)
         .filter((threadId): threadId is string => Boolean(threadId))
     );
@@ -1388,7 +1514,7 @@ function normalizeSelections() {
     .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
     .at(0)?.id ?? null;
 
-  for (const user of Object.values(persisted.users)) {
+  for (const user of bridgeUsers.values()) {
     if (user.selectedThreadId === null) {
       continue;
     }
@@ -2359,14 +2485,12 @@ function broadcastToAllUsers(event: ServerEvent) {
 }
 
 function broadcastSnapshotsToAllUsers() {
-  for (const userId of Object.keys(persisted.users)) {
-    broadcast(userId, { type: "snapshot", snapshot: snapshotForUser(userId) });
-  }
+  sendBridgeState();
 }
 
 function broadcastBannersToAllUsers() {
-  for (const [userId, user] of Object.entries(persisted.users)) {
-    broadcast(userId, { type: "banner", banner: user.banner });
+  for (const user of bridgeUsers.values()) {
+    sendUserPatch(user.profile.id, { banner: user.banner });
   }
 }
 
@@ -2375,32 +2499,23 @@ function broadcastThreadToAllUsers(threadId: string) {
   if (!thread) {
     return;
   }
-
-  for (const [userId, user] of Object.entries(persisted.users)) {
-    broadcast(userId, {
-      type: "thread:updated",
-      thread,
-      selectedThreadId: user.selectedThreadId,
-    });
-  }
+  sendBridgeEvent({ type: "bridge:thread:updated", thread });
 }
 
 function clearAllBanners() {
-  for (const user of Object.values(persisted.users)) {
+  for (const user of bridgeUsers.values()) {
     user.banner = null;
+    sendUserPatch(user.profile.id, { banner: null });
   }
-  broadcastBannersToAllUsers();
 }
 
 function publishPresenceToAllUsers() {
   const connection = buildConnection();
-  for (const userId of Object.keys(persisted.users)) {
-    broadcast(userId, { type: "presence", connection });
-  }
+  sendBridgeEvent({ type: "bridge:presence", connection });
 }
 
 function sendToast(userId: string, tone: "info" | "success" | "error", message: string) {
-  broadcast(userId, { type: "toast", tone, message });
+  sendBridgeEvent({ type: "bridge:toast", tone, message, userId });
 }
 
 function broadcast(userId: string, event: ServerEvent) {
@@ -2799,7 +2914,12 @@ function startManagedCodexProcess() {
 }
 
 function shutdownCodexBridge() {
+  clearRelayReconnectTimer();
   clearCodexReconnectTimer();
+  if (relaySocket && (relaySocket.readyState === WebSocket.OPEN || relaySocket.readyState === WebSocket.CONNECTING)) {
+    relaySocket.close();
+  }
+  relaySocket = null;
   if (codexSocket && (codexSocket.readyState === WebSocket.OPEN || codexSocket.readyState === WebSocket.CONNECTING)) {
     codexSocket.close();
   }

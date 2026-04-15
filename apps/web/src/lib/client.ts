@@ -39,9 +39,9 @@ const PENDING_THREAD_PREFIX = "pending-thread:";
 const PENDING_THREAD_TIMEOUT_MS = 12_000;
 const runtimeHost = window.location.hostname || "localhost";
 const inferredApiOrigin =
-  window.location.port === "3443" && window.location.protocol === "https:"
-    ? window.location.origin
-    : `https://${runtimeHost}:3443`;
+  import.meta.env.DEV && window.location.port !== "3443"
+    ? `${window.location.protocol === "https:" ? "https" : "http"}://${runtimeHost}:3443`
+    : window.location.origin;
 const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || inferredApiOrigin;
 const WS_ORIGIN = API_ORIGIN.replace(/^http/, "ws");
 

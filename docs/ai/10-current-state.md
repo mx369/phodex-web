@@ -5,15 +5,15 @@ Broad status snapshot for planning and handoff.
 ## Repository Shape
 
 - `apps/web`: Vue 3 full-page mobile shell, current UI implementation, and client socket/bootstrap logic.
-- `apps/server`: Bun HTTPS/WSS relay, email OTP auth, local state persistence, and Codex app-server bridge.
+- `apps/server`: split Bun runtime with `relay.ts` for the public web/OTP/relay surface and `index.ts` for the local outbound Codex bridge.
 - `packages/shared`: shared protocol and record types.
 - `docs`: source audit notes, page matrices, CDP acceptance docs, and this AI context stack.
 
 ## Real Today
 
 - Email code request, live Resend delivery when mail config is available, and OTP verify.
-- HTTPS bootstrap and WSS relay session sync.
-- Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt.
+- Public bootstrap/API plus relay websocket, with a separate bridge websocket for the local client machine.
+- Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt through the outbound bridge.
 - Conversation send, stream, stop, queue, resume, rename, and archive.
 - Real browser-based CDP screenshots and acceptance artifacts.
 

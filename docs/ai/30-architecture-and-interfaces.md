@@ -6,7 +6,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - `apps/web/src/App.vue`: top-level UI state, page routing, shell panels, dialogs, and composer surfaces.
 - `apps/web/src/lib/client.ts`: bootstrap fetches, websocket lifecycle, optimistic UI sync, and client event emission.
-- `apps/server/src/index.ts`: Bun HTTPS/WSS server, auth routes, relay session management, local persistence, and Codex app-server bridge.
+- `apps/server/src/relay.ts`: Bun public relay, static web serving, OTP auth, authenticated client sessions, and bridge session management.
+- `apps/server/src/index.ts`: local outbound bridge, Codex app-server integration, thread sync, and local filesystem/worktree operations.
 - `packages/shared/src/index.ts`: shared event and record shapes.
 
 ## HTTP Endpoints
@@ -16,6 +17,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `POST /api/auth/request-code`: issue OTP and send it through Resend when mail config is available.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /relay?token=...`: WSS upgrade endpoint.
+- `GET /bridge?secret=...`: local bridge WSS upgrade endpoint.
 
 ## Product Scope Constraints
 
@@ -29,7 +31,9 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## Runtime Behaviors
 
-- Bootstrap and websocket open send a full snapshot.
+- Bootstrap and client websocket open send a full snapshot from the public relay.
+- The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
+- The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.
@@ -62,9 +66,9 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## Invariants
 
-- Server transport must stay Bun-native for HTTPS and WSS.
+- Public relay transport must stay Bun-native for HTTP/WSS.
 - OTP email delivery should stay dependency-light: direct HTTP to Resend is acceptable; do not add a mail SDK just to send one transactional message.
-- Keep the local Codex bridge real. Do not regress to fake assistant scripts.
+- Keep the local Codex bridge real and outbound. Do not regress to fake assistant scripts or put local filesystem execution on the public relay.
 - Do not add OTP backdoors, static bypass codes, or local auth lookup endpoints.
 
 ## Auth Delivery Notes
