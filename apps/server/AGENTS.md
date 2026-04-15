@@ -13,6 +13,8 @@ Read this file before editing anything under `apps/server`.
 - Keep the bridge connected to the real local Codex CLI service.
 - Do not add OTP backdoors, static bypass codes, or local dev-only auth shortcuts.
 - Do not claim thread deletion works; Codex app-server does not currently expose it.
+- Do not add QR login or camera pairing support.
+- Do not add end-to-end encryption on top of HTTPS/WSS.
 
 ## Current Truth
 

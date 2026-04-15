@@ -17,6 +17,11 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 
+## Product Scope Constraints
+
+- Auth stays email-OTP-first. Do not add QR login or camera pairing flows.
+- Transport security is HTTPS/WSS only. Do not add end-to-end encryption protocols or key-exchange layers.
+
 ## Client -> Server Events
 
 - `thread:create` accepts `mode` (`local` or `worktree`) and an optional `cwd` seed from the selected drawer project target.
