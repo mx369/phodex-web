@@ -28,6 +28,10 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Commit each intentional change separately.
 - Commit messages should be primarily in Chinese. Keep commands, paths, code symbols, and proper nouns in English when that is clearer.
 
+## Publishing Defaults
+
+- For CNB operations, default to the org `mxai-2026` and the repo path `mxai-2026/phodex-web` unless the user explicitly asks for another target.
+
 ## Execution
 
 - The main thread owns coordination, integration, and final acceptance.
