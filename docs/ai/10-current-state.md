@@ -1,6 +1,6 @@
 # Current State
 
-This file is the level-1 handoff and status summary. It is intentionally broader than `00-start-here.md` but still compressed.
+Broad status snapshot for planning and handoff.
 
 ## Repository Shape
 
@@ -9,51 +9,39 @@ This file is the level-1 handoff and status summary. It is intentionally broader
 - `packages/shared`: shared protocol and record types.
 - `docs`: source audit notes, page matrices, CDP acceptance docs, and this AI context stack.
 
-## Functional Reality
-
-Implemented and real:
+## Real Today
 
 - Email code request, live Resend delivery when mail config is available, and OTP verify.
 - HTTPS bootstrap and WSS relay session sync.
 - Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt.
-- Conversation send/stream/stop flow.
-- Queued drafts while a run is active.
-- Thread rename and archive/unarchive.
+- Conversation send, stream, stop, queue, resume, rename, and archive.
 - Real browser-based CDP screenshots and acceptance artifacts.
 
-Implemented but incomplete:
+## Still Incomplete
 
-- Onboarding, bootstrap failure, subscription gate, and paywall pages.
-- Home empty, sidebar, settings, archived, and about pages now render as full-page mobile surfaces, but remain approximate.
-- Turn composer autocomplete, structured-input replacement states, and deeper toolbar/sheet affordances.
+- Page-by-page parity across onboarding, auth, home, turn, settings, archived, about, and paywall.
+- Purchase and restore flows; current subscription surfaces are preview-only.
+- Turn secondary states, structured-input replacement, and some toolbar/sheet affordances.
+- Final visual parity across screens.
 
-Not yet source-equal or still shell-level:
-
-- Pixel parity across screens.
-- Real subscription purchase or restore flows; current paywall/gate surfaces are preview-only.
-- Many upstream interaction details such as swipe actions, context menus, richer approval flows, and composer/toolbar secondary surfaces.
-
-Explicitly excluded by current product direction:
+## Excluded Scope
 
 - QR-code login and camera pairing.
 - End-to-end encryption and upstream encrypted-envelope flows.
 
-## Current Architectural Debt
+## Current Risk Areas
 
-- Thread rendering now covers richer Codex execution items, but the resulting card system is still an approximation of source `TurnView`.
-- Composer-adjacent work-state now exists, but it is still a simpler band rather than the full source `TurnView` accessory system.
+- Turn rendering maps more Codex execution items than before, but the resulting UI is still a simplified version of source `TurnView`.
+- Several screens are behaviorally real but still visually approximate.
 
-## Acceptance Bar
+## Acceptance Standard
 
-The intended acceptance bar is not "looks similar." It is:
+- Reconstruct from source, not marketing screenshots.
+- Verify the real flow.
+- Capture fresh evidence when acceptance depends on behavior or visuals.
+- Call out remaining gaps explicitly.
 
-1. Source app pages identified.
-2. Page behavior reconstructed from source.
-3. Real flow verified.
-4. CDP screenshots captured.
-5. Remaining gaps called out explicitly instead of being implied away.
-
-## Recommended Next Reads
+## Read Next
 
 - UI work: `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`
 - Server and protocol work: `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`

@@ -17,83 +17,48 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 
-## Product Scope Constraints
-
-- Auth must stay email-OTP-first. Do not add QR login or camera pairing flows.
-- Transport security is HTTPS/WSS only. Do not add end-to-end encryption protocols or key exchange layers.
-
 ## Client -> Server Events
 
-- `thread:create`
-  accepts `mode` (`local` or `worktree`) and an optional `cwd` seed from the selected drawer project target
-- `thread:select`
-- `thread:clearSelection`
-- `thread:rename`
-- `thread:delete`
-- `thread:archive`
-- `message:send`
-- `draft:resume`
-- `draft:remove`
-- `run:stop`
-- `settings:update`
+- `thread:create` accepts `mode` (`local` or `worktree`) and an optional `cwd` seed from the selected drawer project target.
+- Other client events: `thread:select`, `thread:clearSelection`, `thread:rename`, `thread:delete`, `thread:archive`, `message:send`, `draft:resume`, `draft:remove`, `run:stop`, `settings:update`.
 
-## Server -> Client Behavior
+## Runtime Behaviors
 
 - Bootstrap and websocket open send a full snapshot.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
-- Historical thread reads and live item notifications now map richer Codex execution items into structured thread cards.
-- When Codex `thread/read` omits completed tool items, the server now falls back to the thread session JSONL plus the live git worktree state to restore diff chips and file-change summaries for the selected thread.
-- Completion banner payloads are still synthesized after run completion, but the web shell suppresses normal success banners and only surfaces failures through floating error toasts.
-- The web client now inserts a local pending-thread placeholder as soon as `thread:create` is sent, then removes it when the server snapshot or thread update for the real thread arrives.
-- The web client now also inserts a local pending-run placeholder immediately after `message:send`, so the submitted prompt stays visible until the server echoes the first live item for that turn.
-- `thread:create` now resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that default.
-- Local chat creation now `mkdir -p`s the requested cwd when it does not exist, so the drawer can create a fresh project folder before starting Codex there.
-- Worktree chats still resolve the selected Git project root first, then run `git worktree add` under `~/.codex/worktrees/<repo>/...` before starting the Codex thread from the new worktree path.
-- Thread grouping now uses the Git common-dir root rather than the raw worktree cwd, so worktree chats stay grouped under the main project label.
-- Thread rename now applies a persisted local title override immediately, then best-effort syncs `thread/name/set` through Codex when the backend supports it.
+- Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.
+- If Codex `thread/read` omits completed tool items, the server backfills diff/file summaries from the session JSONL plus live git state.
+- The web shell inserts local pending placeholders for both `thread:create` and `message:send` until real server items arrive.
+- `thread:create` resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that root.
+- Local chats create missing directories with `mkdir -p`; worktree chats run `git worktree add` under `~/.codex/worktrees/<repo>/...`.
+- Thread grouping follows the Git common-dir root so worktree chats stay grouped under the main project.
+- Rename applies a local override immediately, then best-effort syncs `thread/name/set`.
+- `fastMode` maps to `turn/start.serviceTier="fast"` and retries without it if the bridge rejects that field.
+- Queued drafts retain runtime metadata (`model`, `planArmed`, `fastMode`, `accessMode`) for later resume.
+- `on-request` sandbox writable roots are derived from each thread cwd.
 
 ## Codex App-Server Methods In Use
 
-- `thread/start`
-- `thread/list`
-- `thread/read`
-- `thread/name/set`
-- `thread/archive`
-- `thread/unarchive`
-- `turn/start`
-- `turn/interrupt`
+- `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `thread/archive`, `thread/unarchive`, `turn/start`, `turn/interrupt`
 
 ## Codex Notifications Consumed
 
-- `thread/started`
-- `thread/status/changed`
-- `thread/name/updated`
-- `thread/archived`
-- `thread/unarchived`
-- `thread/closed`
-- `turn/started`
-- `item/started`
-- `item/agentMessage/delta`
-- `item/completed`
-- `turn/diff/updated`
-- `turn/completed`
+- `thread/started`, `thread/status/changed`, `thread/name/updated`, `thread/archived`, `thread/unarchived`, `thread/closed`
+- `turn/started`, `item/started`, `item/agentMessage/delta`, `item/completed`, `turn/diff/updated`, `turn/completed`
 
-## Known Interface Limits
+## Known Limits
 
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
-- The current message mapper now covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the resulting UI is still a simplified card system.
-- Codex `thread/read` on this workstation's current app-server build may return only user/assistant history for completed turns even when the live run emitted tool activity. Phodex now backfills `apply_patch`-driven file summaries from the session JSONL and reconciles the selected thread's current git diff as a compatibility fallback.
+- The message mapper covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the UI remains a simplified card system.
+- `thread/read` may still omit completed tool activity on this workstation's current bridge build; the JSONL/git fallback is a compatibility path, not ideal source behavior.
 - Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
-- Pinned plans and queued drafts now surface above the composer, but structured-input replacement and deeper toolbar/sheet behaviors are still client-side parity gaps.
-- `fastMode` now maps to `turn/start.serviceTier="fast"` when the local Codex bridge accepts that field; if the bridge rejects `serviceTier` with `invalid params`, the server retries without it and remembers the limitation for the current bridge session.
-- Queued drafts now preserve their send-time runtime metadata (`model`, `planArmed`, `fastMode`, `accessMode`) so a resumed draft replays the same run configuration instead of silently falling back to defaults.
-- `on-request` sandbox writable roots are now derived from each thread's actual repo/worktree cwd instead of always falling back to the default app root.
+- Structured-input replacement and deeper toolbar/sheet behavior are still parity gaps.
 
 ## Invariants
 
-- Server transport must stay Bun-native for HTTPS and WSS. Do not add third-party HTTP or websocket server dependencies.
-- OTP email delivery should stay dependency-light: direct HTTP to Resend is acceptable, but do not add a mail SDK just to send one transactional message.
+- Server transport must stay Bun-native for HTTPS and WSS.
+- OTP email delivery should stay dependency-light: direct HTTP to Resend is acceptable; do not add a mail SDK just to send one transactional message.
 - Keep the local Codex bridge real. Do not regress to fake assistant scripts.
 - Do not add OTP backdoors, static bypass codes, or local auth lookup endpoints.
 
