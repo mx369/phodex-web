@@ -19,6 +19,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?secret=...`
 - CNB relay preview uses port `8686` and serves the web UI and relay from the same public origin.
+- The project baseline for CNB preview is `runner.cpus: 2`, which CNB maps to `4 GB` memory.
 - For CNB machine traffic, derive the public preview origin from `CNB_VSCODE_PROXY_URI` by replacing `{{port}}` with `8686`.
 - Do not use CNB `jumpUrl` as a bridge target; it is a browser-facing entry and returns auth gating to direct non-browser requests.
 

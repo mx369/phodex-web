@@ -1,7 +1,7 @@
 $:
   vscode:
     - runner:
-        cpus: 1
+        cpus: 2
       docker:
         build: .ide/Dockerfile
       services:
