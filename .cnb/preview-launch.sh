@@ -17,10 +17,10 @@ bun install --frozen-lockfile
 bun run build:web
 
 if command -v setsid >/dev/null 2>&1; then
-  setsid sh -c 'exec PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$1" 2>&1' sh "$LOG_FILE" </dev/null &
+  setsid sh -c 'exec env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$1" 2>&1' sh "$LOG_FILE" </dev/null &
   echo "$!" >"$PID_FILE"
 else
-  nohup sh -c 'exec PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$1" 2>&1' sh "$LOG_FILE" >/dev/null 2>&1 </dev/null &
+  nohup sh -c 'exec env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview >>"$1" 2>&1' sh "$LOG_FILE" >/dev/null 2>&1 </dev/null &
   echo "$!" >"$PID_FILE"
 fi
 
