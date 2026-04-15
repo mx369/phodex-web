@@ -7,7 +7,12 @@ $:
         - name: vscode
           options:
             onlyPreview: true
-            launch: bash .cnb/preview-launch.sh
+            launch: env PHODEX_HOST=0.0.0.0 PHODEX_PORT=8686 bun run cnb:preview
             keepAliveTimeout: 18h
-            daemon: false
+            daemon: true
             backup: true
+      stages:
+        - name: install
+          script:
+            - bun install --frozen-lockfile
+            - bun run build:web
