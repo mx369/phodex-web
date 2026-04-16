@@ -746,7 +746,27 @@ function sendEvent(ws: ServerWebSocket<SocketData>, event: ServerEvent) {
 
 function buildOrigin(req: Request) {
   const requestOrigin = new URL(req.url).origin;
+  const forwardedOrigin = resolveForwardedOrigin(req);
   const origin = req.headers.get("origin");
+  if (forwardedOrigin) {
+    if (!origin) {
+      return forwardedOrigin;
+    }
+    try {
+      const parsedOrigin = new URL(origin).origin;
+      const parsedHost = new URL(origin).host;
+      const forwardedHost = new URL(forwardedOrigin).host;
+      if (parsedOrigin === forwardedOrigin || parsedHost === forwardedHost) {
+        return parsedOrigin;
+      }
+    } catch {
+      // ignore malformed origin headers
+    }
+    if (ALLOWED_ORIGINS.has(origin) || DEV_ORIGINS.has(origin)) {
+      return origin;
+    }
+    return forwardedOrigin;
+  }
   if (!origin) {
     return requestOrigin;
   }
@@ -754,6 +774,42 @@ function buildOrigin(req: Request) {
     return origin;
   }
   return requestOrigin;
+}
+
+function resolveForwardedOrigin(req: Request) {
+  const forwarded = req.headers.get("forwarded");
+  const forwardedEntry = forwarded?.split(",")[0]?.trim() ?? "";
+  const forwardedPairs = new Map<string, string>();
+  if (forwardedEntry) {
+    for (const segment of forwardedEntry.split(";")) {
+      const [rawKey, rawValue] = segment.split("=", 2);
+      const key = rawKey?.trim().toLowerCase();
+      const value = rawValue?.trim().replace(/^"|"$/g, "");
+      if (key && value) {
+        forwardedPairs.set(key, value);
+      }
+    }
+  }
+
+  const proto =
+    forwardedPairs.get("proto") ??
+    req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
+    "";
+  const host =
+    forwardedPairs.get("host") ??
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    req.headers.get("host")?.trim() ??
+    "";
+
+  if (!proto || !host) {
+    return "";
+  }
+
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return "";
+  }
 }
 
 function withCors(req: Request, response: Response) {
