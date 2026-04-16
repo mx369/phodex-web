@@ -34,7 +34,6 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Bootstrap and client websocket open send a full snapshot from the public relay.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
-- For CNB-hosted relay previews, machine clients should use the direct origin derived from `CNB_VSCODE_PROXY_URI` with port `8686`; CNB `jumpUrl` remains a browser-only entry.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.

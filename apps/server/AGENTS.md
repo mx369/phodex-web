@@ -23,7 +23,6 @@ Read this file before editing anything under `apps/server`.
 - OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
 - The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
-- CNB machine-consumable preview should use the direct origin from `CNB_VSCODE_PROXY_URI` with port `8686`, not the browser-facing `jumpUrl`.
 - Richer upstream message mapping is still incomplete.
 
 ## Read Next
@@ -34,5 +33,4 @@ Read this file before editing anything under `apps/server`.
 ## Verification
 
 - Exercise the affected endpoint or websocket path directly.
-- For CNB relay validation, point the local bridge at the direct preview origin. Do not treat CNB `jumpUrl` as a daemon-safe relay target.
 - Then run at least one end-to-end path through the web client if the change affects runtime behavior.

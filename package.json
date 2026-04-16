@@ -15,7 +15,6 @@
     "start:relay": "bun run --cwd apps/server start:relay",
     "dev:bridge": "bun run --cwd apps/server dev:bridge",
     "start:bridge": "bun run --cwd apps/server start:bridge",
-    "cnb:preview": "bun run start:relay",
     "serve": "bun run --cwd apps/server start"
   }
 }
