@@ -52,7 +52,7 @@ async function main() {
   const installDir = resolveInstallDir(args.options.dir);
   const relayOrigin = resolveRelayOrigin(installDir, args.options.relay);
   const manifest = await fetchInstallManifest(relayOrigin);
-  const bridgeSecret = args.options.secret || manifest.bridgeSecret;
+  const setup = await resolveInstallSetup(relayOrigin, manifest, args.options.token, args.options.secret);
   const bunBin = process.execPath;
   const macLabel = args.options["mac-label"] || hostname();
 
@@ -61,7 +61,8 @@ async function main() {
   mkdirSync(resolve(installDir, "logs"), { recursive: true });
   mkdirSync(resolve(installDir, "data"), { recursive: true });
 
-  const runtimeResponse = await fetch(manifest.bridgeRuntimeUrl);
+  const runtimeUrl = setup.bridgeRuntimeUrl || manifest.bridgeRuntimeUrl;
+  const runtimeResponse = await fetch(runtimeUrl);
   if (!runtimeResponse.ok) {
     throw new Error(`Failed to download bridge runtime: ${runtimeResponse.status} ${runtimeResponse.statusText}`);
   }
@@ -69,9 +70,9 @@ async function main() {
   writeFileSync(resolve(installDir, DEFAULT_RUNTIME_FILE), runtimeSource, "utf8");
 
   const envLines = [
-    `PHODEX_RELAY_URL=${manifest.relayOrigin}`,
-    `PHODEX_BRIDGE_SECRET=${bridgeSecret}`,
-    `PHODEX_RELAY_LABEL=${manifest.relayLabel}`,
+    `PHODEX_RELAY_URL=${setup.relayOrigin}`,
+    `PHODEX_BRIDGE_SECRET=${setup.bridgeSecret}`,
+    `PHODEX_RELAY_LABEL=${setup.relayLabel}`,
     `PHODEX_MAC_LABEL=${macLabel}`,
     `PHODEX_STATE_FILE=${resolve(installDir, "data", "bridge-state.json")}`,
   ];
@@ -90,9 +91,9 @@ async function main() {
     resolve(installDir, DEFAULT_METADATA_FILE),
     JSON.stringify(
       {
-        relayOrigin: manifest.relayOrigin,
-        bridgeRuntimeUrl: manifest.bridgeRuntimeUrl,
-        relayLabel: manifest.relayLabel,
+        relayOrigin: setup.relayOrigin,
+        bridgeRuntimeUrl: runtimeUrl,
+        relayLabel: setup.relayLabel,
         installedAt: new Date().toISOString(),
         bunBin,
       },
@@ -104,14 +105,14 @@ async function main() {
 
   stopInstalledBridge(installDir);
   const pid = startInstalledBridge(installDir, bunBin);
-  const health = await waitForRelayBridgeHealth(manifest.relayOrigin);
+  const health = await waitForRelayBridgeHealth(setup.relayOrigin);
 
   console.log(`[phodex-bridge] Installed to ${installDir}`);
   console.log(`[phodex-bridge] Runtime ${resolve(installDir, DEFAULT_RUNTIME_FILE)}`);
   console.log(`[phodex-bridge] Log ${resolve(installDir, DEFAULT_LOG_FILE)}`);
   console.log(`[phodex-bridge] PID ${pid}`);
   if (health?.bridgeConnected) {
-    console.log(`[phodex-bridge] Relay connected to ${manifest.relayOrigin}`);
+    console.log(`[phodex-bridge] Relay connected to ${setup.relayOrigin}`);
   } else {
     console.log("[phodex-bridge] Started, but relay health has not reported the bridge yet.");
   }
@@ -121,8 +122,8 @@ function printUsage() {
   console.log(
     [
       "Usage:",
-      "  phodex-bridge install --relay <origin> [--dir <path>] [--mac-label <label>]",
-      "  phodex-bridge start --relay <origin> [--dir <path>] [--mac-label <label>]",
+      "  phodex-bridge install --relay <origin> [--token <setup-token>] [--dir <path>] [--mac-label <label>]",
+      "  phodex-bridge start --relay <origin> [--token <setup-token>] [--dir <path>] [--mac-label <label>]",
       "  phodex-bridge stop [--dir <path>]",
       "  phodex-bridge status [--dir <path>] [--relay <origin>]",
     ].join("\n")
@@ -200,11 +201,61 @@ async function fetchInstallManifest(relayOrigin) {
   }
 
   const manifest = await response.json();
-  if (!manifest?.bridgeRuntimeUrl || !manifest?.bridgeSecret) {
-    throw new Error("Install manifest is missing runtime URL or bridge secret.");
+  if (!manifest?.installerUrl || !manifest?.command) {
+    throw new Error("Install manifest is missing installer metadata.");
   }
 
   return manifest;
+}
+
+async function resolveInstallSetup(relayOrigin, manifest, setupToken, explicitSecret) {
+  if (explicitSecret) {
+    return {
+      relayOrigin: normalizeRelayOrigin(manifest.relayOrigin) || relayOrigin,
+      relayLabel: manifest.relayLabel || "Phodex Public Relay",
+      bridgeRuntimeUrl: manifest.bridgeRuntimeUrl || new URL("/install/bridge-runtime.js", relayOrigin).toString(),
+      bridgeSecret: explicitSecret,
+    };
+  }
+
+  const token = typeof setupToken === "string" && setupToken.trim() ? setupToken.trim() : manifest.setupToken;
+  if (!token) {
+    throw new Error("Missing setup token. Re-copy the command from the phone onboarding screen.");
+  }
+
+  return await claimInstallSetup(relayOrigin, token);
+}
+
+async function claimInstallSetup(relayOrigin, token) {
+  const response = await fetch(new URL("/install/claim", relayOrigin), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) {
+    const message = await readResponseError(response, "Failed to claim install setup");
+    throw new Error(message);
+  }
+
+  const payload = await response.json();
+  if (!payload?.bridgeRuntimeUrl || !payload?.bridgeSecret || !payload?.relayOrigin) {
+    throw new Error("Install setup claim response is missing runtime URL, relay origin, or bridge secret.");
+  }
+  return payload;
+}
+
+async function readResponseError(response, fallback) {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.error === "string" && payload.error.trim()) {
+      return payload.error;
+    }
+  } catch {
+    // ignore json parse errors
+  }
+  return `${fallback}: ${response.status} ${response.statusText}`;
 }
 
 function startInstalledBridge(installDir, bunBin) {

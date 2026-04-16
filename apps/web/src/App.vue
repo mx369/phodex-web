@@ -49,9 +49,10 @@ type InstallManifest = {
   version: string;
   relayOrigin: string;
   relayLabel: string;
-  bridgeSecret: string;
   installerUrl: string;
   bridgeRuntimeUrl: string;
+  setupToken?: string;
+  setupTokenExpiresAt?: string;
   command: string;
 };
 

@@ -17,6 +17,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `POST /api/auth/request-code`: issue OTP and send it through Resend when mail config is available.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /install/manifest.json`: public bridge-install manifest for onboarding and local installer bootstrap.
+- `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus the long-lived bridge secret.
 - `GET /install/phodex-bridge-installer.tgz`: latest installer tarball alias.
 - `GET /install/bridge-runtime.js`: latest bundled local bridge runtime alias.
 - `GET /relay?token=...`: WSS upgrade endpoint.
@@ -38,6 +39,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
 - The public relay now publishes a versioned `bunx` installer and bundled bridge runtime so onboarding can point Mac users at a single local install/start command.
+- The install manifest no longer exposes the long-lived bridge secret. It issues a short-lived single-use setup token, and the installer swaps that token through `/install/claim` before writing local bridge config.
 - Bridge thread-sync defaults depend on relay target: local relay hosts keep the old full-thread sweep, while public relay hosts default to syncing only the currently selected thread ids. Override with `PHODEX_BRIDGE_SYNC_MODE=all|selected` when you need a different behavior.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.

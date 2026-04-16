@@ -71,6 +71,11 @@ type InstallAssets = {
   installerPath: string;
 };
 
+type SetupTokenRecord = {
+  expiresAt: string;
+  usedAt: string | null;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -88,6 +93,7 @@ const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
 const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const DEFAULT_MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
 const BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET ?? "phodex-local-bridge";
@@ -118,6 +124,7 @@ const threadMirror = new Map<string, ThreadRecord>();
 let bridgeSocket: ServerWebSocket<SocketData> | null = null;
 let installAssetsPromise: Promise<InstallAssets> | null = null;
 let cachedInstallAssets: InstallAssets | null = null;
+const installSetupTokens = new Map<string, SetupTokenRecord>();
 let bridgeConnection: RelayConnection = {
   state: "disconnected",
   relayLabel: RELAY_LABEL,
@@ -182,6 +189,10 @@ const server = Bun.serve<SocketData>({
 
     if (url.pathname === "/install/manifest.json" && req.method === "GET") {
       return withCors(req, await handleInstallManifest(req));
+    }
+
+    if (url.pathname === "/install/claim" && req.method === "POST") {
+      return withCors(req, await handleInstallClaim(req));
     }
 
     if (
@@ -768,17 +779,56 @@ async function handleInstallManifest(req: Request) {
     const origin = buildOrigin(req);
     const installerUrl = `${origin}/install/${basename(assets.installerPath)}`;
     const bridgeRuntimeUrl = `${origin}/install/${basename(assets.runtimePath)}`;
+    const { token, expiresAt } = issueInstallSetupToken();
     return json({
       version: assets.version,
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
-      bridgeSecret: BRIDGE_SECRET,
       installerUrl,
       bridgeRuntimeUrl,
-      command: `bunx phodex-bridge-installer@${installerUrl} --relay ${origin}`,
+      setupToken: token,
+      setupTokenExpiresAt: expiresAt,
+      command: `bunx phodex-bridge-installer@${installerUrl} --relay ${origin} --token ${token}`,
     });
   } catch (error) {
     return json({ ok: false, error: `Install manifest failed: ${readErrorMessage(error)}` }, 500);
+  }
+}
+
+async function handleInstallClaim(req: Request) {
+  const body = (await safeJson(req)) as { token?: string } | null;
+  const token = body?.token?.trim() ?? "";
+  if (!token) {
+    return json({ ok: false, error: "A setup token is required." }, 400);
+  }
+
+  const record = installSetupTokens.get(token);
+  if (!record) {
+    return json({ ok: false, error: "Invalid or expired setup token." }, 401);
+  }
+  if (sessionExpired(record.expiresAt)) {
+    installSetupTokens.delete(token);
+    return json({ ok: false, error: "Invalid or expired setup token." }, 401);
+  }
+  if (record.usedAt) {
+    return json({ ok: false, error: "Setup token has already been used." }, 409);
+  }
+
+  try {
+    const assets = await ensureInstallAssets();
+    const origin = buildOrigin(req);
+    record.usedAt = new Date().toISOString();
+    return json({
+      ok: true,
+      relayOrigin: origin,
+      relayLabel: RELAY_LABEL,
+      bridgeSecret: BRIDGE_SECRET,
+      bridgeRuntimeUrl: `${origin}/install/${basename(assets.runtimePath)}`,
+      version: assets.version,
+    });
+  } catch (error) {
+    record.usedAt = null;
+    return json({ ok: false, error: `Install setup claim failed: ${readErrorMessage(error)}` }, 500);
   }
 }
 
@@ -871,6 +921,26 @@ function computeInstallAssetsVersion() {
     statSync(bridgeInstallerBinPath).mtimeMs
   );
   return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
+}
+
+function issueInstallSetupToken() {
+  pruneExpiredInstallSetupTokens();
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + INSTALL_SETUP_TOKEN_TTL_MS).toISOString();
+  installSetupTokens.set(token, {
+    expiresAt,
+    usedAt: null,
+  });
+  return { token, expiresAt };
+}
+
+function pruneExpiredInstallSetupTokens() {
+  const now = Date.now();
+  for (const [token, record] of installSetupTokens.entries()) {
+    if (record.usedAt || Date.parse(record.expiresAt) <= now) {
+      installSetupTokens.delete(token);
+    }
+  }
 }
 
 function buildInstallerArchive(installerPath: string) {
