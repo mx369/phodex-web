@@ -12,12 +12,16 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Relay start: `bun run start:relay`
 - Bridge dev: `bun run dev:bridge`
 - Bridge start: `bun run start:bridge`
+- Installer manifest: `GET /install/manifest.json`
+- Latest installer tarball alias: `GET /install/phodex-bridge-installer.tgz`
+- Latest bridge runtime alias: `GET /install/bridge-runtime.js`
 
 ## Runtime Defaults
 
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?secret=...`
+- User-facing local install/start command now comes from `/install/manifest.json` and resolves to a versioned `bunx phodex-bridge-installer@... --relay ...` invocation.
 
 ## Verification Expectations
 

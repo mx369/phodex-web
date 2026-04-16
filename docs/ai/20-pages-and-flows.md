@@ -6,7 +6,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Page | Current status | Real behavior today | Main gaps |
 | --- | --- | --- | --- |
-| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, and routes into Email OTP | Copy, layout, and parity still approximate |
+| Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, and routes into Email OTP; the final setup step now shows the real one-command `bunx` bridge installer for the current relay origin | Copy, layout, and parity still approximate |
 | Bootstrap failure | Shell | Rendered and navigable | No real purchase or restore flow |
 | Subscription gate | Shell | Plan selection and navigation exist | No real purchase or restore flow |
 | Email OTP | Real | Request-code and verify-code are live; OTP uses real mail delivery when configured | UI is still approximate |
@@ -23,7 +23,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Flow | Status | Notes |
 | --- | --- | --- |
-| Onboarding -> Email OTP | Real | Fresh unauthenticated users now move from onboarding directly into the email verification screen |
+| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; onboarding now keeps Codex CLI as Step 1 and combines bridge install + start into one real `bunx` command |
 | Email OTP login | Real | Uses `/api/auth/request-code` and `/api/auth/verify-code`; request-code requires configured live email delivery and no longer exposes any local bypass path |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | Local pending thread state appears immediately, then resolves to the real Codex thread |

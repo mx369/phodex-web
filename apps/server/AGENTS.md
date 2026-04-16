@@ -20,6 +20,7 @@ Read this file before editing anything under `apps/server`.
 ## Current Truth
 
 - Real endpoints exist for health, bootstrap, OTP issue, OTP verify, client relay websocket, and bridge websocket.
+- The public relay also serves installer assets for the local bridge: install manifest JSON, a versioned `bunx` installer tarball, and the bundled bridge runtime.
 - OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
 - The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
 - Public-relay bridge runs now default to selected-thread sync only; local relay runs still default to full thread sync unless `PHODEX_BRIDGE_SYNC_MODE` overrides it.

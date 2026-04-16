@@ -1,7 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { hostname } from "node:os";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
+import { hostname, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type {
   AppSettings,
@@ -64,6 +65,12 @@ type OtpMailConfig = {
   sourceLabel: string;
 };
 
+type InstallAssets = {
+  version: string;
+  runtimePath: string;
+  installerPath: string;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -71,6 +78,11 @@ const appRoot = resolve(serverRoot, "../..");
 const dataDir = resolve(serverRoot, "data");
 const dataFile = process.env.PHODEX_STATE_FILE ?? resolve(dataDir, "relay-state.json");
 const distDir = resolve(appRoot, "apps/web/dist");
+const installAssetsDir = resolve(dataDir, "install-assets");
+const bridgeRuntimeSourcePath = resolve(serverRoot, "src/index.ts");
+const bridgeInstallerPackageDir = resolve(appRoot, "packages/bridge-installer");
+const bridgeInstallerPackageJsonPath = resolve(bridgeInstallerPackageDir, "package.json");
+const bridgeInstallerBinPath = resolve(bridgeInstallerPackageDir, "bin/phodex-bridge.js");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
@@ -104,6 +116,8 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const threadMirror = new Map<string, ThreadRecord>();
 let bridgeSocket: ServerWebSocket<SocketData> | null = null;
+let installAssetsPromise: Promise<InstallAssets> | null = null;
+let cachedInstallAssets: InstallAssets | null = null;
 let bridgeConnection: RelayConnection = {
   state: "disconnected",
   relayLabel: RELAY_LABEL,
@@ -164,6 +178,25 @@ const server = Bun.serve<SocketData>({
           users: Object.keys(persisted.users).length,
         })
       );
+    }
+
+    if (url.pathname === "/install/manifest.json" && req.method === "GET") {
+      return withCors(req, await handleInstallManifest(req));
+    }
+
+    if (
+      (url.pathname === "/install/bridge-runtime.js" || /^\/install\/bridge-runtime-[A-Za-z0-9.-]+\.js$/.test(url.pathname)) &&
+      req.method === "GET"
+    ) {
+      return withCors(req, await serveInstallAsset(url.pathname, "text/javascript; charset=utf-8"));
+    }
+
+    if (
+      (url.pathname === "/install/phodex-bridge-installer.tgz" ||
+        /^\/install\/phodex-bridge-installer-[A-Za-z0-9.-]+\.tgz$/.test(url.pathname)) &&
+      req.method === "GET"
+    ) {
+      return withCors(req, await serveInstallAsset(url.pathname, "application/gzip"));
     }
 
     if (url.pathname === "/api/bootstrap" && req.method === "GET") {
@@ -729,6 +762,136 @@ function serveStatic(pathname: string) {
   return new Response(Bun.file(resolve(distDir, "index.html")));
 }
 
+async function handleInstallManifest(req: Request) {
+  try {
+    const assets = await ensureInstallAssets();
+    const origin = buildOrigin(req);
+    const installerUrl = `${origin}/install/${basename(assets.installerPath)}`;
+    const bridgeRuntimeUrl = `${origin}/install/${basename(assets.runtimePath)}`;
+    return json({
+      version: assets.version,
+      relayOrigin: origin,
+      relayLabel: RELAY_LABEL,
+      bridgeSecret: BRIDGE_SECRET,
+      installerUrl,
+      bridgeRuntimeUrl,
+      command: `bunx phodex-bridge-installer@${installerUrl} --relay ${origin}`,
+    });
+  } catch (error) {
+    return json({ ok: false, error: `Install manifest failed: ${readErrorMessage(error)}` }, 500);
+  }
+}
+
+async function serveInstallAsset(pathname: string, contentType: string) {
+  let assets: InstallAssets;
+  try {
+    assets = await ensureInstallAssets();
+  } catch (error) {
+    return new Response(`Install asset build failed: ${readErrorMessage(error)}`, { status: 500 });
+  }
+
+  const assetName =
+    pathname === "/install/bridge-runtime.js"
+      ? basename(assets.runtimePath)
+      : pathname === "/install/phodex-bridge-installer.tgz"
+        ? basename(assets.installerPath)
+        : basename(pathname);
+  const filePath = resolve(installAssetsDir, assetName);
+  if (!filePath.startsWith(`${installAssetsDir}/`) || !existsSync(filePath)) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  return new Response(Bun.file(filePath), {
+    headers: {
+      "content-type": contentType,
+      "cache-control": "public, max-age=300",
+    },
+  });
+}
+
+async function ensureInstallAssets() {
+  const version = computeInstallAssetsVersion();
+  if (
+    cachedInstallAssets &&
+    cachedInstallAssets.version === version &&
+    existsSync(cachedInstallAssets.runtimePath) &&
+    existsSync(cachedInstallAssets.installerPath)
+  ) {
+    return cachedInstallAssets;
+  }
+
+  if (installAssetsPromise) {
+    return installAssetsPromise;
+  }
+
+  installAssetsPromise = (async () => {
+    mkdirSync(installAssetsDir, { recursive: true });
+
+    const runtimePath = resolve(installAssetsDir, `bridge-runtime-${version}.js`);
+    const installerPath = resolve(installAssetsDir, `phodex-bridge-installer-${version}.tgz`);
+
+    if (!existsSync(runtimePath)) {
+      const result = await Bun.build({
+        entrypoints: [bridgeRuntimeSourcePath],
+        target: "bun",
+        minify: false,
+        naming: "bridge-runtime.js",
+        outdir: installAssetsDir,
+        write: false,
+      });
+      if (!result.success) {
+        throw new Error(result.logs.map((entry) => entry.message).join("\n") || "Unknown bridge build failure");
+      }
+      const output = result.outputs[0];
+      if (!output) {
+        throw new Error("Bridge build did not emit an output file.");
+      }
+      writeFileSync(runtimePath, Buffer.from(await output.arrayBuffer()));
+    }
+
+    if (!existsSync(installerPath)) {
+      buildInstallerArchive(installerPath);
+    }
+
+    cachedInstallAssets = { version, runtimePath, installerPath };
+    return cachedInstallAssets;
+  })().finally(() => {
+    installAssetsPromise = null;
+  });
+
+  return installAssetsPromise;
+}
+
+function computeInstallAssetsVersion() {
+  const packageJson = JSON.parse(readFileSync(bridgeInstallerPackageJsonPath, "utf8")) as { version?: string };
+  const packageVersion = packageJson.version || "0.1.0";
+  const lastSourceEdit = Math.max(
+    statSync(bridgeRuntimeSourcePath).mtimeMs,
+    statSync(bridgeInstallerPackageJsonPath).mtimeMs,
+    statSync(bridgeInstallerBinPath).mtimeMs
+  );
+  return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
+}
+
+function buildInstallerArchive(installerPath: string) {
+  const tempRoot = mkdtempSync(resolve(tmpdir(), "phodex-bridge-installer-"));
+  const packageRoot = resolve(tempRoot, "package");
+  mkdirSync(resolve(packageRoot, "bin"), { recursive: true });
+  writeFileSync(resolve(packageRoot, "package.json"), readFileSync(bridgeInstallerPackageJsonPath));
+  writeFileSync(resolve(packageRoot, "bin/phodex-bridge.js"), readFileSync(bridgeInstallerBinPath));
+  chmodSync(resolve(packageRoot, "bin/phodex-bridge.js"), 0o755);
+
+  const packed = spawnSync("tar", ["-czf", installerPath, "-C", tempRoot, "package"], {
+    encoding: "utf8",
+  });
+
+  rmSync(tempRoot, { recursive: true, force: true });
+
+  if (packed.status !== 0) {
+    throw new Error(packed.stderr?.trim() || packed.stdout?.trim() || "Unknown installer archive failure");
+  }
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -819,6 +982,13 @@ function readOptionalEnvFile(filePath: string) {
 function readConfigValue(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : "";
+}
+
+function readErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }
 
 function renderOtpEmail(code: string) {

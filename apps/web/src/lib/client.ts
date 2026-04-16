@@ -42,7 +42,7 @@ const inferredApiOrigin =
   import.meta.env.DEV && window.location.port !== "3443"
     ? `${window.location.protocol === "https:" ? "https" : "http"}://${runtimeHost}:3443`
     : window.location.origin;
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || inferredApiOrigin;
+export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || inferredApiOrigin;
 const WS_ORIGIN = API_ORIGIN.replace(/^http/, "ws");
 
 export const state = reactive({

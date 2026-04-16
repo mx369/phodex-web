@@ -4,7 +4,7 @@ import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type { ThreadCreateMode, ThreadRecord } from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
 import remodexAppLogo from "./assets/remodex-app-logo.png";
-import { createAppClient, state } from "./lib/client";
+import { API_ORIGIN, createAppClient, state } from "./lib/client";
 
 type AppIconName =
   | "archive"
@@ -43,6 +43,16 @@ type DrawerProjectTarget = {
   liveCount: number;
   hasWorktree: boolean;
   isCurrent: boolean;
+};
+
+type InstallManifest = {
+  version: string;
+  relayOrigin: string;
+  relayLabel: string;
+  bridgeSecret: string;
+  installerUrl: string;
+  bridgeRuntimeUrl: string;
+  command: string;
 };
 
 const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
@@ -247,6 +257,7 @@ const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
+const installManifest = ref<InstallManifest | null>(null);
 
 const onboardingScreens = [
   {
@@ -298,23 +309,15 @@ const onboardingScreens = [
     icon: "terminal",
     title: "Install Codex CLI",
     subtitle: "The AI coding agent that lives in your terminal. Remodex connects to it from your iPhone.",
-    command: "npm install -g @openai/codex@latest",
+    commandKey: "codex",
   },
   {
     kind: "step",
     step: "Step 2",
     icon: "relay",
-    title: "Install the Bridge",
-    subtitle: "A lightweight relay that connects your Mac to your iPhone.",
-    command: "npm install -g remodex@latest",
-  },
-  {
-    kind: "step",
-    step: "Step 3",
-    icon: "arrow-up",
-    title: "Start Remodex",
-    subtitle: "Run this on your Mac, then continue here with email verification.",
-    command: "remodex up",
+    title: "Install & Start Bridge",
+    subtitle: "Run one Bun command on your Mac to install the local bridge, write the relay settings, and launch it.",
+    commandKey: "bridge",
   },
 ] as const;
 
@@ -436,6 +439,7 @@ const slashCommandCatalog = [
 onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("keydown", handleDocumentKeyDown);
+  void loadInstallManifest();
   void client.restoreSession().then(() => {
     if (pendingShellPage.value && isAuthenticated.value) {
       openPanel(pendingShellPage.value, true);
@@ -453,6 +457,11 @@ onBeforeUnmount(() => {
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
+const onboardingBridgeCommand = computed(
+  () =>
+    installManifest.value?.command ??
+    `bunx phodex-bridge-installer@${API_ORIGIN}/install/phodex-bridge-installer.tgz --relay ${API_ORIGIN}`
+);
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
     return rootFlowState.value;
@@ -469,6 +478,15 @@ const rootFlow = computed<RootFlowState>(() => {
   return "email-otp";
 });
 const currentOnboardingScreen = computed(() => onboardingScreens[onboardingPage.value]);
+const currentOnboardingCommand = computed(() => {
+  if (currentOnboardingScreen.value.kind !== "step") {
+    return "";
+  }
+
+  return currentOnboardingScreen.value.commandKey === "codex"
+    ? "npm install -g @openai/codex@latest"
+    : onboardingBridgeCommand.value;
+});
 const onboardingCtaLabel = computed(() => {
   if (onboardingPage.value === 0) return "Get Started";
   if (onboardingPage.value === 1) return "Set Up";
@@ -964,6 +982,18 @@ function formatRelativeTime(value: string) {
   }
   const days = Math.round(hours / 24);
   return `${days}d`;
+}
+
+async function loadInstallManifest() {
+  try {
+    const response = await fetch(`${API_ORIGIN}/install/manifest.json`);
+    if (!response.ok) {
+      return;
+    }
+    installManifest.value = (await response.json()) as InstallManifest;
+  } catch (error) {
+    console.warn("[phodex-web] install manifest unavailable", error);
+  }
 }
 
 function formatMessageRole(role: string) {
@@ -1592,7 +1622,7 @@ function handleScrollToLatest() {
                     <div class="onboarding-step-icon"><AppIcon :name="currentOnboardingScreen.icon" /></div>
                     <h2>{{ currentOnboardingScreen.title }}</h2>
                     <p>{{ currentOnboardingScreen.subtitle }}</p>
-                    <div class="onboarding-command-card">{{ currentOnboardingScreen.command }}</div>
+                    <div class="onboarding-command-card">{{ currentOnboardingCommand }}</div>
                   </div>
                 </template>
 
