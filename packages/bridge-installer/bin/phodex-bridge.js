@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
 
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -21,6 +20,22 @@ const DEFAULT_ENV_FILE = "bridge.env";
 const DEFAULT_LOG_FILE = "logs/bridge.log";
 const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.js";
 const DEFAULT_METADATA_FILE = "current/install.json";
+const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
+const LAUNCH_AGENT_ENV_KEYS = new Set([
+  "DISPLAY",
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "NO_COLOR",
+  "NODE_EXTRA_CA_CERTS",
+  "PATH",
+  "SHELL",
+  "SSH_AUTH_SOCK",
+  "SSL_CERT_FILE",
+  "TERM",
+  "TMPDIR",
+]);
 
 main().catch((error) => {
   console.error(`[phodex-bridge] ${readErrorMessage(error)}`);
@@ -84,6 +99,12 @@ async function main() {
   if (args.options["codex-ws-url"]) {
     envLines.push(`PHODEX_CODEX_WS_URL=${args.options["codex-ws-url"]}`);
     envLines.push("PHODEX_MANAGE_CODEX=false");
+  }
+
+  const autoCaBundle = chooseSystemCaBundle(setup.relayOrigin);
+  if (autoCaBundle) {
+    envLines.push(`SSL_CERT_FILE=${autoCaBundle}`);
+    envLines.push(`NODE_EXTRA_CA_CERTS=${autoCaBundle}`);
   }
 
   writeFileSync(resolve(installDir, DEFAULT_ENV_FILE), `${envLines.join("\n")}\n`, "utf8");
@@ -194,6 +215,33 @@ function normalizeRelayOrigin(value) {
   }
 }
 
+function chooseSystemCaBundle(relayOrigin) {
+  if (process.env.SSL_CERT_FILE?.trim()) {
+    return process.env.SSL_CERT_FILE.trim();
+  }
+
+  try {
+    const url = new URL(relayOrigin);
+    if (url.protocol !== "https:" || isLocalRelayHost(url.hostname)) {
+      return "";
+    }
+  } catch {
+    return "";
+  }
+
+  for (const candidate of SYSTEM_CA_BUNDLE_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function isLocalRelayHost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
 async function fetchInstallManifest(relayOrigin) {
   const response = await fetch(new URL("/install/manifest.json", relayOrigin));
   if (!response.ok) {
@@ -263,30 +311,84 @@ function startInstalledBridge(installDir, bunBin) {
   const envFile = resolve(installDir, DEFAULT_ENV_FILE);
   const pidFile = resolve(installDir, DEFAULT_PID_FILE);
   const logFile = resolve(installDir, DEFAULT_LOG_FILE);
-  const env = {
-    ...process.env,
-    ...readEnvFile(envFile),
-  };
+  const env = sanitizeBridgeEnv(
+    {
+      ...process.env,
+      ...readEnvFile(envFile),
+    },
+    bunBin
+  );
 
   if (!existsSync(runtimeFile)) {
     throw new Error(`Missing runtime file at ${runtimeFile}`);
   }
 
-  const logFd = openSync(logFile, "a");
-  const child = spawn(bunBin, [runtimeFile], {
-    cwd: installDir,
-    env,
-    detached: true,
-    stdio: ["ignore", logFd, logFd],
-  });
-  closeSync(logFd);
-  child.unref();
+  if (process.platform === "darwin") {
+    const pid = startBridgeViaLaunchAgent(installDir, bunBin, runtimeFile, logFile, env);
+    writeFileSync(pidFile, `${pid}\n`, "utf8");
+    return pid;
+  }
 
-  writeFileSync(pidFile, `${child.pid}\n`, "utf8");
-  return child.pid;
+  const launched = spawnSync(
+    "/bin/sh",
+    [
+      "-lc",
+      'nohup "$1" "$2" >> "$3" 2>&1 < /dev/null & echo $!',
+      "sh",
+      bunBin,
+      runtimeFile,
+      logFile,
+    ],
+    {
+      cwd: installDir,
+      env,
+      encoding: "utf8",
+    }
+  );
+
+  if (launched.status !== 0) {
+    throw new Error((launched.stderr || launched.stdout || "Failed to start local bridge.").trim());
+  }
+
+  const pid = Number.parseInt((launched.stdout || "").trim(), 10);
+  if (!Number.isFinite(pid)) {
+    throw new Error("Failed to capture local bridge PID.");
+  }
+
+  writeFileSync(pidFile, `${pid}\n`, "utf8");
+  return pid;
+}
+
+function sanitizeBridgeEnv(env, bunBin) {
+  const next = { ...env };
+
+  for (const key of Object.keys(next)) {
+    if (key === "BUN_INTERNAL_BUNX_INSTALL" || key.startsWith("npm_")) {
+      delete next[key];
+    }
+  }
+
+  if (typeof next.PATH === "string" && next.PATH) {
+    next.PATH = next.PATH
+      .split(":")
+      .filter((segment) => segment && !segment.includes("/tmp/bunx-") && !segment.includes("/private/tmp/bunx-"))
+      .join(":");
+  }
+
+  next._ = bunBin;
+  return next;
 }
 
 function stopInstalledBridge(installDir) {
+  if (process.platform === "darwin") {
+    const stopped = stopBridgeLaunchAgent(installDir);
+    const pidFile = resolve(installDir, DEFAULT_PID_FILE);
+    if (existsSync(pidFile)) {
+      unlinkSync(pidFile);
+    }
+    return stopped;
+  }
+
   const pidFile = resolve(installDir, DEFAULT_PID_FILE);
   if (!existsSync(pidFile)) {
     return false;
@@ -338,7 +440,12 @@ async function printStatus(installDir, relayOriginOverride) {
   const metadataFile = resolve(installDir, DEFAULT_METADATA_FILE);
   const env = existsSync(envFile) ? readEnvFile(envFile) : {};
   const relayOrigin = relayOriginOverride || normalizeRelayOrigin(env.PHODEX_RELAY_URL);
-  const pid = existsSync(pidFile) ? Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10) : null;
+  const pid =
+    process.platform === "darwin"
+      ? readLaunchAgentPid(buildLaunchAgentLabel(installDir))
+      : existsSync(pidFile)
+        ? Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10)
+        : null;
   const running = pid ? isPidAlive(pid) : false;
 
   console.log(`[phodex-bridge] Install dir ${installDir}`);
@@ -396,6 +503,134 @@ function readEnvFile(filePath) {
     values[key] = value;
   }
   return values;
+}
+
+function startBridgeViaLaunchAgent(installDir, bunBin, runtimeFile, logFile, env) {
+  const label = buildLaunchAgentLabel(installDir);
+  const plistPath = resolveLaunchAgentPlistPath(label);
+  const domain = buildLaunchAgentDomain(label);
+
+  mkdirSync(resolve(homedir(), "Library/LaunchAgents"), { recursive: true });
+  writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, env), "utf8");
+
+  spawnSync("launchctl", ["bootout", domain], { stdio: "ignore" });
+
+  const bootstrap = spawnSync("launchctl", ["bootstrap", `gui/${process.getuid()}`, plistPath], {
+    encoding: "utf8",
+  });
+  if (bootstrap.status !== 0) {
+    throw new Error((bootstrap.stderr || bootstrap.stdout || "Failed to bootstrap launch agent.").trim());
+  }
+
+  const kickstart = spawnSync("launchctl", ["kickstart", "-k", domain], {
+    encoding: "utf8",
+  });
+  if (kickstart.status !== 0) {
+    throw new Error((kickstart.stderr || kickstart.stdout || "Failed to start launch agent.").trim());
+  }
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const pid = readLaunchAgentPid(label);
+    if (pid) {
+      return pid;
+    }
+    Bun.sleepSync(100);
+  }
+
+  return 0;
+}
+
+function stopBridgeLaunchAgent(installDir) {
+  const label = buildLaunchAgentLabel(installDir);
+  const plistPath = resolveLaunchAgentPlistPath(label);
+  const domain = buildLaunchAgentDomain(label);
+  const bootout = spawnSync("launchctl", ["bootout", domain], {
+    encoding: "utf8",
+  });
+
+  if (existsSync(plistPath)) {
+    rmSync(plistPath, { force: true });
+  }
+
+  return bootout.status === 0 || bootout.status === null;
+}
+
+function buildLaunchAgentLabel(installDir) {
+  return `com.phodex.bridge.${createHash("sha1").update(installDir).digest("hex").slice(0, 12)}`;
+}
+
+function resolveLaunchAgentPlistPath(label) {
+  return resolve(homedir(), "Library/LaunchAgents", `${label}.plist`);
+}
+
+function buildLaunchAgentDomain(label) {
+  return `gui/${process.getuid()}/${label}`;
+}
+
+function readLaunchAgentPid(label) {
+  const printed = spawnSync("launchctl", ["print", buildLaunchAgentDomain(label)], {
+    encoding: "utf8",
+  });
+  if (printed.status !== 0) {
+    return null;
+  }
+
+  const match = printed.stdout.match(/\bpid = (\d+)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, env) {
+  const launchEnv = selectLaunchAgentEnv(env);
+  const envXml = Object.entries(launchEnv)
+    .map(([key, value]) => `    <key>${xmlEscape(key)}</key><string>${xmlEscape(String(value))}</string>`)
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${xmlEscape(label)}</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>WorkingDirectory</key><string>${xmlEscape(installDir)}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${xmlEscape(bunBin)}</string>
+    <string>${xmlEscape(runtimeFile)}</string>
+  </array>
+  <key>StandardOutPath</key><string>${xmlEscape(logFile)}</string>
+  <key>StandardErrorPath</key><string>${xmlEscape(logFile)}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+${envXml}
+  </dict>
+</dict>
+</plist>
+`;
+}
+
+function selectLaunchAgentEnv(env) {
+  const next = {};
+
+  for (const [key, value] of Object.entries(env)) {
+    if (!value) {
+      continue;
+    }
+    if (key.startsWith("PHODEX_") || LAUNCH_AGENT_ENV_KEYS.has(key)) {
+      next[key] = value;
+    }
+  }
+
+  return next;
+}
+
+function xmlEscape(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 function isPidAlive(pid) {

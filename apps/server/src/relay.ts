@@ -141,6 +141,7 @@ const server = Bun.serve<SocketData>({
 
     if (url.pathname === "/relay") {
       const token = url.searchParams.get("token");
+      refreshPersisted();
       const session = token ? persisted.sessions[token] : null;
       if (!token || !session || sessionExpired(session.expiresAt)) {
         return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
@@ -292,6 +293,7 @@ if (OTP_MAIL_CONFIG) {
 }
 
 async function handleRequestCode(req: Request) {
+  refreshPersisted();
   const body = await safeJson(req);
   const email = normalizeEmail(body?.email);
   if (!email) {
@@ -318,7 +320,7 @@ async function handleRequestCode(req: Request) {
     expiresAt,
     delivery: "resend",
   };
-  schedulePersist();
+  persistNow();
 
   const response: RequestCodeResponse = {
     ok: true,
@@ -329,6 +331,7 @@ async function handleRequestCode(req: Request) {
 }
 
 async function handleVerifyCode(req: Request) {
+  refreshPersisted();
   const body = await safeJson(req);
   const email = normalizeEmail(body?.email);
   const code = String(body?.code ?? "").trim();
@@ -355,7 +358,7 @@ async function handleVerifyCode(req: Request) {
     expiresAt: session.expiresAt,
   };
   delete persisted.otpCodes[email];
-  schedulePersist();
+  persistNow();
 
   const response: VerifyCodeResponse = {
     ok: true,
@@ -653,6 +656,7 @@ function findFirstLiveThreadId(excludingThreadId?: string) {
 }
 
 function authenticate(req: Request) {
+  refreshPersisted();
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   const session = persisted.sessions[token];
   if (!session || sessionExpired(session.expiresAt)) {
@@ -1177,10 +1181,23 @@ function schedulePersist() {
   }
 
   persistTimer = setTimeout(() => {
-    mkdirSync(dataDir, { recursive: true });
-    writeFileSync(dataFile, JSON.stringify(persisted, null, 2));
-    persistTimer = null;
+    persistNow();
   }, 120);
+}
+
+function persistNow() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(dataFile, JSON.stringify(persisted, null, 2));
+}
+
+function refreshPersisted() {
+  persisted = loadState();
+  return persisted;
 }
 
 function loadState(): PersistedState {
