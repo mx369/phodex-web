@@ -22,6 +22,7 @@ Read this file before editing anything under `apps/server`.
 - Real endpoints exist for health, bootstrap, OTP issue, OTP verify, client relay websocket, and bridge websocket.
 - OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
 - The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
+- Public-relay bridge runs now default to selected-thread sync only; local relay runs still default to full thread sync unless `PHODEX_BRIDGE_SYNC_MODE` overrides it.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
 - Richer upstream message mapping is still incomplete.
 

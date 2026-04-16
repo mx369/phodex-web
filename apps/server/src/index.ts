@@ -135,6 +135,7 @@ const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const CODEX_BIN = resolveCodexBinary();
 const OTP_MAIL_CONFIG = resolveOtpMailConfig();
+const BRIDGE_SYNC_MODE = resolveBridgeSyncMode();
 const DEV_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -214,15 +215,18 @@ function connectRelaySocket() {
     handleRelayMessage(typeof event.data === "string" ? event.data : event.data.toString());
   });
 
-  socket.addEventListener("error", () => {
+  socket.addEventListener("error", (event) => {
+    console.warn("[phodex-bridge] Relay socket error.", event.type);
     scheduleRelayReconnect();
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
     if (relaySocket === socket) {
       relaySocket = null;
     }
-    console.warn("[phodex-bridge] Relay connection closed.");
+    console.warn(
+      `[phodex-bridge] Relay connection closed code=${event.code} reason=${event.reason || "none"} wasClean=${event.wasClean}`
+    );
     scheduleRelayReconnect();
   });
 }
@@ -1116,6 +1120,27 @@ async function syncAllThreadsFromCodex() {
   }
 
   threadSyncInFlight = (async () => {
+    if (BRIDGE_SYNC_MODE === "selected") {
+      const selectedThreadIds = [...new Set(
+        [...bridgeUsers.values()]
+          .map((user) => user.selectedThreadId)
+          .filter((threadId): threadId is string => Boolean(threadId))
+      )];
+
+      if (selectedThreadIds.length === 0) {
+        codexLastSyncAt = new Date().toISOString();
+        publishPresenceToAllUsers();
+        return;
+      }
+
+      for (const threadId of selectedThreadIds) {
+        await syncThreadFromCodex(threadId, false);
+      }
+      codexLastSyncAt = new Date().toISOString();
+      publishPresenceToAllUsers();
+      return;
+    }
+
     const [liveThreads, archivedThreads] = await Promise.all([
       listThreads(false),
       listThreads(true),
@@ -2634,6 +2659,21 @@ function resolveOtpMailConfig(): OtpMailConfig | null {
     authEmailFrom,
     sourceLabel,
   };
+}
+
+function resolveBridgeSyncMode() {
+  const explicit = process.env.PHODEX_BRIDGE_SYNC_MODE?.trim().toLowerCase();
+  if (explicit === "all" || explicit === "selected") {
+    return explicit;
+  }
+
+  try {
+    const relayUrl = new URL(PUBLIC_RELAY_URL);
+    const isLocalRelayHost = relayUrl.hostname === "127.0.0.1" || relayUrl.hostname === "localhost";
+    return isLocalRelayHost ? "all" : "selected";
+  } catch {
+    return "all";
+  }
 }
 
 function readOptionalEnvFile(filePath: string) {

@@ -34,6 +34,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Bootstrap and client websocket open send a full snapshot from the public relay.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
+- Bridge thread-sync defaults depend on relay target: local relay hosts keep the old full-thread sweep, while public relay hosts default to syncing only the currently selected thread ids. Override with `PHODEX_BRIDGE_SYNC_MODE=all|selected` when you need a different behavior.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.
