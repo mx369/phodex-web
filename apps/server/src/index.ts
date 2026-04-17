@@ -1,13 +1,14 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import type {
   AppSettings,
   AppSnapshot,
   AuthSession,
+  BridgeProjectRequest,
   BridgeCommand,
   BridgeDispatchEvent,
   BridgeEvent,
@@ -16,6 +17,12 @@ import type {
   DeliveryMode,
   DiffStats,
   FileChangeSummary,
+  ProjectDiffFile,
+  ProjectDiffPayload,
+  ProjectFilePayload,
+  ProjectResourcePayload,
+  ProjectTreeEntry,
+  ProjectTreePayload,
   QueuedDraft,
   RelayConnection,
   RequestCodeResponse,
@@ -106,6 +113,15 @@ type ProjectContext = {
   gitCommonDir: string | null;
   isRepo: boolean;
 };
+
+class ProjectResourceError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
@@ -258,9 +274,406 @@ function handleRelayMessage(raw: string) {
         console.error(`[phodex-bridge] sync-thread failed: ${readErrorMessage(error)}`);
       });
       break;
+    case "bridge:project:request":
+      void handleProjectRequest(command);
+      break;
     case "bridge:dispatch":
       void handleBridgeDispatch(command);
       break;
+  }
+}
+
+async function handleProjectRequest(command: Extract<BridgeCommand, { type: "bridge:project:request" }>) {
+  try {
+    const result = await readProjectResource(command.request);
+    sendBridgeEvent({
+      type: "bridge:project:response",
+      requestId: command.requestId,
+      userId: command.userId,
+      ok: true,
+      result,
+    });
+  } catch (error) {
+    const status = error instanceof ProjectResourceError ? error.status : 500;
+    sendBridgeEvent({
+      type: "bridge:project:response",
+      requestId: command.requestId,
+      userId: command.userId,
+      ok: false,
+      error: readErrorMessage(error),
+      status,
+    });
+  }
+}
+
+async function readProjectResource(request: BridgeProjectRequest): Promise<ProjectResourcePayload> {
+  const thread = threadCache.get(request.threadId);
+  if (!thread) {
+    throw new ProjectResourceError(404, "Thread not found.");
+  }
+
+  const rootPath = normalizeComparablePath(resolve(thread.repoLabel || DEFAULT_THREAD_CWD));
+  if (!existsSync(rootPath) || !statSync(rootPath).isDirectory()) {
+    throw new ProjectResourceError(404, "Project root is unavailable.");
+  }
+
+  switch (request.kind) {
+    case "tree":
+      return readProjectTree(rootPath, request.path);
+    case "file":
+      return readProjectFile(rootPath, request.path);
+    case "diff":
+      return readProjectDiff(rootPath, request.path);
+  }
+}
+
+function readProjectTree(rootPath: string, rawPath: string | undefined) {
+  const resolved = resolveProjectPathWithinRoot(rootPath, rawPath ?? ".");
+  const directoryStat = statSync(resolved.absolutePath);
+  if (!directoryStat.isDirectory()) {
+    throw new ProjectResourceError(400, "Tree path must point to a directory.");
+  }
+
+  const entries: ProjectTreeEntry[] = readdirSync(resolved.absolutePath, { withFileTypes: true })
+    .map((entry) => {
+      const entryAbsolutePath = resolve(resolved.absolutePath, entry.name);
+      const entryStat = statSync(entryAbsolutePath);
+      return {
+        name: entry.name,
+        path: relative(rootPath, entryAbsolutePath) || ".",
+        kind: entryStat.isDirectory() ? "directory" : "file",
+        size: entryStat.size,
+        modifiedAt: entryStat.mtime.toISOString(),
+      } satisfies ProjectTreeEntry;
+    })
+    .sort((left, right) => {
+      const leftRank = left.kind === "directory" ? 0 : 1;
+      const rightRank = right.kind === "directory" ? 0 : 1;
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
+  return {
+    kind: "tree",
+    root: rootPath,
+    path: resolved.relativePath,
+    entries,
+  } satisfies ProjectTreePayload;
+}
+
+function readProjectFile(rootPath: string, rawPath: string) {
+  const resolved = resolveProjectPathWithinRoot(rootPath, rawPath);
+  const fileStat = statSync(resolved.absolutePath);
+  if (fileStat.isDirectory()) {
+    throw new ProjectResourceError(400, "File path must point to a file.");
+  }
+
+  const buffer = readFileSync(resolved.absolutePath);
+  const fileKind = isProbablyBinaryBuffer(buffer) ? "binary" : "text";
+  const response: ProjectFilePayload = {
+    kind: "file",
+    root: rootPath,
+    path: resolved.relativePath,
+    fileKind,
+    encoding: fileKind === "binary" ? "none" : "utf-8",
+    mimeType: guessMimeType(resolved.absolutePath, fileKind),
+    size: fileStat.size,
+    modifiedAt: fileStat.mtime.toISOString(),
+  };
+
+  if (fileKind === "text") {
+    const content = buffer.toString("utf8");
+    if (buffer.length > PROJECT_FILE_PREVIEW_BYTES) {
+      response.content = content.slice(0, PROJECT_FILE_PREVIEW_BYTES);
+      response.truncated = true;
+    } else {
+      response.content = content;
+    }
+  }
+
+  return response;
+}
+
+function readProjectDiff(rootPath: string, rawPath: string | null) {
+  const resolved = rawPath == null ? null : resolveProjectPathWithinRoot(rootPath, rawPath, { mustExist: false });
+  const relativePath = resolved?.relativePath ?? null;
+  const args = ["diff", "--find-renames", "--no-ext-diff", "--no-color", "--unified=3", "HEAD"];
+  if (relativePath && relativePath !== ".") {
+    args.push("--", relativePath);
+  } else if (rawPath !== null) {
+    args.push("--", ".");
+  }
+
+  const diffResult = gitSpawnSync(args, rootPath);
+  if (!diffResult.ok) {
+    throw new ProjectResourceError(404, "Project diff is unavailable.");
+  }
+
+  const untrackedFiles = listUntrackedFiles(rootPath, relativePath);
+  const patch = [diffResult.stdout.trim(), ...untrackedFiles.map((filePath) => buildUntrackedFileDiff(rootPath, filePath))].filter(Boolean).join("\n\n");
+  const files = splitProjectDiffByFile(patch);
+  const summary = files.reduce(
+    (stats, file) => {
+      stats.additions += file.additions;
+      stats.deletions += file.deletions;
+      return stats;
+    },
+    { additions: 0, deletions: 0 } satisfies DiffStats
+  );
+
+  return {
+    kind: "diff",
+    root: rootPath,
+    path: relativePath,
+    summary,
+    files,
+  } satisfies ProjectDiffPayload;
+}
+
+function listUntrackedFiles(rootPath: string, relativePath: string | null) {
+  const args = ["ls-files", "--others", "--exclude-standard"];
+  if (relativePath && relativePath !== ".") {
+    args.push("--", relativePath);
+  }
+  const result = gitSpawnSync(args, rootPath);
+  if (!result.ok || !result.stdout) {
+    return [];
+  }
+  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function buildUntrackedFileDiff(rootPath: string, filePath: string) {
+  const absolutePath = resolve(rootPath, filePath);
+  if (!existsSync(absolutePath)) {
+    return "";
+  }
+
+  const result = spawnSync("git", ["diff", "--no-ext-diff", "--no-color", "--unified=3", "--no-index", "--", "/dev/null", filePath], {
+    cwd: rootPath,
+    encoding: "utf8",
+  });
+  if (result.error || (result.status !== 0 && result.status !== 1)) {
+    return "";
+  }
+  return (result.stdout || "").trim();
+}
+
+function splitProjectDiffByFile(diff: string) {
+  const trimmed = diff.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  for (const line of trimmed.split("\n")) {
+    if (line.startsWith("diff --git ") && current.length) {
+      chunks.push(current);
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length) {
+    chunks.push(current);
+  }
+
+  return chunks
+    .map((lines) => {
+      const patch = lines.join("\n").trim();
+      const path = extractDiffPath(lines);
+      if (!path || !patch) {
+        return null;
+      }
+      return {
+        path,
+        action: detectDiffAction(lines),
+        additions: countDiffAdditions(lines),
+        deletions: countDiffDeletions(lines),
+        patch,
+      } satisfies ProjectDiffFile;
+    })
+    .filter((entry): entry is ProjectDiffFile => Boolean(entry));
+}
+
+function extractDiffPath(lines: string[]) {
+  for (const line of lines) {
+    if (line.startsWith("rename to ")) {
+      return normalizeDiffPath(line.slice("rename to ".length));
+    }
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("+++ ")) {
+      const path = normalizeDiffPath(line.slice(4));
+      if (path && path !== "/dev/null") {
+        return path;
+      }
+    }
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("--- ")) {
+      const path = normalizeDiffPath(line.slice(4));
+      if (path && path !== "/dev/null") {
+        return path;
+      }
+    }
+  }
+
+  const gitHeader = lines.find((line) => line.startsWith("diff --git "));
+  if (gitHeader) {
+    const match = gitHeader.match(/^diff --git a\/(.+) b\/(.+)$/);
+    if (match) {
+      return normalizeDiffPath(match[2]);
+    }
+    const parts = gitHeader.split(" ");
+    if (parts.length >= 4) {
+      return normalizeDiffPath(parts[parts.length - 1]);
+    }
+  }
+
+  return "";
+}
+
+function normalizeDiffPath(rawPath: string) {
+  let value = rawPath.trim();
+  if (value.startsWith("a/") || value.startsWith("b/")) {
+    value = value.slice(2);
+  }
+  return value;
+}
+
+function detectDiffAction(lines: string[]) {
+  if (lines.some((line) => line.startsWith("rename from ") || line.startsWith("rename to "))) {
+    return "Moved" as const;
+  }
+  if (lines.some((line) => line.startsWith("new file mode ") || line === "--- /dev/null")) {
+    return "Created" as const;
+  }
+  if (lines.some((line) => line.startsWith("deleted file mode ") || line === "+++ /dev/null")) {
+    return "Deleted" as const;
+  }
+  return "Edited" as const;
+}
+
+function countDiffAdditions(lines: string[]) {
+  return lines.reduce((total, line) => {
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      return total + 1;
+    }
+    return total;
+  }, 0);
+}
+
+function countDiffDeletions(lines: string[]) {
+  return lines.reduce((total, line) => {
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      return total + 1;
+    }
+    return total;
+  }, 0);
+}
+
+function resolveProjectPathWithinRoot(rootPath: string, rawPath: string, options: { mustExist?: boolean } = {}) {
+  const trimmed = rawPath.trim() || ".";
+  const rootAbsolute = normalizeComparablePath(rootPath);
+  const candidatePath = trimmed === "." ? rootAbsolute : resolve(rootAbsolute, trimmed);
+  const existingAncestor = findNearestExistingPath(candidatePath);
+  if (!existingAncestor) {
+    throw new ProjectResourceError(404, "Path not found.");
+  }
+
+  const resolvedAncestor = normalizeComparablePath(existingAncestor);
+  const relativeToAncestor = relative(existingAncestor, candidatePath);
+  const absolutePath = relativeToAncestor ? resolve(resolvedAncestor, relativeToAncestor) : resolvedAncestor;
+  if (!isPathInsideRoot(rootAbsolute, absolutePath)) {
+    throw new ProjectResourceError(403, "Path must stay inside the thread project root.");
+  }
+
+  if (options.mustExist !== false && !existsSync(absolutePath)) {
+    throw new ProjectResourceError(404, "Path not found.");
+  }
+
+  return {
+    rootPath: rootAbsolute,
+    absolutePath,
+    relativePath: relative(rootAbsolute, absolutePath) || ".",
+  };
+}
+
+function findNearestExistingPath(value: string) {
+  let cursor = resolve(value);
+  while (true) {
+    if (existsSync(cursor)) {
+      return cursor;
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) {
+      return null;
+    }
+    cursor = parent;
+  }
+}
+
+function isPathInsideRoot(rootPath: string, candidatePath: string) {
+  const relativePath = relative(rootPath, candidatePath);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function isProbablyBinaryBuffer(buffer: Buffer) {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
+  if (!sample.length) {
+    return false;
+  }
+
+  if (sample.includes(0)) {
+    return true;
+  }
+
+  let suspicious = 0;
+  for (const byte of sample) {
+    if (byte < 9 || (byte > 13 && byte < 32) || byte === 127) {
+      suspicious += 1;
+    }
+  }
+  return suspicious / sample.length > 0.3;
+}
+
+function guessMimeType(filePath: string, fileKind: "text" | "binary") {
+  if (fileKind === "binary") {
+    return "application/octet-stream";
+  }
+
+  switch (extname(filePath).toLowerCase()) {
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".md":
+      return "text/markdown; charset=utf-8";
+    case ".html":
+    case ".htm":
+      return "text/html; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".js":
+    case ".mjs":
+    case ".cjs":
+    case ".ts":
+    case ".tsx":
+    case ".jsx":
+      return "text/plain; charset=utf-8";
+    case ".yaml":
+    case ".yml":
+      return "text/yaml; charset=utf-8";
+    case ".toml":
+      return "text/plain; charset=utf-8";
+    case ".sh":
+      return "text/x-shellscript; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "text/plain; charset=utf-8";
   }
 }
 
@@ -1713,6 +2126,373 @@ function resolveProjectContext(cwd: string): ProjectContext {
   } satisfies ProjectContext;
   projectContextCache.set(requestedCwd, context);
   return context;
+}
+
+const PROJECT_TEXT_MIME_TYPES: Record<string, string> = {
+  ".c": "text/plain",
+  ".cc": "text/plain",
+  ".cpp": "text/plain",
+  ".css": "text/css",
+  ".go": "text/plain",
+  ".h": "text/plain",
+  ".html": "text/html",
+  ".java": "text/plain",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".jsx": "text/javascript",
+  ".kt": "text/plain",
+  ".md": "text/markdown",
+  ".mjs": "text/javascript",
+  ".py": "text/x-python",
+  ".rb": "text/plain",
+  ".rs": "text/plain",
+  ".sh": "text/x-shellscript",
+  ".sql": "text/plain",
+  ".svg": "image/svg+xml",
+  ".toml": "application/toml",
+  ".ts": "text/typescript",
+  ".tsx": "text/typescript",
+  ".txt": "text/plain",
+  ".vue": "text/plain",
+  ".xml": "application/xml",
+  ".yaml": "application/yaml",
+  ".yml": "application/yaml",
+};
+const PROJECT_FILE_PREVIEW_MAX_BYTES = 256 * 1024;
+
+function readProjectResource(request: BridgeProjectRequest): ProjectResourcePayload {
+  const thread = threadCache.get(request.threadId);
+  if (!thread) {
+    throw new ProjectResourceError(404, "Thread not found.");
+  }
+
+  const root = writableRootForThread(thread);
+  if (!existsSync(root)) {
+    throw new ProjectResourceError(404, "Project root not found on this Mac.");
+  }
+
+  switch (request.kind) {
+    case "tree":
+      return listProjectTree(root, request.path);
+    case "file":
+      return readProjectFile(root, request.path);
+    case "diff":
+      return readProjectDiff(root, request.path);
+  }
+}
+
+function listProjectTree(root: string, requestedPath: string): ProjectTreePayload {
+  const directoryPath = resolveProjectScopedPath(root, requestedPath || ".");
+  if (!existsSync(directoryPath)) {
+    throw new ProjectResourceError(404, "Requested path was not found.");
+  }
+  const directoryStats = statSync(directoryPath);
+  if (!directoryStats.isDirectory()) {
+    throw new ProjectResourceError(400, "Requested path is not a directory.");
+  }
+
+  const entries: ProjectTreeEntry[] = [];
+  for (const dirent of readdirSync(directoryPath, { withFileTypes: true })) {
+    const targetPath = resolve(directoryPath, dirent.name);
+    try {
+      const stats = statSync(targetPath);
+      entries.push({
+        name: dirent.name,
+        path: normalizeProjectRelativePath(root, targetPath),
+        kind: stats.isDirectory() ? "directory" : "file",
+        size: stats.isDirectory() ? 0 : stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  entries.sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "directory" ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+
+  return {
+    kind: "tree",
+    root: resolve(root),
+    path: normalizeProjectRelativePath(root, directoryPath),
+    entries,
+  };
+}
+
+function readProjectFile(root: string, requestedPath: string): ProjectFilePayload {
+  const filePath = resolveProjectScopedPath(root, requestedPath);
+  if (!existsSync(filePath)) {
+    throw new ProjectResourceError(404, "Requested path was not found.");
+  }
+  const stats = statSync(filePath);
+  if (!stats.isFile()) {
+    throw new ProjectResourceError(400, "Requested path is not a file.");
+  }
+
+  const buffer = readFileSync(filePath);
+  const mimeType = PROJECT_TEXT_MIME_TYPES[extname(filePath).toLowerCase()] ?? "text/plain";
+  const payloadBase = {
+    kind: "file" as const,
+    root: resolve(root),
+    path: normalizeProjectRelativePath(root, filePath),
+    mimeType,
+    size: stats.size,
+    modifiedAt: stats.mtime.toISOString(),
+  };
+
+  if (isLikelyBinaryBuffer(buffer)) {
+    return {
+      ...payloadBase,
+      fileKind: "binary",
+      encoding: "none",
+      mimeType: "application/octet-stream",
+    };
+  }
+
+  const truncated = buffer.byteLength > PROJECT_FILE_PREVIEW_MAX_BYTES;
+  const previewBuffer = truncated ? buffer.subarray(0, PROJECT_FILE_PREVIEW_MAX_BYTES) : buffer;
+  return {
+    ...payloadBase,
+    fileKind: "text",
+    encoding: "utf-8",
+    content: previewBuffer.toString("utf8"),
+    truncated,
+  };
+}
+
+function readProjectDiff(root: string, requestedPath: string | null): ProjectDiffPayload {
+  const rootPath = resolve(root);
+  const projectContext = resolveProjectContext(rootPath);
+  let absoluteFilterPath: string | null = null;
+  if (requestedPath) {
+    absoluteFilterPath = resolveProjectScopedPath(rootPath, requestedPath);
+    if (!existsSync(absoluteFilterPath)) {
+      throw new ProjectResourceError(404, "Requested path was not found.");
+    }
+  }
+
+  if (!projectContext.isRepo) {
+    return {
+      kind: "diff",
+      root: rootPath,
+      path: absoluteFilterPath ? normalizeProjectRelativePath(rootPath, absoluteFilterPath) : null,
+      summary: { additions: 0, deletions: 0 },
+      files: [],
+    };
+  }
+
+  const gitRelativeFilter = absoluteFilterPath
+    ? normalizeProjectRelativePath(projectContext.projectRoot, absoluteFilterPath)
+    : null;
+
+  const diffArgs = ["diff", "--find-renames", "--no-ext-diff", "--no-color", "HEAD"];
+  if (gitRelativeFilter) {
+    diffArgs.push("--", gitRelativeFilter);
+  }
+  const diffResult = gitSpawnSync(diffArgs, projectContext.projectRoot);
+  if (!diffResult.ok) {
+    throw new ProjectResourceError(500, diffResult.stderr || "Unable to read git diff.");
+  }
+
+  const files = parseProjectDiffFiles(diffResult.stdout);
+  const untrackedArgs = ["ls-files", "--others", "--exclude-standard"];
+  if (gitRelativeFilter) {
+    untrackedArgs.push("--", gitRelativeFilter);
+  }
+  const untrackedResult = gitSpawnSync(untrackedArgs, projectContext.projectRoot);
+  if (untrackedResult.ok) {
+    for (const relativePath of untrackedResult.stdout.split("\n").map((value) => value.trim()).filter(Boolean)) {
+      const untrackedFile = buildUntrackedDiffFile(projectContext.projectRoot, relativePath);
+      if (untrackedFile) {
+        files.push(untrackedFile);
+      }
+    }
+  }
+
+  return {
+    kind: "diff",
+    root: rootPath,
+    path: absoluteFilterPath ? normalizeProjectRelativePath(rootPath, absoluteFilterPath) : null,
+    summary: summarizeDiffStats(files),
+    files,
+  };
+}
+
+function resolveProjectScopedPath(root: string, requestedPath: string) {
+  const normalizedRoot = resolve(root);
+  const targetPath = resolve(normalizedRoot, requestedPath || ".");
+  const relativeToRoot = relative(normalizedRoot, targetPath);
+  if (relativeToRoot && (relativeToRoot.startsWith("..") || isAbsolute(relativeToRoot))) {
+    throw new ProjectResourceError(403, "Access outside of the project root is not allowed.");
+  }
+
+  const realRoot = normalizeComparablePath(normalizedRoot);
+  if (existsSync(targetPath)) {
+    const realTarget = normalizeComparablePath(targetPath);
+    const relativeToRealRoot = relative(realRoot, realTarget);
+    if (relativeToRealRoot && (relativeToRealRoot.startsWith("..") || isAbsolute(relativeToRealRoot))) {
+      throw new ProjectResourceError(403, "Access outside of the project root is not allowed.");
+    }
+  }
+
+  return targetPath;
+}
+
+function normalizeProjectRelativePath(root: string, targetPath: string) {
+  const normalized = relative(resolve(root), resolve(targetPath)).replace(/\\/g, "/");
+  return normalized || ".";
+}
+
+function isLikelyBinaryBuffer(buffer: Buffer) {
+  const length = Math.min(buffer.length, 8_192);
+  for (let index = 0; index < length; index += 1) {
+    if (buffer[index] === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseProjectDiffFiles(diff: string) {
+  if (!diff.trim()) {
+    return [] as ProjectDiffFile[];
+  }
+
+  const chunks: string[][] = [];
+  let currentChunk: string[] = [];
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("diff --git ") && currentChunk.length) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+    }
+    currentChunk.push(line);
+  }
+  if (currentChunk.length) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks
+    .map((chunk) => buildProjectDiffFile(chunk))
+    .filter((entry): entry is ProjectDiffFile => Boolean(entry));
+}
+
+function buildProjectDiffFile(lines: string[]): ProjectDiffFile | null {
+  const patch = lines.join("\n").trim();
+  if (!patch) {
+    return null;
+  }
+
+  const renameFrom = lines.find((line) => line.startsWith("rename from "))?.slice("rename from ".length).trim() ?? "";
+  const renameTo = lines.find((line) => line.startsWith("rename to "))?.slice("rename to ".length).trim() ?? "";
+  const headerPath = extractDiffHeaderPath(lines);
+  const path = renameFrom && renameTo ? `${renameFrom} -> ${renameTo}` : normalizeProjectDiffPath(headerPath);
+  if (!path) {
+    return null;
+  }
+  const stats = parseUnifiedDiffStats(patch);
+
+  return {
+    action: detectProjectDiffAction(lines),
+    path,
+    additions: stats.additions,
+    deletions: stats.deletions,
+    patch,
+  };
+}
+
+function extractDiffHeaderPath(lines: string[]) {
+  for (const line of lines) {
+    if (line.startsWith("+++ ")) {
+      const candidate = line.slice(4).trim();
+      if (candidate && candidate !== "/dev/null") {
+        return candidate;
+      }
+    }
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("--- ")) {
+      const candidate = line.slice(4).trim();
+      if (candidate && candidate !== "/dev/null") {
+        return candidate;
+      }
+    }
+  }
+
+  const diffHeader = lines.find((line) => line.startsWith("diff --git "));
+  if (!diffHeader) {
+    return "";
+  }
+  const parts = diffHeader.split(" ");
+  return parts[3] ?? parts[2] ?? "";
+}
+
+function normalizeProjectDiffPath(rawPath: string) {
+  return rawPath.replace(/^(a|b)\//, "").trim();
+}
+
+function detectProjectDiffAction(lines: string[]): FileChangeSummary["action"] {
+  if (lines.some((line) => line.startsWith("rename from ") || line.startsWith("rename to "))) {
+    return "Moved";
+  }
+  if (lines.some((line) => line.startsWith("new file mode ")) || lines.includes("--- /dev/null")) {
+    return "Created";
+  }
+  if (lines.some((line) => line.startsWith("deleted file mode ")) || lines.includes("+++ /dev/null")) {
+    return "Deleted";
+  }
+  return "Edited";
+}
+
+function buildUntrackedDiffFile(projectRoot: string, relativePath: string): ProjectDiffFile | null {
+  const filePath = resolve(projectRoot, relativePath);
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const stats = statSync(filePath);
+    if (!stats.isFile()) {
+      return null;
+    }
+
+    const normalizedPath = normalizeProjectRelativePath(projectRoot, filePath);
+    const buffer = readFileSync(filePath);
+    if (isLikelyBinaryBuffer(buffer)) {
+      return {
+        action: "Created",
+        path: normalizedPath,
+        additions: 0,
+        deletions: 0,
+        patch: `diff --git a/${normalizedPath} b/${normalizedPath}\nnew file mode 100644\nBinary files /dev/null and b/${normalizedPath} differ`,
+      };
+    }
+
+    const content = buffer.toString("utf8");
+    const lines = content.split("\n");
+    const patchLines = [
+      `diff --git a/${normalizedPath} b/${normalizedPath}`,
+      "new file mode 100644",
+      "--- /dev/null",
+      `+++ b/${normalizedPath}`,
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map((line) => `+${line}`),
+    ];
+
+    return {
+      action: "Created",
+      path: normalizedPath,
+      additions: lines.length,
+      deletions: 0,
+      patch: patchLines.join("\n"),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function findNearestExistingDirectory(value: string) {
