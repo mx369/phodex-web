@@ -23,7 +23,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Flow | Status | Notes |
 | --- | --- | --- |
-| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; onboarding now keeps Codex CLI as Step 1 and combines bridge install + start into one real `bunx` command that claims a short-lived setup token before writing local bridge config |
+| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; onboarding now uses a single real `bunx` command that installs the local bridge, claims a short-lived setup token, writes local relay config, and starts the bridge |
 | Email OTP login | Real | Uses `/api/auth/request-code` and `/api/auth/verify-code`; request-code requires configured live email delivery and no longer exposes any local bypass path |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | Local pending thread state appears immediately, then resolves to the real Codex thread |

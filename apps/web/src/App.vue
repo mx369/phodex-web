@@ -238,7 +238,6 @@ const pendingShellPage = ref<ShellPageState | null>(readShellPageState());
 const ONBOARDING_STORAGE_KEY = "phodex.onboarding-seen";
 const onboardingPage = ref(0);
 const onboardingSeen = ref(readOnboardingSeen());
-const onboardingInstallWarningVisible = ref(false);
 const onboardingTouchStartX = ref(0);
 const selectedPlanId = ref("annual");
 const shellPageStack = ref<ShellPageState[]>([]);
@@ -307,14 +306,6 @@ const onboardingScreens = [
   {
     kind: "step",
     step: "Step 1",
-    icon: "terminal",
-    title: "Install Codex CLI",
-    subtitle: "The AI coding agent that lives in your terminal. Remodex connects to it from your iPhone.",
-    commandKey: "codex",
-  },
-  {
-    kind: "step",
-    step: "Step 2",
     icon: "relay",
     title: "Install & Start Bridge",
     subtitle: "Run one Bun command on your Mac to install the local bridge, write the relay settings, and launch it.",
@@ -484,9 +475,7 @@ const currentOnboardingCommand = computed(() => {
     return "";
   }
 
-  return currentOnboardingScreen.value.commandKey === "codex"
-    ? "npm install -g @openai/codex@latest"
-    : onboardingBridgeCommand.value;
+  return onboardingBridgeCommand.value;
 });
 const onboardingCtaLabel = computed(() => {
   if (onboardingPage.value === 0) return "Get Started";
@@ -1239,12 +1228,8 @@ function closeSidebar() {
   state.ui.sidebarOpen = false;
 }
 
-function setOnboardingPage(nextPage: number, skipInstallWarning = false) {
+function setOnboardingPage(nextPage: number) {
   const clamped = Math.max(0, Math.min(nextPage, onboardingScreens.length - 1));
-  if (onboardingPage.value === 2 && clamped > 2 && !skipInstallWarning) {
-    onboardingInstallWarningVisible.value = true;
-    return;
-  }
   onboardingPage.value = clamped;
 }
 
@@ -1254,17 +1239,12 @@ function completeOnboarding() {
   rootFlowState.value = "email-otp";
 }
 
-function advanceOnboarding(skipInstallWarning = false) {
+function advanceOnboarding() {
   if (onboardingPage.value < onboardingScreens.length - 1) {
-    setOnboardingPage(onboardingPage.value + 1, skipInstallWarning);
+    setOnboardingPage(onboardingPage.value + 1);
     return;
   }
   completeOnboarding();
-}
-
-function confirmInstallWarning() {
-  onboardingInstallWarningVisible.value = false;
-  advanceOnboarding(true);
 }
 
 function handleOnboardingTouchStart(event: TouchEvent) {
@@ -1282,14 +1262,13 @@ function handleOnboardingTouchEnd(event: TouchEvent) {
     return;
   }
   if (delta > 0 && onboardingPage.value > 0) {
-    setOnboardingPage(onboardingPage.value - 1, true);
+    setOnboardingPage(onboardingPage.value - 1);
   }
 }
 
 function restartOnboarding() {
   onboardingPage.value = 0;
   onboardingSeen.value = false;
-  onboardingInstallWarningVisible.value = false;
   rootFlowState.value = "onboarding";
   window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
   shellPageStack.value = [];
@@ -1634,31 +1613,13 @@ function handleScrollToLatest() {
                       :key="index"
                       class="onboarding-flow__dot"
                       :class="{ 'onboarding-flow__dot--active': onboardingPage === index }"
-                      @click="setOnboardingPage(index, index <= onboardingPage)"
+                      @click="setOnboardingPage(index)"
                     ></button>
                   </div>
                   <button class="primary-cta primary-cta--dark" @click="advanceOnboarding()">
                     {{ onboardingCtaLabel }}
                   </button>
                 </div>
-
-                <transition name="scrim">
-                  <div v-if="onboardingInstallWarningVisible" class="alert-scrim">
-                    <div class="alert-card">
-                      <span class="section-label section-label--light">Before you continue</span>
-                      <h3>Install Codex CLI first.</h3>
-                      <p>Copy and paste the install command on your Mac before moving on. Remodex will not work until Codex CLI is available in your PATH.</p>
-                      <div class="alert-card__actions">
-                        <button class="ghost-cta ghost-cta--dark ghost-cta--compact" @click="onboardingInstallWarningVisible = false">
-                          Not yet
-                        </button>
-                        <button class="primary-cta primary-cta--dark primary-cta--compact" @click="confirmInstallWarning">
-                          Continue
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </transition>
               </section>
 
               <section v-else-if="rootFlow === 'bootstrap-failure'" class="root-auth-screen">
