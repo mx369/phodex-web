@@ -13,7 +13,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Home empty | Partial | Real connection state drives the full-page mobile shell | Final spacing and disconnected-state parity still differ |
 | Sidebar | Partial | Real thread list, select, rename, archive, and project-targeted local/worktree create | Drawer polish and parity details still differ |
 | Turn empty | Partial | Real selected thread, empty timeline block, composer, pending-thread state, and `Normal / Fast` runtime toggle | Structured-input replacement and final polish are still missing |
-| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, pending-run placeholder, queued drafts, and pinned plan | Some empty branches, queue states, and toolbar/sheet parity still differ |
+| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, pending-run placeholder, queued drafts, pinned plan, and thread-scoped project diff/file inspectors | Some empty branches, queue states, and toolbar/sheet parity still differ |
 | Settings | Partial | Real setting patches persist in a dedicated page | Visual and IA parity still differ |
 | Archived chats | Partial | Real archived list and restore | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Dedicated informational page exists | Still simplified versus upstream |
@@ -37,6 +37,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Queue while running | Real | Stores the draft locally and preserves its runtime settings |
 | Resume queued draft | Real | Replays the queued text with its saved runtime settings |
 | Rich execution activity surfaces | Real | Shows structured command, file, tool, image, and subagent cards; history also backfills missing diff/file rows |
+| Project browser and diff inspector | Real | The current thread toolbar can open a lazy project file browser or working-tree diff sheet; `message.fileChanges` rows deep-link into filtered diff for that file |
 | Pinned plan accessory | Real | Latest `/plan` summary can pin above the composer |
 | Rename thread | Real | Applies a local title override immediately and best-effort syncs to Codex |
 | Archive thread | Real | Uses Codex archive/unarchive |

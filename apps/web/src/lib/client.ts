@@ -627,8 +627,12 @@ function flushComposer(threadId: string) {
 }
 
 async function fetchJson<T>(path: string, init: { method: string; body?: unknown }) {
+  return fetchSessionJson<T>(path, init);
+}
+
+export async function fetchSessionJson<T>(path: string, init: { method?: string; body?: unknown } = {}) {
   const response = await fetch(`${API_ORIGIN}${path}`, {
-    method: init.method,
+    method: init.method ?? "GET",
     headers: {
       "content-type": "application/json",
       ...(state.session ? { authorization: `Bearer ${state.session.token}` } : {}),

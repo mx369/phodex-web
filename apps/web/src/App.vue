@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
-import type { ThreadCreateMode, ThreadRecord } from "@phodex/shared";
+import type {
+  ProjectDiffFile,
+  ProjectDiffPayload,
+  ProjectFilePayload,
+  ProjectTreeEntry,
+  ProjectTreePayload,
+  ThreadCreateMode,
+  ThreadRecord,
+} from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
 import remodexAppLogo from "./assets/remodex-app-logo.png";
-import { API_ORIGIN, createAppClient, state } from "./lib/client";
+import { API_ORIGIN, createAppClient, fetchSessionJson, state } from "./lib/client";
 
 type AppIconName =
   | "archive"
@@ -16,6 +24,7 @@ type AppIconName =
   | "chevron-down"
   | "close"
   | "edit"
+  | "file"
   | "folder"
   | "home"
   | "info"
@@ -94,6 +103,9 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   edit: {
     lines: [{ x1: 13.5, y1: 6.5, x2: 17.5, y2: 10.5 }],
     paths: ["M4.5 19.5H8l9.4-9.4a2 2 0 1 0-2.82-2.82L5.18 16.68z"],
+  },
+  file: {
+    paths: ["M8 3.75h6.1l4.15 4.15V19a1.25 1.25 0 0 1-1.25 1.25H8A1.25 1.25 0 0 1 6.75 19V5A1.25 1.25 0 0 1 8 3.75z", "M14.1 3.75V8h4.25"],
   },
   folder: {
     paths: ["M3.75 8.5A2.75 2.75 0 0 1 6.5 5.75H10l2.1 2.1h5.4a2.75 2.75 0 0 1 2.75 2.75v5.9a2.75 2.75 0 0 1-2.75 2.75h-11A2.75 2.75 0 0 1 3.75 16.5z"],
@@ -228,6 +240,20 @@ type AppDialogState =
       cwd: string | null;
       customCwdInput: string;
       useCustomCwd: boolean;
+    }
+  | {
+      kind: "project-browser";
+      threadId: string;
+      title: string;
+      currentPath: string;
+      selectedFilePath: string | null;
+    }
+  | {
+      kind: "project-diff";
+      threadId: string;
+      title: string;
+      filterPath: string | null;
+      selectedDiffPath: string | null;
     };
 
 type TurnAutoScrollMode = "followBottom" | "manual";
@@ -258,6 +284,15 @@ const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
 const installManifest = ref<InstallManifest | null>(null);
+const projectTree = ref<ProjectTreePayload | null>(null);
+const projectTreeLoading = ref(false);
+const projectTreeError = ref("");
+const projectFile = ref<ProjectFilePayload | null>(null);
+const projectFileLoading = ref(false);
+const projectFileError = ref("");
+const projectDiff = ref<ProjectDiffPayload | null>(null);
+const projectDiffLoading = ref(false);
+const projectDiffError = ref("");
 
 const onboardingScreens = [
   {
@@ -711,6 +746,10 @@ function describeTargetPath(cwd: string | null, hasWorktree: boolean) {
   return hasWorktree ? `Project root ${pathTail(cwd, 2)} with worktree support` : `Project root ${pathTail(cwd, 2)}`;
 }
 
+function readAppErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Request failed";
+}
+
 function formatThreadLocation(thread: ThreadRecord) {
   return thread.isWorktree ? `Worktree · ${pathTail(thread.repoLabel, 3)}` : `Project · ${pathTail(thread.repoLabel, 2)}`;
 }
@@ -785,6 +824,19 @@ const showConversationContent = computed(() => Boolean(currentThread.value?.mess
 const showScrollToLatestButton = computed(
   () => Boolean(currentThread.value?.messages.length && autoScrollMode.value === "manual" && !isScrolledToBottom.value)
 );
+const selectedProjectDiff = computed<ProjectDiffFile | null>(() => {
+  const dialog = dialogState.value;
+  if (dialog?.kind !== "project-diff") {
+    return null;
+  }
+
+  const files = projectDiff.value?.files ?? [];
+  if (!files.length) {
+    return null;
+  }
+
+  return files.find((file) => file.path === dialog.selectedDiffPath) ?? files[0] ?? null;
+});
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
   if (!match) {
@@ -837,6 +889,10 @@ const dialogTitle = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
       return dialogState.value.mode === "worktree" ? "Start in a fresh worktree" : "Start a new local chat";
+    case "project-browser":
+      return "Project Files";
+    case "project-diff":
+      return "Code Changes";
     case "rename-thread":
       return "Rename chat";
     case "archive-group":
@@ -851,6 +907,12 @@ const dialogBody = computed(() => {
       return dialogState.value.mode === "worktree"
         ? "Choose an existing project or point at a git-backed path before starting a fresh worktree on your Mac."
         : "Choose an existing project or type a new path for the next chat on your Mac.";
+    case "project-browser":
+      return `Browse ${dialogState.value.title} and lazily preview a file when you tap it.`;
+    case "project-diff":
+      return dialogState.value.filterPath
+        ? `Inspect the diff focused on ${dialogState.value.filterPath}.`
+        : `Inspect the working-tree diff for ${dialogState.value.title}.`;
     case "rename-thread":
       return "Update the thread title shown in the sidebar and top navigation.";
     case "archive-group":
@@ -1079,6 +1141,202 @@ function splitParagraphs(text: string) {
     .split("\n")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function findThreadRecord(threadId: string) {
+  return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
+}
+
+function projectDialogTitle(thread: ThreadRecord | null) {
+  if (!thread) {
+    return "Project";
+  }
+  if (currentThread.value?.id === thread.id) {
+    return currentThreadRepoName.value || thread.projectLabel;
+  }
+  return repoNameFromPath(thread.repoLabel) || thread.projectLabel;
+}
+
+function normalizeProjectPath(path: string | null | undefined) {
+  const value = path?.trim() ?? "";
+  return value || ".";
+}
+
+function formatProjectPath(path: string | null | undefined) {
+  const value = normalizeProjectPath(path);
+  return value === "." ? "Project root" : value;
+}
+
+function parentProjectPath(path: string | null | undefined) {
+  const value = normalizeProjectPath(path);
+  if (value === ".") {
+    return ".";
+  }
+  const segments = value.split("/").filter(Boolean);
+  segments.pop();
+  return segments.length ? segments.join("/") : ".";
+}
+
+function formatProjectEntryMeta(entry: ProjectTreeEntry) {
+  return entry.kind === "directory" ? "Folder" : `${entry.size} bytes`;
+}
+
+function resetProjectBrowserState() {
+  projectTree.value = null;
+  projectTreeLoading.value = false;
+  projectTreeError.value = "";
+  projectFile.value = null;
+  projectFileLoading.value = false;
+  projectFileError.value = "";
+}
+
+function resetProjectDiffState() {
+  projectDiff.value = null;
+  projectDiffLoading.value = false;
+  projectDiffError.value = "";
+}
+
+async function loadProjectTree(threadId: string, path: string) {
+  projectTreeLoading.value = true;
+  projectTreeError.value = "";
+  projectFile.value = null;
+  projectFileLoading.value = false;
+  projectFileError.value = "";
+
+  try {
+    const result = await fetchSessionJson<ProjectTreePayload>(
+      `/api/thread/${encodeURIComponent(threadId)}/project/tree?path=${encodeURIComponent(normalizeProjectPath(path))}`
+    );
+    projectTree.value = result;
+    if (dialogState.value?.kind === "project-browser" && dialogState.value.threadId === threadId) {
+      dialogState.value = {
+        ...dialogState.value,
+        currentPath: result.path,
+        selectedFilePath: null,
+      };
+    }
+  } catch (error) {
+    projectTree.value = null;
+    projectTreeError.value = readAppErrorMessage(error);
+  } finally {
+    projectTreeLoading.value = false;
+  }
+}
+
+async function loadProjectFile(threadId: string, path: string) {
+  projectFileLoading.value = true;
+  projectFileError.value = "";
+
+  try {
+    const result = await fetchSessionJson<ProjectFilePayload>(
+      `/api/thread/${encodeURIComponent(threadId)}/project/file?path=${encodeURIComponent(path)}`
+    );
+    projectFile.value = result;
+    if (dialogState.value?.kind === "project-browser" && dialogState.value.threadId === threadId) {
+      dialogState.value = {
+        ...dialogState.value,
+        selectedFilePath: result.path,
+      };
+    }
+  } catch (error) {
+    projectFile.value = null;
+    projectFileError.value = readAppErrorMessage(error);
+  } finally {
+    projectFileLoading.value = false;
+  }
+}
+
+async function loadProjectDiff(threadId: string, filterPath: string | null) {
+  projectDiffLoading.value = true;
+  projectDiffError.value = "";
+
+  try {
+    const query = filterPath ? `?path=${encodeURIComponent(filterPath)}` : "";
+    const result = await fetchSessionJson<ProjectDiffPayload>(
+      `/api/thread/${encodeURIComponent(threadId)}/project/diff${query}`
+    );
+    projectDiff.value = result;
+    if (dialogState.value?.kind === "project-diff" && dialogState.value.threadId === threadId) {
+      const preferredPath = filterPath ?? dialogState.value.selectedDiffPath;
+      const selected = result.files.find((file) => file.path === preferredPath) ?? result.files[0] ?? null;
+      dialogState.value = {
+        ...dialogState.value,
+        filterPath,
+        selectedDiffPath: selected?.path ?? null,
+      };
+    }
+  } catch (error) {
+    projectDiff.value = null;
+    projectDiffError.value = readAppErrorMessage(error);
+  } finally {
+    projectDiffLoading.value = false;
+  }
+}
+
+function openProjectBrowser(thread = currentThread.value) {
+  if (!thread) {
+    return;
+  }
+
+  closeModelPicker();
+  closeSidebar();
+  resetProjectBrowserState();
+  dialogState.value = {
+    kind: "project-browser",
+    threadId: thread.id,
+    title: projectDialogTitle(thread),
+    currentPath: ".",
+    selectedFilePath: null,
+  };
+  void loadProjectTree(thread.id, ".");
+}
+
+function openProjectDiff(thread = currentThread.value, filterPath: string | null = null) {
+  if (!thread) {
+    return;
+  }
+
+  closeModelPicker();
+  closeSidebar();
+  resetProjectDiffState();
+  dialogState.value = {
+    kind: "project-diff",
+    threadId: thread.id,
+    title: projectDialogTitle(thread),
+    filterPath,
+    selectedDiffPath: filterPath,
+  };
+  void loadProjectDiff(thread.id, filterPath);
+}
+
+function selectProjectEntry(entry: ProjectTreeEntry) {
+  if (dialogState.value?.kind !== "project-browser") {
+    return;
+  }
+
+  if (entry.kind === "directory") {
+    void loadProjectTree(dialogState.value.threadId, entry.path);
+    return;
+  }
+
+  void loadProjectFile(dialogState.value.threadId, entry.path);
+}
+
+function openProjectParentDirectory() {
+  if (dialogState.value?.kind !== "project-browser") {
+    return;
+  }
+  void loadProjectTree(dialogState.value.threadId, parentProjectPath(dialogState.value.currentPath));
+}
+
+function selectProjectDiffFile(path: string) {
+  if (dialogState.value?.kind !== "project-diff") {
+    return;
+  }
+  dialogState.value = {
+    ...dialogState.value,
+    selectedDiffPath: path,
+  };
 }
 
 function deriveProjectLabelFromPathInput(value: string) {
@@ -1384,6 +1642,8 @@ function closePanel() {
 
 function closeDialog() {
   closeModelPicker();
+  resetProjectBrowserState();
+  resetProjectDiffState();
   dialogState.value = null;
   dialogInput.value = "";
 }
@@ -2227,9 +2487,13 @@ function handleScrollToLatest() {
                         <span class="turn-chip" :class="`turn-chip--${threadStateTone(currentThread)}`">
                           {{ formatThreadState(currentThread) }}
                         </span>
-                        <span class="turn-chip">+{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}</span>
+                        <button class="turn-chip turn-chip--button" type="button" @click="openProjectDiff(currentThread)">
+                          +{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}
+                        </button>
                         <span class="turn-chip">{{ currentThread.branch }}</span>
-                        <span class="turn-chip turn-chip--muted">{{ currentThreadRepoName || currentThread.projectLabel }}</span>
+                        <button class="turn-chip turn-chip--button turn-chip--muted" type="button" @click="openProjectBrowser(currentThread)">
+                          {{ currentThreadRepoName || currentThread.projectLabel }}
+                        </button>
                       </div>
                       <div class="turn-toolbar__actions">
                         <button class="turn-toolbar__action" @click="startLocalChat">New Chat</button>
@@ -2319,15 +2583,17 @@ function handleScrollToLatest() {
                             <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
 
                             <div v-if="message.fileChanges?.length" class="file-change-stack">
-                              <div
+                              <button
                                 v-for="change in message.fileChanges"
                                 :key="`${message.id}-${change.path}`"
                                 class="file-change-row"
+                                type="button"
+                                @click="openProjectDiff(currentThread, change.path)"
                               >
                                 <span>{{ change.action }}</span>
                                 <strong>{{ change.path }}</strong>
                                 <em>+{{ change.additions }} -{{ change.deletions }}</em>
-                              </div>
+                              </button>
                             </div>
                           </div>
                         </article>
@@ -2662,7 +2928,13 @@ function handleScrollToLatest() {
 
               <transition name="scrim">
                 <div v-if="dialogState" class="app-dialog-scrim" @click.self="closeDialog">
-                  <div class="app-dialog-card" :class="{ 'app-dialog-card--create-thread': dialogState.kind === 'create-thread' }">
+                  <div
+                    class="app-dialog-card"
+                    :class="{
+                      'app-dialog-card--create-thread': dialogState.kind === 'create-thread',
+                      'app-dialog-card--inspector': dialogState.kind === 'project-browser' || dialogState.kind === 'project-diff',
+                    }"
+                  >
                     <div class="app-dialog-card__head">
                       <span class="section-label">
                         {{
@@ -2670,7 +2942,11 @@ function handleScrollToLatest() {
                             ? "Rename"
                             : dialogState.kind === "create-thread"
                               ? "Create"
-                              : "Confirm"
+                              : dialogState.kind === "project-browser"
+                                ? "Project"
+                                : dialogState.kind === "project-diff"
+                                  ? "Diff"
+                                  : "Confirm"
                         }}
                       </span>
                       <h3>{{ dialogTitle }}</h3>
@@ -2776,20 +3052,167 @@ function handleScrollToLatest() {
                         </div>
                       </div>
                     </template>
+                    <template v-else-if="dialogState.kind === 'project-browser'">
+                      <div class="project-inspector">
+                        <div class="project-inspector__toolbar">
+                          <div class="project-inspector__summary">
+                            <span class="section-label">Path</span>
+                            <strong>{{ formatProjectPath(dialogState.currentPath) }}</strong>
+                            <span>{{ projectTree?.entries.length ?? 0 }} items</span>
+                          </div>
+                          <button
+                            v-if="normalizeProjectPath(dialogState.currentPath) !== '.'"
+                            class="ghost-cta ghost-cta--compact"
+                            type="button"
+                            @click="openProjectParentDirectory"
+                          >
+                            Up
+                          </button>
+                        </div>
+
+                        <p v-if="projectTreeError" class="project-inspector__error">{{ projectTreeError }}</p>
+
+                        <div class="project-browser">
+                          <div class="project-browser__list">
+                            <div v-if="projectTreeLoading" class="project-browser__empty">Loading files…</div>
+                            <template v-else>
+                              <button
+                                v-if="normalizeProjectPath(dialogState.currentPath) !== '.'"
+                                class="project-browser__entry project-browser__entry--parent"
+                                type="button"
+                                @click="openProjectParentDirectory"
+                              >
+                                <span class="project-browser__entry-icon">
+                                  <AppIcon name="chevron-left" />
+                                </span>
+                                <div class="project-browser__entry-copy">
+                                  <strong>..</strong>
+                                  <span>Back to {{ formatProjectPath(parentProjectPath(dialogState.currentPath)) }}</span>
+                                </div>
+                              </button>
+                              <button
+                                v-for="entry in projectTree?.entries ?? []"
+                                :key="entry.path"
+                                class="project-browser__entry"
+                                :class="{ 'project-browser__entry--active': dialogState.selectedFilePath === entry.path }"
+                                type="button"
+                                @click="selectProjectEntry(entry)"
+                              >
+                                <span class="project-browser__entry-icon">
+                                  <AppIcon :name="entry.kind === 'directory' ? 'folder' : 'file'" />
+                                </span>
+                                <div class="project-browser__entry-copy">
+                                  <strong>{{ entry.name }}</strong>
+                                  <span>{{ formatProjectEntryMeta(entry) }}</span>
+                                </div>
+                              </button>
+                              <div v-if="!(projectTree?.entries.length ?? 0)" class="project-browser__empty">
+                                This folder is empty.
+                              </div>
+                            </template>
+                          </div>
+
+                          <div class="project-preview">
+                            <div v-if="projectFileLoading" class="project-preview__empty">Loading file preview…</div>
+                            <template v-else-if="projectFile">
+                              <div class="project-preview__head">
+                                <strong>{{ projectFile.path }}</strong>
+                                <span>{{ projectFile.fileKind === "text" ? projectFile.mimeType : "Binary file" }}</span>
+                              </div>
+                              <pre v-if="projectFile.fileKind === 'text'" class="project-preview__code"><code>{{ projectFile.content ?? "" }}</code></pre>
+                              <div v-else class="project-preview__empty">Binary previews stay lazy. Open this file on your Mac for the full view.</div>
+                              <p v-if="projectFile.truncated" class="project-preview__note">Preview truncated at 256 KB.</p>
+                            </template>
+                            <div v-else-if="projectFileError" class="project-preview__empty">{{ projectFileError }}</div>
+                            <div v-else class="project-preview__empty">Select a file to lazily load its contents.</div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <template v-else-if="dialogState.kind === 'project-diff'">
+                      <div class="project-inspector">
+                        <div class="project-inspector__toolbar">
+                          <div class="project-inspector__summary">
+                            <span class="section-label">Scope</span>
+                            <strong>{{ formatProjectPath(dialogState.filterPath) }}</strong>
+                            <span>+{{ projectDiff?.summary.additions ?? 0 }} -{{ projectDiff?.summary.deletions ?? 0 }}</span>
+                          </div>
+                          <button
+                            v-if="dialogState.filterPath"
+                            class="ghost-cta ghost-cta--compact"
+                            type="button"
+                            @click="openProjectDiff(findThreadRecord(dialogState.threadId), null)"
+                          >
+                            Clear Filter
+                          </button>
+                        </div>
+
+                        <p v-if="projectDiffError" class="project-inspector__error">{{ projectDiffError }}</p>
+
+                        <div class="project-diff-browser">
+                          <div class="project-diff-browser__list">
+                            <div v-if="projectDiffLoading" class="project-browser__empty">Loading diff…</div>
+                            <template v-else>
+                              <button
+                                v-for="file in projectDiff?.files ?? []"
+                                :key="file.path"
+                                class="project-diff-browser__entry"
+                                :class="{ 'project-diff-browser__entry--active': selectedProjectDiff?.path === file.path }"
+                                type="button"
+                                @click="selectProjectDiffFile(file.path)"
+                              >
+                                <div class="project-diff-browser__copy">
+                                  <strong>{{ file.path }}</strong>
+                                  <span>{{ file.action }}</span>
+                                </div>
+                                <em>+{{ file.additions }} -{{ file.deletions }}</em>
+                              </button>
+                              <div v-if="!(projectDiff?.files.length ?? 0)" class="project-browser__empty">
+                                No working-tree changes for this scope.
+                              </div>
+                            </template>
+                          </div>
+
+                          <div class="project-preview">
+                            <template v-if="selectedProjectDiff">
+                              <div class="project-preview__head">
+                                <strong>{{ selectedProjectDiff.path }}</strong>
+                                <span>{{ selectedProjectDiff.action }} · +{{ selectedProjectDiff.additions }} -{{ selectedProjectDiff.deletions }}</span>
+                              </div>
+                              <pre class="project-preview__code project-preview__code--diff"><code>{{ selectedProjectDiff.patch }}</code></pre>
+                            </template>
+                            <div v-else class="project-preview__empty">Select a changed file to inspect its patch.</div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
 
                     <input
-                      v-if="dialogState.kind === 'rename-thread'"
+                      v-else-if="dialogState.kind === 'rename-thread'"
                       v-model="dialogInput"
                       class="input-field app-dialog-card__input"
                       type="text"
                       placeholder="Conversation title"
                     />
 
-                    <div class="alert-card__actions" :class="{ 'alert-card__actions--dialog': dialogState.kind === 'create-thread' }">
-                      <button class="ghost-cta ghost-cta--compact" @click="closeDialog">Cancel</button>
-                      <button class="primary-cta primary-cta--compact" :disabled="dialogConfirmDisabled" @click="confirmDialogAction">
-                        {{ dialogConfirmLabel }}
-                      </button>
+                    <div
+                      class="alert-card__actions"
+                      :class="{
+                        'alert-card__actions--dialog':
+                          dialogState.kind === 'create-thread' ||
+                          dialogState.kind === 'project-browser' ||
+                          dialogState.kind === 'project-diff',
+                      }"
+                    >
+                      <template v-if="dialogState.kind === 'project-browser' || dialogState.kind === 'project-diff'">
+                        <button class="ghost-cta ghost-cta--compact" type="button" @click="closeDialog">Close</button>
+                      </template>
+                      <template v-else>
+                        <button class="ghost-cta ghost-cta--compact" @click="closeDialog">Cancel</button>
+                        <button class="primary-cta primary-cta--compact" :disabled="dialogConfirmDisabled" @click="confirmDialogAction">
+                          {{ dialogConfirmLabel }}
+                        </button>
+                      </template>
                     </div>
                   </div>
                 </div>

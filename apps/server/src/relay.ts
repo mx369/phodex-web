@@ -14,6 +14,7 @@ import type {
   ClientEvent,
   CompletionBanner,
   DeliveryMode,
+  ProjectResourcePayload,
   RelayConnection,
   RequestCodeResponse,
   ServerEvent,
@@ -83,6 +84,13 @@ type SetupTokenRecord = {
   usedAt: string | null;
 };
 
+type PendingProjectRequest = {
+  userId: string;
+  resolve: (value: ProjectResourcePayload) => void;
+  reject: (error: Error & { status?: number }) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -132,6 +140,7 @@ let installAssetsPromise: Promise<InstallAssets> | null = null;
 let cachedInstallAssets: InstallAssets | null = null;
 const installSetupTokens = new Map<string, SetupTokenRecord>();
 const bridgeConnectionsByUserId = new Map<string, RelayConnection>();
+const pendingProjectRequests = new Map<string, PendingProjectRequest>();
 
 const server = Bun.serve<SocketData>({
   hostname: HOST,
@@ -191,6 +200,21 @@ const server = Bun.serve<SocketData>({
           users: Object.keys(persisted.users).length,
         })
       );
+    }
+
+    const projectTreeMatch = url.pathname.match(/^\/api\/thread\/([^/]+)\/project\/tree$/);
+    if (projectTreeMatch && req.method === "GET") {
+      return withCors(req, await handleProjectTree(req, decodeURIComponent(projectTreeMatch[1]), url));
+    }
+
+    const projectFileMatch = url.pathname.match(/^\/api\/thread\/([^/]+)\/project\/file$/);
+    if (projectFileMatch && req.method === "GET") {
+      return withCors(req, await handleProjectFile(req, decodeURIComponent(projectFileMatch[1]), url));
+    }
+
+    const projectDiffMatch = url.pathname.match(/^\/api\/thread\/([^/]+)\/project\/diff$/);
+    if (projectDiffMatch && req.method === "GET") {
+      return withCors(req, await handleProjectDiff(req, decodeURIComponent(projectDiffMatch[1]), url));
     }
 
     if (url.pathname === "/install/manifest.json" && req.method === "GET") {
@@ -278,6 +302,7 @@ const server = Bun.serve<SocketData>({
         if (bridgeSocketsByUserId.get(ws.data.userId) === ws) {
           bridgeSocketsByUserId.delete(ws.data.userId);
         }
+        rejectPendingProjectRequestsForUser(ws.data.userId, "The local bridge went offline.");
         bridgeConnectionsByUserId.set(ws.data.userId, {
           ...getBridgeConnection(ws.data.userId),
           state: "disconnected",
@@ -474,6 +499,22 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
   const bridgeUserId = ws.data.userId;
 
   switch (event.type) {
+    case "bridge:project:response": {
+      const pending = pendingProjectRequests.get(event.requestId);
+      if (!pending || pending.userId !== bridgeUserId) {
+        break;
+      }
+      pendingProjectRequests.delete(event.requestId);
+      clearTimeout(pending.timer);
+      if (event.ok) {
+        pending.resolve(event.result);
+      } else {
+        const error = new Error(event.error) as Error & { status?: number };
+        error.status = event.status;
+        pending.reject(error);
+      }
+      break;
+    }
     case "bridge:state":
       getThreadMirror(bridgeUserId).clear();
       for (const thread of event.threads) {
@@ -769,6 +810,143 @@ function authenticate(req: Request) {
     return null;
   }
   return session;
+}
+
+function requireAuthenticatedSession(req: Request) {
+  const session = authenticate(req);
+  if (!session) {
+    throw httpError(401, "Unauthorized");
+  }
+  return session;
+}
+
+function httpError(status: number, message: string) {
+  const error = new Error(message) as Error & { status?: number };
+  error.status = status;
+  return error;
+}
+
+function resolveProjectThreadForUser(userId: string, threadId: string) {
+  const thread = getThreadMirror(userId).get(threadId);
+  if (!thread) {
+    throw httpError(404, "Thread not found.");
+  }
+  return thread;
+}
+
+function normalizeProjectPath(rawPath: string | null, fallback = ".") {
+  const value = rawPath?.trim() ?? "";
+  return value || fallback;
+}
+
+function normalizeOptionalProjectPath(rawPath: string | null) {
+  const value = rawPath?.trim() ?? "";
+  return value || null;
+}
+
+async function handleProjectTree(req: Request, threadId: string, url: URL) {
+  try {
+    const session = requireAuthenticatedSession(req);
+    resolveProjectThreadForUser(session.userId, threadId);
+    const result = await requestProjectResource(session.userId, {
+      kind: "tree",
+      threadId,
+      path: normalizeProjectPath(url.searchParams.get("path")),
+    });
+    if (result.kind !== "tree") {
+      throw httpError(502, "Bridge returned an unexpected tree payload.");
+    }
+    return json(result);
+  } catch (error) {
+    return projectErrorResponse(error);
+  }
+}
+
+async function handleProjectFile(req: Request, threadId: string, url: URL) {
+  try {
+    const session = requireAuthenticatedSession(req);
+    resolveProjectThreadForUser(session.userId, threadId);
+    const path = normalizeProjectPath(url.searchParams.get("path"), "");
+    if (!path) {
+      throw httpError(400, "A file path is required.");
+    }
+    const result = await requestProjectResource(session.userId, {
+      kind: "file",
+      threadId,
+      path,
+    });
+    if (result.kind !== "file") {
+      throw httpError(502, "Bridge returned an unexpected file payload.");
+    }
+    return json(result);
+  } catch (error) {
+    return projectErrorResponse(error);
+  }
+}
+
+async function handleProjectDiff(req: Request, threadId: string, url: URL) {
+  try {
+    const session = requireAuthenticatedSession(req);
+    resolveProjectThreadForUser(session.userId, threadId);
+    const result = await requestProjectResource(session.userId, {
+      kind: "diff",
+      threadId,
+      path: normalizeOptionalProjectPath(url.searchParams.get("path")),
+    });
+    if (result.kind !== "diff") {
+      throw httpError(502, "Bridge returned an unexpected diff payload.");
+    }
+    return json(result);
+  } catch (error) {
+    return projectErrorResponse(error);
+  }
+}
+
+function projectErrorResponse(error: unknown) {
+  const status = typeof (error as { status?: unknown })?.status === "number" ? Number((error as { status?: unknown }).status) : 500;
+  return json({ ok: false, error: readErrorMessage(error) }, status);
+}
+
+function requestProjectResource(userId: string, request: Extract<BridgeCommand, { type: "bridge:project:request" }>["request"]) {
+  const bridgeSocket = bridgeSocketsByUserId.get(userId);
+  if (!bridgeSocket) {
+    throw httpError(503, "The local bridge is offline.");
+  }
+
+  const requestId = randomUUID();
+  const command: BridgeCommand = {
+    type: "bridge:project:request",
+    requestId,
+    userId,
+    request,
+  };
+
+  return new Promise<ProjectResourcePayload>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingProjectRequests.delete(requestId);
+      reject(httpError(504, "Timed out waiting for the local bridge."));
+    }, 7_000);
+
+    pendingProjectRequests.set(requestId, {
+      userId,
+      resolve,
+      reject,
+      timer,
+    });
+
+    bridgeSocket.send(JSON.stringify(command));
+  });
+}
+
+function rejectPendingProjectRequestsForUser(userId: string, message: string) {
+  for (const [requestId, pending] of pendingProjectRequests.entries()) {
+    if (pending.userId !== userId) {
+      continue;
+    }
+    pendingProjectRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    pending.reject(httpError(503, message));
+  }
 }
 
 function registerSocket(ws: ServerWebSocket<SocketData>) {

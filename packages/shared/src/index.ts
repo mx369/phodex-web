@@ -17,6 +17,57 @@ export interface FileChangeSummary {
   deletions: number;
 }
 
+export type ProjectEntryKind = "file" | "directory";
+export type ProjectFileKind = "text" | "binary";
+export type ProjectFileEncoding = "utf-8" | "none";
+
+export interface ProjectTreeEntry {
+  name: string;
+  path: string;
+  kind: ProjectEntryKind;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface ProjectTreePayload {
+  kind: "tree";
+  root: string;
+  path: string;
+  entries: ProjectTreeEntry[];
+}
+
+export interface ProjectFilePayload {
+  kind: "file";
+  root: string;
+  path: string;
+  fileKind: ProjectFileKind;
+  encoding: ProjectFileEncoding;
+  content?: string;
+  mimeType: string;
+  size: number;
+  modifiedAt: string;
+  truncated?: boolean;
+}
+
+export interface ProjectDiffFile extends FileChangeSummary {
+  patch: string;
+}
+
+export interface ProjectDiffPayload {
+  kind: "diff";
+  root: string;
+  path: string | null;
+  summary: DiffStats;
+  files: ProjectDiffFile[];
+}
+
+export type ProjectResourcePayload = ProjectTreePayload | ProjectFilePayload | ProjectDiffPayload;
+
+export type BridgeProjectRequest =
+  | { kind: "tree"; threadId: string; path: string }
+  | { kind: "file"; threadId: string; path: string }
+  | { kind: "diff"; threadId: string; path: string | null };
+
 export type CardTone = "amber" | "blue" | "green" | "rose" | "slate";
 
 export interface RunEvent {
@@ -212,6 +263,12 @@ export type BridgeCommand =
   | { type: "bridge:sync-all" }
   | { type: "bridge:sync-thread"; threadId: string }
   | {
+      type: "bridge:project:request";
+      requestId: string;
+      userId: string;
+      request: BridgeProjectRequest;
+    }
+  | {
       type: "bridge:dispatch";
       requestId: string;
       userId: string;
@@ -222,6 +279,21 @@ export type BridgeCommand =
 export type BridgeEvent =
   | { type: "bridge:state"; threads: ThreadRecord[]; connection: RelayConnection }
   | { type: "bridge:thread:updated"; thread: ThreadRecord }
+  | {
+      type: "bridge:project:response";
+      requestId: string;
+      userId: string;
+      ok: true;
+      result: ProjectResourcePayload;
+    }
+  | {
+      type: "bridge:project:response";
+      requestId: string;
+      userId: string;
+      ok: false;
+      error: string;
+      status: number;
+    }
   | { type: "bridge:message:appended"; threadId: string; message: ThreadMessage }
   | { type: "bridge:message:delta"; threadId: string; messageId: string; delta: string }
   | { type: "bridge:message:finished"; threadId: string; messageId: string }
