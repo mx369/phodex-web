@@ -782,7 +782,9 @@ const pendingRunStatus = computed(() => {
       };
 });
 const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
-const showScrollToLatestButton = computed(() => Boolean(currentThread.value?.messages.length && !isScrolledToBottom.value));
+const showScrollToLatestButton = computed(
+  () => Boolean(currentThread.value?.messages.length && autoScrollMode.value === "manual" && !isScrolledToBottom.value)
+);
 const composerSuggestion = computed(() => {
   const match = state.ui.composerText.match(/(^|\s)([@$/])([^\s]*)$/);
   if (!match) {
@@ -966,10 +968,13 @@ watch(
 
     if (!conversationResizeObserver) {
       conversationResizeObserver = new ResizeObserver(() => {
-        isScrolledToBottom.value = isConversationPinnedToBottom();
         if (autoScrollMode.value === "followBottom") {
+          // Keep the CTA hidden while streaming/resize updates are auto-followed.
+          isScrolledToBottom.value = true;
           queueFollowBottomScroll();
+          return;
         }
+        isScrolledToBottom.value = isConversationPinnedToBottom();
       });
     }
 
