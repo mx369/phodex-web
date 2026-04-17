@@ -803,22 +803,26 @@ const pendingRunStatus = computed(() => {
   }
   if (currentThread.value.state !== "running") {
     return {
-      title: "Sending to your Mac",
-      detail: "The relay accepted the run and is waiting for the desktop session to acknowledge it.",
+      title: "Syncing to your Mac",
+      detail: "Your message was accepted and is syncing to the desktop session.",
       label: "Syncing",
     };
   }
   return pending.promptAcknowledged
     ? {
-        title: "Waiting for first output",
-        detail: "Your prompt landed. Codex has not emitted the first command, tool call, or reply yet.",
-        label: "Running",
+        title: "Codex is thinking",
+        detail: "Preparing the first command, tool call, or reply.",
+        label: "Thinking",
       }
     : {
-        title: "Sending to your Mac",
-        detail: "The relay accepted the run, but the thread has not echoed your prompt into the timeline yet.",
+        title: "Syncing to your Mac",
+        detail: "The relay accepted your message and is waiting for the thread to echo it back.",
         label: "Running",
       };
+});
+const pendingRunAgeLabel = computed(() => {
+  const pending = currentPendingRunFeedback.value;
+  return pending ? formatRelativeTime(pending.startedAt) : null;
 });
 const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
 const showScrollToLatestButton = computed(
@@ -2617,29 +2621,37 @@ function handleScrollToLatest() {
                                 {{ paragraph }}
                               </p>
                             </div>
+
+                            <div v-if="pendingRunStatus" class="pending-inline-state">
+                              <span class="pending-inline-state__pulse" aria-hidden="true"></span>
+                              <div class="pending-inline-state__copy">
+                                <strong>{{ pendingRunStatus.title }}</strong>
+                                <span>{{ pendingRunStatus.detail }}</span>
+                              </div>
+                            </div>
                           </div>
                         </article>
 
-                        <article v-if="pendingRunStatus" class="phone-message phone-message--system phone-message--pending">
+                        <article v-else-if="pendingRunStatus" class="phone-message phone-message--assistant phone-message--pending">
                           <div class="phone-message__meta">
-                            <span>System</span>
-                            <span>Live</span>
-                            <span>activity</span>
+                            <span>Codex</span>
+                            <span>{{ pendingRunAgeLabel }}</span>
+                            <span>thinking</span>
                           </div>
 
                           <div class="phone-message__card">
-                            <div class="message-card-stack">
-                              <article class="message-card message-card--amber message-card--pending-run">
-                                <div class="message-card__head">
-                                  <div>
-                                    <span class="section-label">Run Starting</span>
-                                    <strong>{{ pendingRunStatus.title }}</strong>
-                                  </div>
-                                  <span class="message-card__status">{{ pendingRunStatus.label }}</span>
-                                </div>
-
-                                <p class="message-card__detail">{{ pendingRunStatus.detail }}</p>
-                              </article>
+                            <div class="pending-assistant-state" role="status" aria-live="polite" aria-atomic="true">
+                              <div class="pending-assistant-state__head">
+                                <span class="section-label">Live run</span>
+                                <span class="pending-assistant-state__badge">{{ pendingRunStatus.label }}</span>
+                              </div>
+                              <p class="pending-assistant-state__title">{{ pendingRunStatus.title }}</p>
+                              <p class="pending-assistant-state__detail">{{ pendingRunStatus.detail }}</p>
+                              <div class="pending-assistant-state__dots" aria-hidden="true">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </div>
                             </div>
                           </div>
                         </article>

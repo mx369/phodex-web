@@ -13,7 +13,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Home empty | Partial | Real connection state drives the full-page mobile shell | Final spacing and disconnected-state parity still differ |
 | Sidebar | Partial | Real thread list, select, rename, archive, and project-targeted local/worktree create | Drawer polish and parity details still differ |
 | Turn empty | Partial | Real selected thread, empty timeline block, composer, pending-thread state, and `Normal / Fast` runtime toggle | Structured-input replacement and final polish are still missing |
-| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, pending-run placeholder, queued drafts, pinned plan, and thread-scoped project diff/file inspectors | Some empty branches, queue states, and toolbar/sheet parity still differ |
+| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, a single inline pending-send -> thinking handoff, queued drafts, pinned plan, and thread-scoped project diff/file inspectors | Some empty branches, queue states, and toolbar/sheet parity still differ |
 | Settings | Partial | Real setting patches persist in a dedicated page | Visual and IA parity still differ |
 | Archived chats | Partial | Real archived list and restore | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Dedicated informational page exists | Still simplified versus upstream |
