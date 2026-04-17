@@ -9,7 +9,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Onboarding welcome/features/setup steps | Partial | Rendered, paged, swipeable, and routes into Email OTP; the final setup step is now explanatory only and no longer exposes a live install command before auth | Copy, layout, and parity still approximate |
 | Bootstrap failure | Shell | Rendered and navigable | No real purchase or restore flow |
 | Subscription gate | Shell | Plan selection and navigation exist | No real purchase or restore flow |
-| Email OTP | Real | Request-code and verify-code are live; OTP uses real mail delivery when configured | UI is still approximate |
+| Email OTP | Real | Request-code and verify-code are live; OTP uses real mail delivery when configured, and verification failures now render an inline error in the form instead of relying on toast only | UI is still approximate |
 | Home empty | Partial | Real bridge/account state drives the full-page mobile shell; the bridge install card only appears when the signed-in account has no bound bridge socket, and a linked-but-not-ready Mac now renders as a warning instead of another install prompt | Final spacing and disconnected-state parity still differ |
 | Sidebar | Partial | Real thread list, select, rename, archive, and project-targeted local/worktree create | Drawer polish and parity details still differ |
 | Turn empty | Partial | Real selected thread, empty timeline block, composer, pending-thread state, and `Normal / Fast` runtime toggle | Structured-input replacement and final polish are still missing |

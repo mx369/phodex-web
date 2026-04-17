@@ -21,6 +21,8 @@ type UiToast = {
   message: string;
 };
 
+type AuthStatusTone = "neutral" | "success" | "error";
+
 type AuthPhase = "idle" | "requested" | "authenticated";
 type PendingThreadCreate = {
   tempId: string;
@@ -66,6 +68,7 @@ export const state = reactive({
     sidebarOpen: false,
     settingsOpen: false,
     authStatus: "",
+    authStatusTone: "neutral" as AuthStatusTone,
     toasts: [] as UiToast[],
     pendingRunFeedback: null as PendingRunFeedback | null,
   },
@@ -106,6 +109,8 @@ export function createAppClient() {
   async function requestCode() {
     const email = state.auth.email.trim().toLowerCase();
     if (!email) {
+      state.ui.authStatus = "Enter your email first.";
+      state.ui.authStatusTone = "error";
       pushToast("error", "Enter your email first.");
       return;
     }
@@ -121,9 +126,13 @@ export function createAppClient() {
       state.auth.phase = "requested";
       state.auth.delivery = response.delivery;
       state.ui.authStatus = "Verification code sent. Check your inbox for the Phodex email.";
+      state.ui.authStatusTone = "success";
       pushToast("success", "Verification code ready.");
     } catch (error) {
-      pushToast("error", readErrorMessage(error));
+      const message = readErrorMessage(error);
+      state.ui.authStatus = message;
+      state.ui.authStatusTone = "error";
+      pushToast("error", message);
     } finally {
       state.ui.sendingCode = false;
     }
@@ -132,6 +141,8 @@ export function createAppClient() {
   async function verifyCode(code: string) {
     const email = state.auth.email.trim().toLowerCase();
     if (!email || !code.trim()) {
+      state.ui.authStatus = "Email and code are both required.";
+      state.ui.authStatusTone = "error";
       pushToast("error", "Email and code are both required.");
       return false;
     }
@@ -148,12 +159,17 @@ export function createAppClient() {
       state.session = response.session;
       writeStoredSession(response.session);
       state.auth.phase = "authenticated";
+      state.ui.authStatus = "";
+      state.ui.authStatusTone = "neutral";
       applySnapshot(response.snapshot);
       connectSocket();
       pushToast("success", "Connected to the secure relay.");
       return true;
     } catch (error) {
-      pushToast("error", readErrorMessage(error));
+      const message = readErrorMessage(error);
+      state.ui.authStatus = message;
+      state.ui.authStatusTone = "error";
+      pushToast("error", message);
       return false;
     } finally {
       state.ui.verifyingCode = false;
@@ -167,6 +183,8 @@ export function createAppClient() {
     state.auth.phase = "idle";
     state.ui.composerText = "";
     state.ui.settingsOpen = false;
+    state.ui.authStatus = "";
+    state.ui.authStatusTone = "neutral";
     state.ui.pendingRunFeedback = null;
     pushToast("info", "Signed out.");
   }

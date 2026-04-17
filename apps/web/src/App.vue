@@ -1652,6 +1652,23 @@ async function handleVerifyCode() {
   }
 }
 
+watch(
+  () => state.auth.email,
+  () => {
+    if (state.ui.authStatusTone === "error") {
+      state.ui.authStatus = "";
+      state.ui.authStatusTone = "neutral";
+    }
+  }
+);
+
+watch(verificationCode, () => {
+  if (state.ui.authStatusTone === "error") {
+    state.ui.authStatus = "";
+    state.ui.authStatusTone = "neutral";
+  }
+});
+
 function handleSend() {
   if (!currentThread.value) {
     client.createThreadAndSend("Phodex Web", "local");
@@ -2116,7 +2133,13 @@ function handleScrollToLatest() {
                     </button>
                   </template>
 
-                  <p v-if="state.ui.authStatus" class="root-auth-screen__status">{{ state.ui.authStatus }}</p>
+                  <p
+                    v-if="state.ui.authStatus"
+                    class="root-auth-screen__status"
+                    :class="`root-auth-screen__status--${state.ui.authStatusTone}`"
+                  >
+                    {{ state.ui.authStatus }}
+                  </p>
 
                   <button class="root-auth-screen__text-link" @click="restartOnboarding">Show setup flow again</button>
                 </div>

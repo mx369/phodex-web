@@ -1030,6 +1030,14 @@ button {
   line-height: 1.55;
 }
 
+.root-auth-screen__status--success {
+  color: rgba(182, 244, 208, 0.92);
+}
+
+.root-auth-screen__status--error {
+  color: rgba(255, 173, 173, 0.96);
+}
+
 .root-auth-screen__card .primary-cta,
 .root-auth-screen__card .ghost-cta {
   margin-top: 0;
