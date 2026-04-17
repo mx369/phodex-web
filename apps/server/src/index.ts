@@ -1556,6 +1556,7 @@ function snapshotForUser(userId: string): AppSnapshot {
 
 function buildConnection(): RelayConnection {
   return {
+    bridgeOnline: relaySocket?.readyState === WebSocket.OPEN,
     state: codexConnectionState,
     relayLabel: RELAY_LABEL,
     macLabel: MAC_LABEL,

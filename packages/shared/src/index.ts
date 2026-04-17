@@ -184,6 +184,7 @@ export interface UserSummary {
 }
 
 export interface RelayConnection {
+  bridgeOnline: boolean;
   state: "connecting" | "connected" | "disconnected";
   relayLabel: string;
   macLabel: string;

@@ -18,7 +18,7 @@ const DEFAULT_INSTALL_DIR = resolve(homedir(), ".phodex-bridge");
 const DEFAULT_PID_FILE = "bridge.pid";
 const DEFAULT_ENV_FILE = "bridge.env";
 const DEFAULT_LOG_FILE = "logs/bridge.log";
-const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.js";
+const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.ts";
 const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
 const LAUNCH_AGENT_ENV_KEYS = new Set([
@@ -570,9 +570,14 @@ function readLaunchAgentPid(label) {
 
 function buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, env) {
   const launchEnv = selectLaunchAgentEnv(env);
-  const envXml = Object.entries(launchEnv)
-    .map(([key, value]) => `    <key>${xmlEscape(key)}</key><string>${xmlEscape(String(value))}</string>`)
-    .join("\n");
+  const programArguments = [
+    "/usr/bin/env",
+    "-i",
+    ...Object.entries(launchEnv).map(([key, value]) => `${key}=${String(value)}`),
+    bunBin,
+    runtimeFile,
+  ];
+  const programArgumentsXml = programArguments.map((value) => `    <string>${xmlEscape(value)}</string>`).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -584,15 +589,10 @@ function buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, 
   <key>WorkingDirectory</key><string>${xmlEscape(installDir)}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${xmlEscape(bunBin)}</string>
-    <string>${xmlEscape(runtimeFile)}</string>
+${programArgumentsXml}
   </array>
   <key>StandardOutPath</key><string>${xmlEscape(logFile)}</string>
   <key>StandardErrorPath</key><string>${xmlEscape(logFile)}</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-${envXml}
-  </dict>
 </dict>
 </plist>
 `;

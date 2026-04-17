@@ -39,10 +39,11 @@ Read this file for relay, auth, client, and Codex bridge work.
 ## Runtime Behaviors
 
 - Bootstrap and client websocket open send a full snapshot from the public relay.
+- `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
 - The public relay now publishes a versioned `bunx` installer and bundled bridge runtime so the authenticated shell can point Mac users at a single local install/start command.
-- The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
+- The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config. The generated command starts with `cd "$HOME"` so `bunx` does not inherit a protected cwd such as `~/Downloads`.
 - Bridge connections are now account-bound on the relay. Each logged-in user gets an isolated bridge socket, isolated bridge connection state, and an isolated mirrored thread cache.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.

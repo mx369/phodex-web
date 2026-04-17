@@ -283,7 +283,9 @@ const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
+let installCommandCopyTimer: number | null = null;
 const installManifest = ref<InstallManifest | null>(null);
+const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
 const projectTreeError = ref("");
@@ -480,6 +482,7 @@ onBeforeUnmount(() => {
   clearFollowBottomFrame();
   conversationResizeObserver?.disconnect();
   conversationResizeObserver = null;
+  clearInstallCommandCopyTimer();
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -487,12 +490,25 @@ const onboardingBridgeCommand = computed(
   () => "Sign in with email first. The app will mint a one-time bridge command that only this account can claim."
 );
 const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound bridge command…");
-const showBridgeInstallCard = computed(() => isAuthenticated.value && state.snapshot?.connection.state !== "connected");
+const showBridgeInstallCard = computed(() => isAuthenticated.value && !state.snapshot?.connection.bridgeOnline);
+const showBridgeLinkedWarning = computed(
+  () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
+);
 const bridgeInstallCopy = computed(() =>
   installManifest.value?.command
-    ? "Run this one-time Bun command on your Mac. It installs the bridge, writes the relay settings, and binds the bridge to your signed-in account."
+    ? 'Run this one-time Bun command on your Mac. It switches into your Home folder first, then installs the bridge, writes the relay settings, and binds the bridge to your signed-in account. If you previously installed from another account, rerun the command from this signed-in session.'
     : "Signed in. Minting a one-time bridge command for this account…"
 );
+const bridgeInstallCopyLabel = computed(() => {
+  switch (installCommandCopyState.value) {
+    case "copied":
+      return "Copied";
+    case "failed":
+      return "Copy failed";
+    default:
+      return "Copy";
+  }
+});
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
     return rootFlowState.value;
@@ -665,6 +681,9 @@ const composerSendTitle = computed(() => {
   return currentThread.value?.state === "running" ? "Queue" : "Send";
 });
 const homeStatusLabel = computed(() => {
+  if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
+    return "Mac linked";
+  }
   switch (state.snapshot?.connection.state) {
     case "connected":
       return "Connected";
@@ -677,6 +696,9 @@ const homeStatusLabel = computed(() => {
   }
 });
 const homeStatusTone = computed(() => {
+  if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
+    return "amber";
+  }
   switch (state.snapshot?.connection.state) {
     case "connected":
       return "green";
@@ -702,7 +724,11 @@ const homeSecondaryLabel = computed(() =>
   state.snapshot?.connection.state === "connected" ? "Open chats" : "Replay onboarding"
 );
 const homeStatusCopy = computed(() => {
-  switch (state.snapshot?.connection.state) {
+  const connection = state.snapshot?.connection;
+  if (connection?.bridgeOnline && connection.state !== "connected") {
+    return "This Mac is already linked to your account, but the local Codex service is not ready yet. Check the Mac-side Codex app-server, then wait for the bridge to reconnect.";
+  }
+  switch (connection?.state) {
     case "connected":
       return "Your phone shell is connected. Open a chat or disconnect this trusted session.";
     case "connecting":
@@ -1084,6 +1110,51 @@ async function loadInstallManifest() {
     installManifest.value = null;
     console.warn("[phodex-web] install manifest unavailable", error);
   }
+}
+
+function clearInstallCommandCopyTimer() {
+  if (installCommandCopyTimer === null) {
+    return;
+  }
+  window.clearTimeout(installCommandCopyTimer);
+  installCommandCopyTimer = null;
+}
+
+function resetInstallCommandCopyStateLater() {
+  clearInstallCommandCopyTimer();
+  installCommandCopyTimer = window.setTimeout(() => {
+    installCommandCopyState.value = "idle";
+    installCommandCopyTimer = null;
+  }, 1800);
+}
+
+async function copyInstallCommand() {
+  const command = installManifest.value?.command?.trim() ?? "";
+  if (!command) {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(command);
+    } else {
+      const helper = document.createElement("textarea");
+      helper.value = command;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "absolute";
+      helper.style.left = "-9999px";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      document.body.removeChild(helper);
+    }
+    installCommandCopyState.value = "copied";
+  } catch (error) {
+    console.warn("[phodex-web] failed to copy install command", error);
+    installCommandCopyState.value = "failed";
+  }
+
+  resetInstallCommandCopyStateLater();
 }
 
 function formatMessageRole(role: string) {
@@ -2443,7 +2514,13 @@ function handleScrollToLatest() {
                       <div class="phone-drawer__foot">
                         <div class="phone-drawer__footer-card">
                           <span class="drawer-status__label">
-                            {{ state.snapshot?.connection.state === "connected" ? "Connected to Mac" : "Trusted Mac" }}
+                            {{
+                              state.snapshot?.connection.state === "connected"
+                                ? "Connected to Mac"
+                                : state.snapshot?.connection.bridgeOnline
+                                  ? "Linked Mac"
+                                  : "Trusted Mac"
+                            }}
                           </span>
                           <div class="drawer-status__row">
                             <div class="drawer-status">
@@ -2686,7 +2763,13 @@ function handleScrollToLatest() {
                         </div>
                         <div v-if="state.snapshot?.connection.macLabel" class="home-empty-state__trusted-card">
                           <span class="section-label">
-                            {{ state.snapshot.connection.state === "connected" ? "Connected To Mac" : "Trusted Mac" }}
+                            {{
+                              state.snapshot.connection.state === "connected"
+                                ? "Connected To Mac"
+                                : state.snapshot.connection.bridgeOnline
+                                  ? "Linked Mac"
+                                  : "Trusted Mac"
+                            }}
                           </span>
                           <div class="home-empty-state__trusted-row">
                             <span class="home-empty-state__trusted-icon">
@@ -2703,7 +2786,25 @@ function handleScrollToLatest() {
                           <span class="section-label">Bridge Install</span>
                           <strong>Bind this Mac to {{ state.snapshot?.user.email }}</strong>
                           <p>{{ bridgeInstallCopy }}</p>
-                          <div class="onboarding-command-card onboarding-command-card--inline">{{ bridgeInstallCommand }}</div>
+                          <div class="home-empty-state__install-actions">
+                            <div class="onboarding-command-card onboarding-command-card--inline">{{ bridgeInstallCommand }}</div>
+                            <button
+                              class="icon-button icon-button--ghost home-empty-state__install-copy"
+                              type="button"
+                              :disabled="!installManifest?.command"
+                              @click="copyInstallCommand"
+                            >
+                              {{ bridgeInstallCopyLabel }}
+                            </button>
+                          </div>
+                        </div>
+                        <div v-else-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
+                          <span class="section-label">Mac Linked</span>
+                          <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                          <p>
+                            The bridge is already bound to this account. This screen stays offline because the local Codex
+                            app-server has not finished initializing on your Mac yet.
+                          </p>
                         </div>
                         <button
                           class="primary-cta primary-cta--compact home-empty-state__primary"

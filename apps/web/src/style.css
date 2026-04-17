@@ -2185,6 +2185,11 @@ button {
   background: rgba(18, 18, 18, 0.03);
 }
 
+.home-empty-state__install-card--warning {
+  background: rgba(188, 139, 51, 0.08);
+  border-color: rgba(188, 139, 51, 0.18);
+}
+
 .home-empty-state__install-card strong {
   font-size: 13px;
   letter-spacing: -0.02em;
@@ -2195,6 +2200,20 @@ button {
   color: var(--muted-strong);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.home-empty-state__install-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.home-empty-state__install-copy {
+  min-width: 72px;
+  align-self: stretch;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .home-empty-state__primary {

@@ -226,10 +226,12 @@ const server = Bun.serve<SocketData>({
     }
 
     if (
-      (url.pathname === "/install/bridge-runtime.js" || /^\/install\/bridge-runtime-[A-Za-z0-9.-]+\.js$/.test(url.pathname)) &&
+      (url.pathname === "/install/bridge-runtime.js" ||
+        url.pathname === "/install/bridge-runtime.ts" ||
+        /^\/install\/bridge-runtime-[A-Za-z0-9.-]+\.(js|ts)$/.test(url.pathname)) &&
       req.method === "GET"
     ) {
-      return withCors(req, await serveInstallAsset(url.pathname, "text/javascript; charset=utf-8"));
+      return withCors(req, await serveInstallAsset(url.pathname, "text/plain; charset=utf-8"));
     }
 
     if (
@@ -270,6 +272,10 @@ const server = Bun.serve<SocketData>({
           existing.close(1000, "Superseded by a newer bridge connection.");
         }
         bridgeSocketsByUserId.set(ws.data.userId, ws);
+        bridgeConnectionsByUserId.set(ws.data.userId, {
+          ...getBridgeConnection(ws.data.userId),
+          bridgeOnline: true,
+        });
         const user = persisted.users[ws.data.userId];
         if (user?.bridgeAuth) {
           user.bridgeAuth.lastConnectedAt = new Date().toISOString();
@@ -305,6 +311,7 @@ const server = Bun.serve<SocketData>({
         rejectPendingProjectRequestsForUser(ws.data.userId, "The local bridge went offline.");
         bridgeConnectionsByUserId.set(ws.data.userId, {
           ...getBridgeConnection(ws.data.userId),
+          bridgeOnline: false,
           state: "disconnected",
           latencyMs: 0,
         });
@@ -329,7 +336,6 @@ if (OTP_MAIL_CONFIG) {
 }
 
 async function handleRequestCode(req: Request) {
-  refreshPersisted();
   const body = await safeJson(req);
   const email = normalizeEmail(body?.email);
   if (!email) {
@@ -367,7 +373,6 @@ async function handleRequestCode(req: Request) {
 }
 
 async function handleVerifyCode(req: Request) {
-  refreshPersisted();
   const body = await safeJson(req);
   const email = normalizeEmail(body?.email);
   const code = String(body?.code ?? "").trim();
@@ -520,7 +525,10 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       for (const thread of event.threads) {
         getThreadMirror(bridgeUserId).set(thread.id, thread);
       }
-      bridgeConnectionsByUserId.set(bridgeUserId, event.connection);
+      bridgeConnectionsByUserId.set(bridgeUserId, {
+        ...event.connection,
+        bridgeOnline: true,
+      });
       normalizeSelectionForUser(bridgeUserId);
       broadcastSnapshot(bridgeUserId);
       broadcastPresence(bridgeUserId);
@@ -553,7 +561,10 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     case "bridge:presence":
-      bridgeConnectionsByUserId.set(bridgeUserId, event.connection);
+      bridgeConnectionsByUserId.set(bridgeUserId, {
+        ...event.connection,
+        bridgeOnline: true,
+      });
       broadcastPresence(bridgeUserId);
       break;
     case "bridge:banner":
@@ -749,6 +760,7 @@ function getThreadMirror(userId: string) {
 
 function disconnectedBridgeConnection(): RelayConnection {
   return {
+    bridgeOnline: false,
     state: "disconnected",
     relayLabel: RELAY_LABEL,
     macLabel: DEFAULT_MAC_LABEL,
@@ -1129,7 +1141,7 @@ async function handleInstallManifest(req: Request) {
       bridgeRuntimeUrl,
       setupToken: token,
       setupTokenExpiresAt: expiresAt,
-      command: `bunx phodex-bridge-installer@${installerUrl} --relay ${origin} --token ${token}`,
+      command: `cd "$HOME" && bunx --package "phodex-bridge-installer@${installerUrl}" phodex-bridge --relay "${origin}" --token "${token}"`,
     });
   } catch (error) {
     return json({ ok: false, error: `Install manifest failed: ${readErrorMessage(error)}` }, 500);
@@ -1231,26 +1243,11 @@ async function ensureInstallAssets() {
   installAssetsPromise = (async () => {
     mkdirSync(installAssetsDir, { recursive: true });
 
-    const runtimePath = resolve(installAssetsDir, `bridge-runtime-${version}.js`);
+    const runtimePath = resolve(installAssetsDir, `bridge-runtime-${version}.ts`);
     const installerPath = resolve(installAssetsDir, `phodex-bridge-installer-${version}.tgz`);
 
     if (!existsSync(runtimePath)) {
-      const result = await Bun.build({
-        entrypoints: [bridgeRuntimeSourcePath],
-        target: "bun",
-        minify: false,
-        naming: "bridge-runtime.js",
-        outdir: installAssetsDir,
-        write: false,
-      });
-      if (!result.success) {
-        throw new Error(result.logs.map((entry) => entry.message).join("\n") || "Unknown bridge build failure");
-      }
-      const output = result.outputs[0];
-      if (!output) {
-        throw new Error("Bridge build did not emit an output file.");
-      }
-      writeFileSync(runtimePath, Buffer.from(await output.arrayBuffer()));
+      writeFileSync(runtimePath, readFileSync(bridgeRuntimeSourcePath, "utf8"), "utf8");
     }
 
     if (!existsSync(installerPath)) {
@@ -1270,6 +1267,7 @@ function computeInstallAssetsVersion() {
   const packageJson = JSON.parse(readFileSync(bridgeInstallerPackageJsonPath, "utf8")) as { version?: string };
   const packageVersion = packageJson.version || "0.1.0";
   const lastSourceEdit = Math.max(
+    statSync(currentFile).mtimeMs,
     statSync(bridgeRuntimeSourcePath).mtimeMs,
     statSync(bridgeInstallerPackageJsonPath).mtimeMs,
     statSync(bridgeInstallerBinPath).mtimeMs
