@@ -123,7 +123,8 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const PUBLIC_RELAY_URL = process.env.PHODEX_RELAY_URL ?? "ws://127.0.0.1:3443";
-const BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET ?? "phodex-local-bridge";
+const BRIDGE_TOKEN = process.env.PHODEX_BRIDGE_TOKEN?.trim() ?? "";
+const LEGACY_BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET?.trim() ?? "";
 const BRIDGE_RECONNECT_MS = Number(process.env.PHODEX_BRIDGE_RECONNECT_MS ?? "1500");
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
@@ -188,7 +189,11 @@ function buildBridgeSocketUrl() {
   }
   url.pathname = "/bridge";
   url.search = "";
-  url.searchParams.set("secret", BRIDGE_SECRET);
+  if (BRIDGE_TOKEN) {
+    url.searchParams.set("token", BRIDGE_TOKEN);
+  } else if (LEGACY_BRIDGE_SECRET) {
+    url.searchParams.set("secret", LEGACY_BRIDGE_SECRET);
+  }
   return url.toString();
 }
 

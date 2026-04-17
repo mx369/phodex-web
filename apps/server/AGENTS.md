@@ -20,9 +20,10 @@ Read this file before editing anything under `apps/server`.
 ## Current Truth
 
 - Real endpoints exist for health, bootstrap, OTP issue, OTP verify, client relay websocket, and bridge websocket.
-- The public relay also serves installer assets for the local bridge: install manifest JSON, a versioned `bunx` installer tarball, the bundled bridge runtime, and a short-lived `/install/claim` setup-token exchange that keeps the long-lived bridge secret out of the onboarding payload.
+- The public relay also serves installer assets for the local bridge: an authenticated install manifest, a versioned `bunx` installer tarball, the bundled bridge runtime, and a short-lived `/install/claim` setup-token exchange that swaps into a user-bound bridge token.
 - OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
 - The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
+- Public relay bridge state is account-bound. Do not collapse it back into a single global bridge socket, global thread mirror, or public pre-login install token flow.
 - Public-relay bridge runs now default to selected-thread sync only; local relay runs still default to full thread sync unless `PHODEX_BRIDGE_SYNC_MODE` overrides it.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
 - Richer upstream message mapping is still incomplete.

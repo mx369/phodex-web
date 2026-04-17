@@ -307,8 +307,8 @@ const onboardingScreens = [
     kind: "step",
     step: "Step 1",
     icon: "relay",
-    title: "Install & Start Bridge",
-    subtitle: "Run one Bun command on your Mac to install the local bridge, write the relay settings, and launch it.",
+    title: "Sign In To Mint Bridge Setup",
+    subtitle: "Email verification comes first. After you sign in, the app generates a one-time Bun command tied to your account.",
     commandKey: "bridge",
   },
 ] as const;
@@ -431,7 +431,6 @@ const slashCommandCatalog = [
 onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("keydown", handleDocumentKeyDown);
-  void loadInstallManifest();
   void client.restoreSession().then(() => {
     if (pendingShellPage.value && isAuthenticated.value) {
       openPanel(pendingShellPage.value, true);
@@ -450,9 +449,14 @@ onBeforeUnmount(() => {
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
 const onboardingBridgeCommand = computed(
-  () =>
-    installManifest.value?.command ??
-    `bunx phodex-bridge-installer@${API_ORIGIN}/install/phodex-bridge-installer.tgz --relay ${API_ORIGIN}`
+  () => "Sign in with email first. The app will mint a one-time bridge command that only this account can claim."
+);
+const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound bridge command…");
+const showBridgeInstallCard = computed(() => isAuthenticated.value && state.snapshot?.connection.state !== "connected");
+const bridgeInstallCopy = computed(() =>
+  installManifest.value?.command
+    ? "Run this one-time Bun command on your Mac. It installs the bridge, writes the relay settings, and binds the bridge to your signed-in account."
+    : "Signed in. Minting a one-time bridge command for this account…"
 );
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
@@ -654,9 +658,9 @@ const homePrimaryLabel = computed(() => {
     case "connecting":
       return "Connecting…";
     case "disconnected":
-      return "Reconnect with Email";
+      return "Sign out";
     default:
-      return "Reconnect with Email";
+      return "Sign out";
   }
 });
 const homeSecondaryLabel = computed(() =>
@@ -669,9 +673,11 @@ const homeStatusCopy = computed(() => {
     case "connecting":
       return "The relay is still rehydrating thread state from the desktop side.";
     case "disconnected":
-      return "Sign in again with email to reconnect this mobile shell to your Mac.";
+      return installManifest.value?.command
+        ? "Your phone is signed in, but this account does not have an active Mac bridge yet. Run the account-bound command below on your Mac."
+        : "Your phone is signed in. The relay is minting an account-bound bridge command for this session.";
     default:
-      return "Reconnect to recover threads, queued drafts, and remote controls.";
+      return "Sign in first, then install the local bridge from the command generated for your account.";
   }
 });
 
@@ -712,6 +718,17 @@ function formatThreadLocation(thread: ThreadRecord) {
 const currentThreadRepoName = computed(() => {
   return repoNameFromPath(currentThread.value?.repoLabel ?? "");
 });
+watch(
+  isAuthenticated,
+  (authenticated) => {
+    if (!authenticated) {
+      installManifest.value = null;
+      return;
+    }
+    void loadInstallManifest();
+  },
+  { immediate: true }
+);
 const planAccessory = computed(() => {
   if (!currentThread.value || isCurrentThreadPendingCreate.value) {
     return null;
@@ -975,13 +992,25 @@ function formatRelativeTime(value: string) {
 }
 
 async function loadInstallManifest() {
+  const token = state.session?.token?.trim();
+  if (!token) {
+    installManifest.value = null;
+    return;
+  }
+
   try {
-    const response = await fetch(`${API_ORIGIN}/install/manifest.json`);
+    const response = await fetch(`${API_ORIGIN}/install/manifest.json`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
     if (!response.ok) {
+      installManifest.value = null;
       return;
     }
     installManifest.value = (await response.json()) as InstallManifest;
   } catch (error) {
+    installManifest.value = null;
     console.warn("[phodex-web] install manifest unavailable", error);
   }
 }
@@ -2387,6 +2416,12 @@ function handleScrollToLatest() {
                           </div>
                         </div>
                         <p class="home-empty-state__copy">{{ homeStatusCopy }}</p>
+                        <div v-if="showBridgeInstallCard" class="home-empty-state__install-card">
+                          <span class="section-label">Bridge Install</span>
+                          <strong>Bind this Mac to {{ state.snapshot?.user.email }}</strong>
+                          <p>{{ bridgeInstallCopy }}</p>
+                          <div class="onboarding-command-card onboarding-command-card--inline">{{ bridgeInstallCommand }}</div>
+                        </div>
                         <button
                           class="primary-cta primary-cta--compact home-empty-state__primary"
                           :disabled="state.snapshot?.connection.state === 'connecting'"

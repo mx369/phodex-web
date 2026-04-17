@@ -337,6 +337,13 @@ button {
   font-size: 13px;
 }
 
+.onboarding-command-card--inline {
+  color: rgba(18, 18, 18, 0.82);
+  background: rgba(18, 18, 18, 0.04);
+  border-color: rgba(18, 18, 18, 0.08);
+  overflow-wrap: anywhere;
+}
+
 .onboarding-flow__bottom {
   display: grid;
   gap: 18px;
@@ -1819,6 +1826,28 @@ button {
   font-size: 11px;
   line-height: 1.5;
   max-width: 100%;
+}
+
+.home-empty-state__install-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.03);
+}
+
+.home-empty-state__install-card strong {
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.home-empty-state__install-card p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .home-empty-state__primary {

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { hostname, tmpdir } from "node:os";
@@ -28,6 +28,11 @@ type PersistedUser = {
   settings: AppSettings;
   selectedThreadId: string | null;
   banner: CompletionBanner | null;
+  bridgeAuth: {
+    tokenHash: string;
+    issuedAt: string;
+    lastConnectedAt: string | null;
+  } | null;
 };
 
 type SessionRecord = {
@@ -55,6 +60,7 @@ type ClientSocketData = {
 
 type BridgeSocketData = {
   kind: "bridge";
+  userId: string;
 };
 
 type SocketData = ClientSocketData | BridgeSocketData;
@@ -72,6 +78,7 @@ type InstallAssets = {
 };
 
 type SetupTokenRecord = {
+  userId: string;
   expiresAt: string;
   usedAt: string | null;
 };
@@ -96,7 +103,6 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const DEFAULT_MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
-const BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET ?? "phodex-local-bridge";
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEV_ORIGINS = new Set([
@@ -120,18 +126,12 @@ const OTP_MAIL_CONFIG = resolveOtpMailConfig();
 let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
-const threadMirror = new Map<string, ThreadRecord>();
-let bridgeSocket: ServerWebSocket<SocketData> | null = null;
+const threadMirrorsByUserId = new Map<string, Map<string, ThreadRecord>>();
+const bridgeSocketsByUserId = new Map<string, ServerWebSocket<SocketData>>();
 let installAssetsPromise: Promise<InstallAssets> | null = null;
 let cachedInstallAssets: InstallAssets | null = null;
 const installSetupTokens = new Map<string, SetupTokenRecord>();
-let bridgeConnection: RelayConnection = {
-  state: "disconnected",
-  relayLabel: RELAY_LABEL,
-  macLabel: DEFAULT_MAC_LABEL,
-  latencyMs: 0,
-  lastSyncAt: null,
-};
+const bridgeConnectionsByUserId = new Map<string, RelayConnection>();
 
 const server = Bun.serve<SocketData>({
   hostname: HOST,
@@ -158,14 +158,17 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/bridge") {
-      const secret = url.searchParams.get("secret");
-      if (!secret || secret !== BRIDGE_SECRET) {
+      refreshPersisted();
+      const bridgeToken = url.searchParams.get("token")?.trim() ?? "";
+      const bridgeUserId = resolveBridgeUserId(bridgeToken);
+      if (!bridgeUserId) {
         return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
       }
 
       const upgraded = serverInstance.upgrade(req, {
         data: {
           kind: "bridge",
+          userId: bridgeUserId,
         } satisfies BridgeSocketData,
       });
       return upgraded ? undefined : withCors(req, json({ ok: false, error: "Upgrade failed" }, 400));
@@ -176,13 +179,15 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/api/health") {
+      const healthUserId = resolveHealthUserId(req);
+      const connection = healthUserId ? getBridgeConnection(healthUserId) : disconnectedBridgeConnection();
       return withCors(
         req,
         json({
           ok: true,
           relay: RELAY_LABEL,
-          bridgeConnected: Boolean(bridgeSocket),
-          connection: bridgeConnection,
+          bridgeConnected: healthUserId ? bridgeSocketsByUserId.has(healthUserId) : false,
+          connection,
           users: Object.keys(persisted.users).length,
         })
       );
@@ -236,22 +241,28 @@ const server = Bun.serve<SocketData>({
   websocket: {
     open(ws) {
       if (ws.data.kind === "bridge") {
-        if (bridgeSocket && bridgeSocket !== ws) {
-          bridgeSocket.close(1000, "Superseded by a newer bridge connection.");
+        const existing = bridgeSocketsByUserId.get(ws.data.userId);
+        if (existing && existing !== ws) {
+          existing.close(1000, "Superseded by a newer bridge connection.");
         }
-        bridgeSocket = ws;
-        broadcastPresenceToAllUsers();
-        sendBridgeCommand({ type: "bridge:sync-all" });
+        bridgeSocketsByUserId.set(ws.data.userId, ws);
+        const user = persisted.users[ws.data.userId];
+        if (user?.bridgeAuth) {
+          user.bridgeAuth.lastConnectedAt = new Date().toISOString();
+          schedulePersist();
+        }
+        broadcastPresence(ws.data.userId);
+        sendBridgeCommand(ws.data.userId, { type: "bridge:sync-all" });
         return;
       }
 
       registerSocket(ws);
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(ws.data.userId) });
-      broadcastPresenceToAllUsers();
+      broadcastPresence(ws.data.userId);
     },
     message(ws, raw) {
       if (ws.data.kind === "bridge") {
-        handleBridgeMessage(raw.toString());
+        handleBridgeMessage(ws, raw.toString());
         return;
       }
 
@@ -264,20 +275,20 @@ const server = Bun.serve<SocketData>({
     },
     close(ws) {
       if (ws.data.kind === "bridge") {
-        if (bridgeSocket === ws) {
-          bridgeSocket = null;
+        if (bridgeSocketsByUserId.get(ws.data.userId) === ws) {
+          bridgeSocketsByUserId.delete(ws.data.userId);
         }
-        bridgeConnection = {
-          ...bridgeConnection,
+        bridgeConnectionsByUserId.set(ws.data.userId, {
+          ...getBridgeConnection(ws.data.userId),
           state: "disconnected",
           latencyMs: 0,
-        };
-        broadcastPresenceToAllUsers();
+        });
+        broadcastPresence(ws.data.userId);
         return;
       }
 
       unregisterSocket(ws);
-      broadcastPresenceToAllUsers();
+      broadcastPresence(ws.data.userId);
     },
   },
 });
@@ -382,10 +393,10 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
   switch (event.type) {
     case "bootstrap":
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
-      if (bridgeSocket) {
-        sendBridgeCommand({ type: "bridge:sync-all" });
+      if (bridgeSocketsByUserId.has(user.profile.id)) {
+        sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" });
         if (user.selectedThreadId) {
-          sendBridgeCommand({ type: "bridge:sync-thread", threadId: user.selectedThreadId });
+          sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
         }
       }
       break;
@@ -427,6 +438,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
 }
 
 function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
+  const bridgeSocket = bridgeSocketsByUserId.get(user.profile.id);
   if (!bridgeSocket) {
     sendToast(user.profile.id, "error", "The local bridge is offline.");
     return false;
@@ -443,7 +455,7 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
   return true;
 }
 
-function handleBridgeMessage(raw: string) {
+function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
   let event: BridgeEvent | null = null;
   try {
     event = JSON.parse(raw) as BridgeEvent;
@@ -455,46 +467,53 @@ function handleBridgeMessage(raw: string) {
     return;
   }
 
+  if (ws.data.kind !== "bridge") {
+    return;
+  }
+
+  const bridgeUserId = ws.data.userId;
+
   switch (event.type) {
     case "bridge:state":
-      threadMirror.clear();
+      getThreadMirror(bridgeUserId).clear();
       for (const thread of event.threads) {
-        threadMirror.set(thread.id, thread);
+        getThreadMirror(bridgeUserId).set(thread.id, thread);
       }
-      bridgeConnection = event.connection;
-      normalizeSelections();
-      broadcastSnapshotsToAllUsers();
-      broadcastPresenceToAllUsers();
+      bridgeConnectionsByUserId.set(bridgeUserId, event.connection);
+      normalizeSelectionForUser(bridgeUserId);
+      broadcastSnapshot(bridgeUserId);
+      broadcastPresence(bridgeUserId);
       break;
     case "bridge:thread:updated":
-      threadMirror.set(event.thread.id, event.thread);
-      normalizeSelections();
-      broadcastThreadToAllUsers(event.thread.id);
+      getThreadMirror(bridgeUserId).set(event.thread.id, event.thread);
+      normalizeSelectionForUser(bridgeUserId);
+      broadcastThreadToUser(bridgeUserId, event.thread.id);
       break;
     case "bridge:message:appended":
-      appendMirroredMessage(event.threadId, event.message);
-      broadcastToAllUsers({ type: "message:appended", threadId: event.threadId, message: event.message });
+      appendMirroredMessage(bridgeUserId, event.threadId, event.message);
+      broadcast(bridgeUserId, { type: "message:appended", threadId: event.threadId, message: event.message });
       break;
     case "bridge:message:delta":
-      applyMirroredDelta(event.threadId, event.messageId, event.delta);
-      broadcastToAllUsers({ type: "message:delta", threadId: event.threadId, messageId: event.messageId, delta: event.delta });
+      applyMirroredDelta(bridgeUserId, event.threadId, event.messageId, event.delta);
+      broadcast(bridgeUserId, { type: "message:delta", threadId: event.threadId, messageId: event.messageId, delta: event.delta });
       break;
     case "bridge:message:finished":
-      finishMirroredMessage(event.threadId, event.messageId);
-      broadcastToAllUsers({ type: "message:finished", threadId: event.threadId, messageId: event.messageId });
+      finishMirroredMessage(bridgeUserId, event.threadId, event.messageId);
+      broadcast(bridgeUserId, { type: "message:finished", threadId: event.threadId, messageId: event.messageId });
       break;
     case "bridge:presence":
-      bridgeConnection = event.connection;
-      broadcastPresenceToAllUsers();
+      bridgeConnectionsByUserId.set(bridgeUserId, event.connection);
+      broadcastPresence(bridgeUserId);
       break;
     case "bridge:banner":
-      for (const user of Object.values(persisted.users)) {
-        user.banner = event.banner;
-      }
+      persisted.users[bridgeUserId].banner = event.banner;
       schedulePersist();
-      broadcastBannersToAllUsers();
+      broadcastBanner(bridgeUserId);
       break;
     case "bridge:user-patch": {
+      if (event.userId !== bridgeUserId) {
+        break;
+      }
       const user = persisted.users[event.userId];
       if (!user) {
         break;
@@ -507,21 +526,20 @@ function handleBridgeMessage(raw: string) {
         broadcast(user.profile.id, { type: "banner", banner: user.banner });
       }
       schedulePersist();
-      broadcast(user.profile.id, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      broadcastSnapshot(user.profile.id);
       break;
     }
     case "bridge:toast":
-      if (event.userId) {
-        sendToast(event.userId, event.tone, event.message);
-      } else {
-        broadcastToAllUsers({ type: "toast", tone: event.tone, message: event.message });
+      if (event.userId && event.userId !== bridgeUserId) {
+        break;
       }
+      sendToast(bridgeUserId, event.tone, event.message);
       break;
   }
 }
 
-function appendMirroredMessage(threadId: string, message: ThreadMessage) {
-  const thread = ensureMirroredThread(threadId);
+function appendMirroredMessage(userId: string, threadId: string, message: ThreadMessage) {
+  const thread = ensureMirroredThread(userId, threadId);
   const existingIndex = thread.messages.findIndex((entry) => entry.id === message.id);
   if (existingIndex === -1) {
     thread.messages.push(message);
@@ -535,8 +553,8 @@ function appendMirroredMessage(threadId: string, message: ThreadMessage) {
   thread.lastActivityAt = message.createdAt;
 }
 
-function applyMirroredDelta(threadId: string, messageId: string, delta: string) {
-  const thread = ensureMirroredThread(threadId);
+function applyMirroredDelta(userId: string, threadId: string, messageId: string, delta: string) {
+  const thread = ensureMirroredThread(userId, threadId);
   const message = thread.messages.find((entry) => entry.id === messageId);
   if (!message) {
     return;
@@ -547,8 +565,8 @@ function applyMirroredDelta(threadId: string, messageId: string, delta: string) 
   thread.lastActivityAt = new Date().toISOString();
 }
 
-function finishMirroredMessage(threadId: string, messageId: string) {
-  const thread = ensureMirroredThread(threadId);
+function finishMirroredMessage(userId: string, threadId: string, messageId: string) {
+  const thread = ensureMirroredThread(userId, threadId);
   const message = thread.messages.find((entry) => entry.id === messageId);
   if (!message) {
     return;
@@ -557,8 +575,9 @@ function finishMirroredMessage(threadId: string, messageId: string) {
   thread.lastActivityAt = new Date().toISOString();
 }
 
-function ensureMirroredThread(threadId: string) {
-  const existing = threadMirror.get(threadId);
+function ensureMirroredThread(userId: string, threadId: string) {
+  const mirror = getThreadMirror(userId);
+  const existing = mirror.get(threadId);
   if (existing) {
     return existing;
   }
@@ -580,13 +599,13 @@ function ensureMirroredThread(threadId: string) {
     queuedDrafts: [],
     messages: [],
   };
-  threadMirror.set(threadId, thread);
+  mirror.set(threadId, thread);
   return thread;
 }
 
 function snapshotForUser(userId: string): AppSnapshot {
   const user = persisted.users[userId];
-  const threads = [...threadMirror.values()].sort((left, right) => {
+  const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
     const leftArchived = left.state === "archived" ? 1 : 0;
     const rightArchived = right.state === "archived" ? 1 : 0;
     if (leftArchived !== rightArchived) {
@@ -600,7 +619,7 @@ function snapshotForUser(userId: string): AppSnapshot {
     selectedThreadId: user.selectedThreadId,
     threads,
     settings: user.settings,
-    connection: bridgeConnection,
+    connection: getBridgeConnection(userId),
     banner: user.banner,
   };
 }
@@ -623,36 +642,102 @@ function ensureUser(email: string): PersistedUser {
       },
       selectedThreadId: null,
       banner: null,
+      bridgeAuth: null,
     };
-    normalizeSelections();
+    normalizeSelectionForUser(userId);
     schedulePersist();
   }
 
   return persisted.users[userId];
 }
 
-function normalizeSelections() {
-  const firstLiveThreadId = findFirstLiveThreadId();
-  const firstAnyThreadId = [...threadMirror.values()]
+function normalizeSelectionForUser(userId: string) {
+  const user = persisted.users[userId];
+  if (!user || user.selectedThreadId === null) {
+    return;
+  }
+
+  const mirror = getThreadMirror(userId);
+  if (mirror.has(user.selectedThreadId)) {
+    return;
+  }
+
+  const firstLiveThreadId = findFirstLiveThreadId(userId);
+  const firstAnyThreadId = [...mirror.values()]
     .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
     .at(0)?.id ?? null;
-
-  for (const user of Object.values(persisted.users)) {
-    if (user.selectedThreadId === null) {
-      continue;
-    }
-    if (threadMirror.has(user.selectedThreadId)) {
-      continue;
-    }
-    user.selectedThreadId = firstLiveThreadId ?? firstAnyThreadId;
-  }
+  user.selectedThreadId = firstLiveThreadId ?? firstAnyThreadId;
 }
 
-function findFirstLiveThreadId(excludingThreadId?: string) {
-  return [...threadMirror.values()]
+function findFirstLiveThreadId(userId: string, excludingThreadId?: string) {
+  return [...getThreadMirror(userId).values()]
     .filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
     .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
     .at(0)?.id ?? null;
+}
+
+function getThreadMirror(userId: string) {
+  let mirror = threadMirrorsByUserId.get(userId);
+  if (!mirror) {
+    mirror = new Map<string, ThreadRecord>();
+    threadMirrorsByUserId.set(userId, mirror);
+  }
+  return mirror;
+}
+
+function disconnectedBridgeConnection(): RelayConnection {
+  return {
+    state: "disconnected",
+    relayLabel: RELAY_LABEL,
+    macLabel: DEFAULT_MAC_LABEL,
+    latencyMs: 0,
+    lastSyncAt: null,
+  };
+}
+
+function getBridgeConnection(userId: string) {
+  return bridgeConnectionsByUserId.get(userId) ?? disconnectedBridgeConnection();
+}
+
+function resolveHealthUserId(req: Request) {
+  const session = authenticate(req);
+  if (session) {
+    return session.userId;
+  }
+  const bridgeToken = req.headers.get("x-phodex-bridge-token")?.trim() ?? "";
+  return bridgeToken ? resolveBridgeUserId(bridgeToken) : "";
+}
+
+function resolveBridgeUserId(token: string) {
+  if (!token) {
+    return "";
+  }
+  const tokenHash = hashBridgeToken(token);
+  for (const user of Object.values(persisted.users)) {
+    if (user.bridgeAuth?.tokenHash === tokenHash) {
+      return user.profile.id;
+    }
+  }
+  return "";
+}
+
+function issueBridgeAccessToken(userId: string) {
+  const user = persisted.users[userId];
+  if (!user) {
+    throw new Error("Bridge user not found.");
+  }
+
+  const token = `${randomUUID()}${randomUUID()}`.replace(/-/g, "");
+  user.bridgeAuth = {
+    tokenHash: hashBridgeToken(token),
+    issuedAt: new Date().toISOString(),
+    lastConnectedAt: user.bridgeAuth?.lastConnectedAt ?? null,
+  };
+  return token;
+}
+
+function hashBridgeToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function authenticate(req: Request) {
@@ -685,56 +770,48 @@ function unregisterSocket(ws: ServerWebSocket<SocketData>) {
   }
 }
 
-function sendBridgeCommand(command: BridgeCommand) {
+function sendBridgeCommand(userId: string, command: BridgeCommand) {
+  const bridgeSocket = bridgeSocketsByUserId.get(userId);
   if (!bridgeSocket) {
     return;
   }
   bridgeSocket.send(JSON.stringify(command));
 }
 
-function broadcastThreadToAllUsers(threadId: string) {
-  const thread = threadMirror.get(threadId);
+function broadcastThreadToUser(userId: string, threadId: string) {
+  const thread = getThreadMirror(userId).get(threadId);
   if (!thread) {
     return;
   }
-  for (const [userId, user] of Object.entries(persisted.users)) {
-    broadcast(userId, {
-      type: "thread:updated",
-      thread,
-      selectedThreadId: user.selectedThreadId,
-    });
+  const user = persisted.users[userId];
+  if (!user) {
+    return;
   }
+  broadcast(userId, {
+    type: "thread:updated",
+    thread,
+    selectedThreadId: user.selectedThreadId,
+  });
 }
 
-function broadcastSnapshotsToAllUsers() {
-  for (const userId of Object.keys(persisted.users)) {
-    broadcast(userId, { type: "snapshot", snapshot: snapshotForUser(userId) });
-  }
+function broadcastSnapshot(userId: string) {
+  broadcast(userId, { type: "snapshot", snapshot: snapshotForUser(userId) });
 }
 
-function broadcastBannersToAllUsers() {
-  for (const [userId, user] of Object.entries(persisted.users)) {
-    broadcast(userId, { type: "banner", banner: user.banner });
+function broadcastBanner(userId: string) {
+  const user = persisted.users[userId];
+  if (!user) {
+    return;
   }
+  broadcast(userId, { type: "banner", banner: user.banner });
 }
 
-function broadcastPresenceToAllUsers() {
-  for (const userId of Object.keys(persisted.users)) {
-    broadcast(userId, { type: "presence", connection: bridgeConnection });
-  }
+function broadcastPresence(userId: string) {
+  broadcast(userId, { type: "presence", connection: getBridgeConnection(userId) });
 }
 
 function sendToast(userId: string, tone: "info" | "success" | "error", message: string) {
   broadcast(userId, { type: "toast", tone, message });
-}
-
-function broadcastToAllUsers(event: ServerEvent) {
-  const payload = JSON.stringify(event);
-  for (const sockets of clientsByUserId.values()) {
-    for (const socket of sockets) {
-      socket.send(payload);
-    }
-  }
 }
 
 function broadcast(userId: string, event: ServerEvent) {
@@ -819,7 +896,7 @@ function resolveForwardedOrigin(req: Request) {
 function withCors(req: Request, response: Response) {
   response.headers.set("access-control-allow-origin", buildOrigin(req));
   response.headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.headers.set("access-control-allow-headers", "content-type,authorization");
+  response.headers.set("access-control-allow-headers", "content-type,authorization,x-phodex-bridge-token");
   response.headers.set("access-control-allow-credentials", "true");
   return response;
 }
@@ -834,12 +911,17 @@ function serveStatic(pathname: string) {
 }
 
 async function handleInstallManifest(req: Request) {
+  const session = authenticate(req);
+  if (!session) {
+    return json({ ok: false, error: "Sign in first to generate a bridge install command." }, 401);
+  }
+
   try {
     const assets = await ensureInstallAssets();
     const origin = buildOrigin(req);
     const installerUrl = `${origin}/install/${basename(assets.installerPath)}`;
     const bridgeRuntimeUrl = `${origin}/install/${basename(assets.runtimePath)}`;
-    const { token, expiresAt } = issueInstallSetupToken();
+    const { token, expiresAt } = issueInstallSetupToken(session.userId);
     return json({
       version: assets.version,
       relayOrigin: origin,
@@ -874,20 +956,33 @@ async function handleInstallClaim(req: Request) {
     return json({ ok: false, error: "Setup token has already been used." }, 409);
   }
 
+  const user = persisted.users[record.userId];
+  const previousBridgeAuth = user?.bridgeAuth ? { ...user.bridgeAuth } : null;
+
   try {
     const assets = await ensureInstallAssets();
     const origin = buildOrigin(req);
+    if (!user) {
+      installSetupTokens.delete(token);
+      return json({ ok: false, error: "Bridge user not found." }, 404);
+    }
+
+    const bridgeToken = issueBridgeAccessToken(record.userId);
     record.usedAt = new Date().toISOString();
+    persistNow();
     return json({
       ok: true,
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
-      bridgeSecret: BRIDGE_SECRET,
+      bridgeToken,
       bridgeRuntimeUrl: `${origin}/install/${basename(assets.runtimePath)}`,
       version: assets.version,
     });
   } catch (error) {
     record.usedAt = null;
+    if (user) {
+      user.bridgeAuth = previousBridgeAuth;
+    }
     return json({ ok: false, error: `Install setup claim failed: ${readErrorMessage(error)}` }, 500);
   }
 }
@@ -983,11 +1078,12 @@ function computeInstallAssetsVersion() {
   return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
 }
 
-function issueInstallSetupToken() {
+function issueInstallSetupToken(userId: string) {
   pruneExpiredInstallSetupTokens();
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + INSTALL_SETUP_TOKEN_TTL_MS).toISOString();
   installSetupTokens.set(token, {
+    userId,
     expiresAt,
     usedAt: null,
   });
@@ -1211,8 +1307,17 @@ function loadState(): PersistedState {
     }
 
     const parsed = JSON.parse(readFileSync(dataFile, "utf8")) as Partial<PersistedState>;
+    const users = Object.fromEntries(
+      Object.entries(parsed.users ?? {}).map(([userId, user]) => [
+        userId,
+        {
+          ...user,
+          bridgeAuth: user?.bridgeAuth ?? null,
+        } satisfies PersistedUser,
+      ])
+    );
     return {
-      users: parsed.users ?? {},
+      users,
       sessions: parsed.sessions ?? {},
       otpCodes: parsed.otpCodes ?? {},
     };

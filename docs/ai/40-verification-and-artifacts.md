@@ -12,7 +12,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Relay start: `bun run start:relay`
 - Bridge dev: `bun run dev:bridge`
 - Bridge start: `bun run start:bridge`
-- Installer manifest: `GET /install/manifest.json`
+- Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
 - Latest installer tarball alias: `GET /install/phodex-bridge-installer.tgz`
 - Latest bridge runtime alias: `GET /install/bridge-runtime.js`
@@ -21,7 +21,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
-- Local bridge endpoint target: `ws://localhost:3443/bridge?secret=...`
+- Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
 - User-facing local install/start command now comes from `/install/manifest.json` and resolves to a versioned `bunx phodex-bridge-installer@... --relay ... --token ...` invocation.
 
 ## Verification Expectations
@@ -31,6 +31,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
+- For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token cannot be reused, and unauthenticated health checks do not expose another account's bridge state.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
