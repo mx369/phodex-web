@@ -133,8 +133,14 @@ async function main() {
   console.log(`[phodex-bridge] PID ${pid}`);
   if (health?.bridgeConnected) {
     console.log(`[phodex-bridge] Relay connected to ${setup.relayOrigin}`);
+  } else if (health?.invalidBridgeToken) {
+    stopInstalledBridge(installDir);
+    throw new Error(
+      health.error ||
+        "Relay rejected this bridge token. Copy the latest install command from the signed-in phone session and run it again."
+    );
   } else {
-    console.log("[phodex-bridge] Started, but relay health has not reported the bridge yet.");
+    console.log("[phodex-bridge] Started, but the relay has not confirmed the bridge within 6 seconds. Check bridge.log.");
   }
 }
 
@@ -462,6 +468,16 @@ async function waitForRelayBridgeHealth(relayOrigin, bridgeToken) {
       const response = await fetch(new URL("/api/health", relayOrigin), {
         headers: bridgeToken ? { "x-phodex-bridge-token": bridgeToken } : {},
       });
+      if (response.status === 401) {
+        return {
+          bridgeConnected: false,
+          invalidBridgeToken: true,
+          error: await readResponseError(
+            response,
+            "Relay rejected this bridge token. Copy the latest install command from the signed-in phone session and run it again."
+          ),
+        };
+      }
       if (response.ok) {
         const payload = await response.json();
         if (payload?.bridgeConnected) {

@@ -188,14 +188,27 @@ const server = Bun.serve<SocketData>({
     }
 
     if (url.pathname === "/api/health") {
-      const healthUserId = resolveHealthUserId(req);
-      const connection = healthUserId ? getBridgeConnection(healthUserId) : disconnectedBridgeConnection();
+      const healthIdentity = resolveHealthIdentity(req);
+      if (healthIdentity.invalidBridgeToken) {
+        return withCors(
+          req,
+          json(
+            {
+              ok: false,
+              error: "Invalid bridge token. Copy the latest install command from the signed-in phone session and reinstall the bridge.",
+            },
+            401
+          )
+        );
+      }
+
+      const connection = healthIdentity.userId ? getBridgeConnection(healthIdentity.userId) : disconnectedBridgeConnection();
       return withCors(
         req,
         json({
           ok: true,
           relay: RELAY_LABEL,
-          bridgeConnected: healthUserId ? bridgeSocketsByUserId.has(healthUserId) : false,
+          bridgeConnected: healthIdentity.userId ? bridgeSocketsByUserId.has(healthIdentity.userId) : false,
           connection,
           users: Object.keys(persisted.users).length,
         })
@@ -773,13 +786,22 @@ function getBridgeConnection(userId: string) {
   return bridgeConnectionsByUserId.get(userId) ?? disconnectedBridgeConnection();
 }
 
-function resolveHealthUserId(req: Request) {
+function resolveHealthIdentity(req: Request) {
   const session = authenticate(req);
   if (session) {
-    return session.userId;
+    return { userId: session.userId, invalidBridgeToken: false };
   }
+
   const bridgeToken = req.headers.get("x-phodex-bridge-token")?.trim() ?? "";
-  return bridgeToken ? resolveBridgeUserId(bridgeToken) : "";
+  if (!bridgeToken) {
+    return { userId: "", invalidBridgeToken: false };
+  }
+
+  const userId = resolveBridgeUserId(bridgeToken);
+  return {
+    userId,
+    invalidBridgeToken: !userId,
+  };
 }
 
 function resolveBridgeUserId(token: string) {

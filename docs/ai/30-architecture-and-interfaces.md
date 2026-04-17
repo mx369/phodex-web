@@ -12,7 +12,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## HTTP Endpoints
 
-- `GET /api/health`: relay health plus user-specific bridge state when called with a user session or bridge token.
+- `GET /api/health`: relay health plus user-specific bridge state when called with a user session or a valid bridge token; invalid bridge tokens now return `401` instead of silently looking disconnected.
 - `GET /api/bootstrap`: authenticated snapshot bootstrap.
 - `GET /api/thread/:threadId/project/tree?path=...`: authenticated lazy directory listing for the selected thread root.
 - `GET /api/thread/:threadId/project/file?path=...`: authenticated lazy single-file preview for the selected thread root.
@@ -22,7 +22,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `GET /install/manifest.json`: authenticated bridge-install manifest; only available after login and used to mint an account-bound one-time setup token.
 - `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus the long-lived user-bound bridge token.
 - `GET /install/phodex-bridge-installer.tgz`: latest installer tarball alias.
-- `GET /install/bridge-runtime.js`: latest bundled local bridge runtime alias.
+- `GET /install/bridge-runtime.ts`: latest local bridge runtime alias.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 - `GET /bridge?token=...`: local bridge WSS upgrade endpoint.
 

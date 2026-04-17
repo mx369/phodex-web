@@ -15,7 +15,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
 - Latest installer tarball alias: `GET /install/phodex-bridge-installer.tgz`
-- Latest bridge runtime alias: `GET /install/bridge-runtime.js`
+- Latest bridge runtime alias: `GET /install/bridge-runtime.ts`
 
 ## Runtime Defaults
 
@@ -32,6 +32,7 @@ Read this file when you need to verify a change or continue from prior evidence.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token cannot be reused, and unauthenticated health checks do not expose another account's bridge state.
+- If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
