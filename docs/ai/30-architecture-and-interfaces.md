@@ -42,7 +42,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
 - Bridge connections are now account-bound on the relay. Each logged-in user gets an isolated bridge socket, isolated bridge connection state, and an isolated mirrored thread cache.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
-- Bridge thread-sync defaults depend on relay target: local relay hosts keep the old full-thread sweep, while public relay hosts default to syncing only the currently selected thread ids. Override with `PHODEX_BRIDGE_SYNC_MODE=all|selected` when you need a different behavior.
+- Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.

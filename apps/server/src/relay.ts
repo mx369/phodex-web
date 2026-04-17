@@ -491,15 +491,25 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       break;
     case "bridge:message:appended":
       appendMirroredMessage(bridgeUserId, event.threadId, event.message);
-      broadcast(bridgeUserId, { type: "message:appended", threadId: event.threadId, message: event.message });
+      if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
+        broadcast(bridgeUserId, { type: "message:appended", threadId: event.threadId, message: event.message });
+      } else {
+        broadcastThreadToUser(bridgeUserId, event.threadId);
+      }
       break;
     case "bridge:message:delta":
       applyMirroredDelta(bridgeUserId, event.threadId, event.messageId, event.delta);
-      broadcast(bridgeUserId, { type: "message:delta", threadId: event.threadId, messageId: event.messageId, delta: event.delta });
+      if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
+        broadcast(bridgeUserId, { type: "message:delta", threadId: event.threadId, messageId: event.messageId, delta: event.delta });
+      }
       break;
     case "bridge:message:finished":
       finishMirroredMessage(bridgeUserId, event.threadId, event.messageId);
-      broadcast(bridgeUserId, { type: "message:finished", threadId: event.threadId, messageId: event.messageId });
+      if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
+        broadcast(bridgeUserId, { type: "message:finished", threadId: event.threadId, messageId: event.messageId });
+      } else {
+        broadcastThreadToUser(bridgeUserId, event.threadId);
+      }
       break;
     case "bridge:presence":
       bridgeConnectionsByUserId.set(bridgeUserId, event.connection);
@@ -603,6 +613,17 @@ function ensureMirroredThread(userId: string, threadId: string) {
   return thread;
 }
 
+function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string | null) {
+  if (thread.id === selectedThreadId) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    messages: [],
+  } satisfies ThreadRecord;
+}
+
 function snapshotForUser(userId: string): AppSnapshot {
   const user = persisted.users[userId];
   const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
@@ -612,7 +633,7 @@ function snapshotForUser(userId: string): AppSnapshot {
       return leftArchived - rightArchived;
     }
     return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
-  });
+  }).map((thread) => serializeThreadForUser(thread, user.selectedThreadId));
 
   return {
     user: user.profile,
@@ -789,7 +810,7 @@ function broadcastThreadToUser(userId: string, threadId: string) {
   }
   broadcast(userId, {
     type: "thread:updated",
-    thread,
+    thread: serializeThreadForUser(thread, user.selectedThreadId),
     selectedThreadId: user.selectedThreadId,
   });
 }

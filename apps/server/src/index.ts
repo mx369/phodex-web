@@ -136,7 +136,6 @@ const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const CODEX_BIN = resolveCodexBinary();
 const OTP_MAIL_CONFIG = resolveOtpMailConfig();
-const BRIDGE_SYNC_MODE = resolveBridgeSyncMode();
 const DEV_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -352,15 +351,46 @@ function sendUserPatch(
 }
 
 function sendBridgeState() {
+  const selectedThreadIds = bridgeSelectedThreadIds();
   sendBridgeEvent({
     type: "bridge:state",
-    threads: listBridgeThreads(),
+    threads: listBridgeThreads().map((thread) => serializeThreadForSelections(thread, selectedThreadIds)),
     connection: buildConnection(),
   });
 }
 
 function listBridgeThreads() {
   return [...threadCache.values()].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt));
+}
+
+function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string | null) {
+  if (thread.id === selectedThreadId) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    messages: [],
+  } satisfies ThreadRecord;
+}
+
+function serializeThreadForSelections(thread: ThreadRecord, selectedThreadIds: Set<string>) {
+  if (selectedThreadIds.has(thread.id)) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    messages: [],
+  } satisfies ThreadRecord;
+}
+
+function bridgeSelectedThreadIds() {
+  return new Set(
+    [...bridgeUsers.values()]
+      .map((user) => user.selectedThreadId)
+      .filter((threadId): threadId is string => Boolean(threadId))
+  );
 }
 
 function sendBridgeEvent(event: BridgeEvent) {
@@ -1125,27 +1155,6 @@ async function syncAllThreadsFromCodex() {
   }
 
   threadSyncInFlight = (async () => {
-    if (BRIDGE_SYNC_MODE === "selected") {
-      const selectedThreadIds = [...new Set(
-        [...bridgeUsers.values()]
-          .map((user) => user.selectedThreadId)
-          .filter((threadId): threadId is string => Boolean(threadId))
-      )];
-
-      if (selectedThreadIds.length === 0) {
-        codexLastSyncAt = new Date().toISOString();
-        publishPresenceToAllUsers();
-        return;
-      }
-
-      for (const threadId of selectedThreadIds) {
-        await syncThreadFromCodex(threadId, false);
-      }
-      codexLastSyncAt = new Date().toISOString();
-      publishPresenceToAllUsers();
-      return;
-    }
-
     const [liveThreads, archivedThreads] = await Promise.all([
       listThreads(false),
       listThreads(true),
@@ -1490,7 +1499,8 @@ function snapshotForUser(userId: string): AppSnapshot {
         return leftArchived - rightArchived;
       }
       return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
-    });
+    })
+    .map((thread) => serializeThreadForUser(thread, user.selectedThreadId));
 
   return {
     user: user.profile,
@@ -2529,7 +2539,10 @@ function broadcastThreadToAllUsers(threadId: string) {
   if (!thread) {
     return;
   }
-  sendBridgeEvent({ type: "bridge:thread:updated", thread });
+  sendBridgeEvent({
+    type: "bridge:thread:updated",
+    thread: serializeThreadForSelections(thread, bridgeSelectedThreadIds()),
+  });
 }
 
 function clearAllBanners() {
@@ -2664,21 +2677,6 @@ function resolveOtpMailConfig(): OtpMailConfig | null {
     authEmailFrom,
     sourceLabel,
   };
-}
-
-function resolveBridgeSyncMode() {
-  const explicit = process.env.PHODEX_BRIDGE_SYNC_MODE?.trim().toLowerCase();
-  if (explicit === "all" || explicit === "selected") {
-    return explicit;
-  }
-
-  try {
-    const relayUrl = new URL(PUBLIC_RELAY_URL);
-    const isLocalRelayHost = relayUrl.hostname === "127.0.0.1" || relayUrl.hostname === "localhost";
-    return isLocalRelayHost ? "all" : "selected";
-  } catch {
-    return "all";
-  }
 }
 
 function readOptionalEnvFile(filePath: string) {
