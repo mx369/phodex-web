@@ -23,7 +23,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Flow | Status | Notes |
 | --- | --- | --- |
-| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; the real `bunx` bridge installer command is minted only after login, is tied to the signed-in account, starts by switching to `$HOME`, and can be copied directly from the post-login empty-home install card |
+| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; the real `curl -fsSL .../install | bash` bridge installer command is minted only after login, is tied to the signed-in account, and can be copied directly from the post-login empty-home install card |
 | Email OTP login | Real | Uses `/api/auth/request-code` and `/api/auth/verify-code`; request-code requires configured live email delivery and no longer exposes any local bypass path |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | Local pending thread state appears immediately, then resolves to the real Codex thread |

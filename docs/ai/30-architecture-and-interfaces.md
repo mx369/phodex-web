@@ -21,7 +21,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
 - `GET /install/manifest.json`: authenticated bridge-install manifest; only available after login and used to mint an account-bound one-time setup token.
 - `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus the long-lived user-bound bridge token.
-- `GET /install/phodex-bridge-installer.tgz`: latest installer tarball alias.
+- `GET /install`: latest shell installer alias.
 - `GET /install/bridge-runtime.ts`: latest local bridge runtime alias.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 - `GET /bridge?token=...`: local bridge WSS upgrade endpoint.
@@ -43,8 +43,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
-- The public relay now publishes a versioned `bunx` installer and bundled bridge runtime so the authenticated shell can point Mac users at a single local install/start command.
-- The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config. The generated command starts with `cd "$HOME"` so `bunx` does not inherit a protected cwd such as `~/Downloads`.
+- The public relay now publishes a Bun-style `curl -fsSL ... | bash` installer script and bundled bridge runtime so the authenticated shell can point Mac users at a single local install/start command.
+- The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
 - Bridge connections are now account-bound on the relay. Each logged-in user gets an isolated bridge socket, isolated bridge connection state, and an isolated mirrored thread cache.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.

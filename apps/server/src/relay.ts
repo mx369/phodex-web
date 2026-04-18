@@ -1,8 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
-import { hostname, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
 import type {
   AppSettings,
@@ -72,12 +71,6 @@ type OtpMailConfig = {
   sourceLabel: string;
 };
 
-type InstallAssets = {
-  version: string;
-  runtimePath: string;
-  installerPath: string;
-};
-
 type SetupTokenRecord = {
   userId: string;
   expiresAt: string;
@@ -98,11 +91,10 @@ const appRoot = resolve(serverRoot, "../..");
 const dataDir = resolve(serverRoot, "data");
 const dataFile = process.env.PHODEX_STATE_FILE ?? resolve(dataDir, "relay-state.json");
 const distDir = resolve(appRoot, "apps/web/dist");
-const installAssetsDir = resolve(dataDir, "install-assets");
 const bridgeRuntimeSourcePath = resolve(serverRoot, "src/index.ts");
 const bridgeInstallerPackageDir = resolve(appRoot, "packages/bridge-installer");
+const bridgeInstallScriptSourcePath = resolve(bridgeInstallerPackageDir, "install.sh");
 const bridgeInstallerPackageJsonPath = resolve(bridgeInstallerPackageDir, "package.json");
-const bridgeInstallerBinPath = resolve(bridgeInstallerPackageDir, "bin/phodex-bridge.js");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
@@ -136,8 +128,6 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const threadMirrorsByUserId = new Map<string, Map<string, ThreadRecord>>();
 const bridgeSocketsByUserId = new Map<string, ServerWebSocket<SocketData>>();
-let installAssetsPromise: Promise<InstallAssets> | null = null;
-let cachedInstallAssets: InstallAssets | null = null;
 const installSetupTokens = new Map<string, SetupTokenRecord>();
 const bridgeConnectionsByUserId = new Map<string, RelayConnection>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
@@ -239,20 +229,21 @@ const server = Bun.serve<SocketData>({
     }
 
     if (
+      (url.pathname === "/install" ||
+        url.pathname === "/install/bridge-install.sh" ||
+        /^\/install\/bridge-install-[A-Za-z0-9.-]+\.sh$/.test(url.pathname)) &&
+      req.method === "GET"
+    ) {
+      return withCors(req, serveInstallSource(bridgeInstallScriptSourcePath, "text/plain; charset=utf-8"));
+    }
+
+    if (
       (url.pathname === "/install/bridge-runtime.js" ||
         url.pathname === "/install/bridge-runtime.ts" ||
         /^\/install\/bridge-runtime-[A-Za-z0-9.-]+\.(js|ts)$/.test(url.pathname)) &&
       req.method === "GET"
     ) {
-      return withCors(req, await serveInstallAsset(url.pathname, "text/plain; charset=utf-8"));
-    }
-
-    if (
-      (url.pathname === "/install/phodex-bridge-installer.tgz" ||
-        /^\/install\/phodex-bridge-installer-[A-Za-z0-9.-]+\.tgz$/.test(url.pathname)) &&
-      req.method === "GET"
-    ) {
-      return withCors(req, await serveInstallAsset(url.pathname, "application/gzip"));
+      return withCors(req, serveInstallSource(bridgeRuntimeSourcePath, "text/plain; charset=utf-8"));
     }
 
     if (url.pathname === "/api/bootstrap" && req.method === "GET") {
@@ -1164,20 +1155,20 @@ async function handleInstallManifest(req: Request) {
   }
 
   try {
-    const assets = await ensureInstallAssets();
+    const version = computeInstallAssetsVersion();
     const origin = buildOrigin(req);
-    const installerUrl = `${origin}/install/${basename(assets.installerPath)}`;
-    const bridgeRuntimeUrl = `${origin}/install/${basename(assets.runtimePath)}`;
+    const installScriptUrl = `${origin}/install`;
+    const bridgeRuntimeUrl = `${origin}/install/bridge-runtime-${version}.ts`;
     const { token, expiresAt } = issueInstallSetupToken(session.userId);
     return json({
-      version: assets.version,
+      version,
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
-      installerUrl,
+      installScriptUrl,
       bridgeRuntimeUrl,
       setupToken: token,
       setupTokenExpiresAt: expiresAt,
-      command: `cd "$HOME" && bunx --package "phodex-bridge-installer@${installerUrl}" phodex-bridge --relay "${origin}" --token "${token}"`,
+      command: `curl -fsSL "${installScriptUrl}" | bash -s -- --relay "${origin}" --token "${token}"`,
     });
   } catch (error) {
     return json({ ok: false, error: `Install manifest failed: ${readErrorMessage(error)}` }, 500);
@@ -1207,7 +1198,7 @@ async function handleInstallClaim(req: Request) {
   const previousBridgeAuth = user?.bridgeAuth ? { ...user.bridgeAuth } : null;
 
   try {
-    const assets = await ensureInstallAssets();
+    const version = computeInstallAssetsVersion();
     const origin = buildOrigin(req);
     if (!user) {
       installSetupTokens.delete(token);
@@ -1222,8 +1213,8 @@ async function handleInstallClaim(req: Request) {
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
       bridgeToken,
-      bridgeRuntimeUrl: `${origin}/install/${basename(assets.runtimePath)}`,
-      version: assets.version,
+      bridgeRuntimeUrl: `${origin}/install/bridge-runtime-${version}.ts`,
+      version,
     });
   } catch (error) {
     record.usedAt = null;
@@ -1234,69 +1225,17 @@ async function handleInstallClaim(req: Request) {
   }
 }
 
-async function serveInstallAsset(pathname: string, contentType: string) {
-  let assets: InstallAssets;
-  try {
-    assets = await ensureInstallAssets();
-  } catch (error) {
-    return new Response(`Install asset build failed: ${readErrorMessage(error)}`, { status: 500 });
-  }
-
-  const assetName =
-    pathname === "/install/bridge-runtime.js"
-      ? basename(assets.runtimePath)
-      : pathname === "/install/phodex-bridge-installer.tgz"
-        ? basename(assets.installerPath)
-        : basename(pathname);
-  const filePath = resolve(installAssetsDir, assetName);
-  if (!filePath.startsWith(`${installAssetsDir}/`) || !existsSync(filePath)) {
+function serveInstallSource(filePath: string, contentType: string) {
+  if (!existsSync(filePath)) {
     return new Response("Not found", { status: 404 });
   }
 
   return new Response(Bun.file(filePath), {
     headers: {
       "content-type": contentType,
-      "cache-control": "public, max-age=300",
+      "cache-control": "no-store",
     },
   });
-}
-
-async function ensureInstallAssets() {
-  const version = computeInstallAssetsVersion();
-  if (
-    cachedInstallAssets &&
-    cachedInstallAssets.version === version &&
-    existsSync(cachedInstallAssets.runtimePath) &&
-    existsSync(cachedInstallAssets.installerPath)
-  ) {
-    return cachedInstallAssets;
-  }
-
-  if (installAssetsPromise) {
-    return installAssetsPromise;
-  }
-
-  installAssetsPromise = (async () => {
-    mkdirSync(installAssetsDir, { recursive: true });
-
-    const runtimePath = resolve(installAssetsDir, `bridge-runtime-${version}.ts`);
-    const installerPath = resolve(installAssetsDir, `phodex-bridge-installer-${version}.tgz`);
-
-    if (!existsSync(runtimePath)) {
-      writeFileSync(runtimePath, readFileSync(bridgeRuntimeSourcePath, "utf8"), "utf8");
-    }
-
-    if (!existsSync(installerPath)) {
-      buildInstallerArchive(installerPath);
-    }
-
-    cachedInstallAssets = { version, runtimePath, installerPath };
-    return cachedInstallAssets;
-  })().finally(() => {
-    installAssetsPromise = null;
-  });
-
-  return installAssetsPromise;
 }
 
 function computeInstallAssetsVersion() {
@@ -1306,7 +1245,7 @@ function computeInstallAssetsVersion() {
     statSync(currentFile).mtimeMs,
     statSync(bridgeRuntimeSourcePath).mtimeMs,
     statSync(bridgeInstallerPackageJsonPath).mtimeMs,
-    statSync(bridgeInstallerBinPath).mtimeMs
+    statSync(bridgeInstallScriptSourcePath).mtimeMs
   );
   return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
 }
@@ -1329,25 +1268,6 @@ function pruneExpiredInstallSetupTokens() {
     if (record.usedAt || Date.parse(record.expiresAt) <= now) {
       installSetupTokens.delete(token);
     }
-  }
-}
-
-function buildInstallerArchive(installerPath: string) {
-  const tempRoot = mkdtempSync(resolve(tmpdir(), "phodex-bridge-installer-"));
-  const packageRoot = resolve(tempRoot, "package");
-  mkdirSync(resolve(packageRoot, "bin"), { recursive: true });
-  writeFileSync(resolve(packageRoot, "package.json"), readFileSync(bridgeInstallerPackageJsonPath));
-  writeFileSync(resolve(packageRoot, "bin/phodex-bridge.js"), readFileSync(bridgeInstallerBinPath));
-  chmodSync(resolve(packageRoot, "bin/phodex-bridge.js"), 0o755);
-
-  const packed = spawnSync("tar", ["-czf", installerPath, "-C", tempRoot, "package"], {
-    encoding: "utf8",
-  });
-
-  rmSync(tempRoot, { recursive: true, force: true });
-
-  if (packed.status !== 0) {
-    throw new Error(packed.stderr?.trim() || packed.stdout?.trim() || "Unknown installer archive failure");
   }
 }
 

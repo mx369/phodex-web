@@ -14,7 +14,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Bridge start: `bun run start:bridge`
 - Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
-- Latest installer tarball alias: `GET /install/phodex-bridge-installer.tgz`
+- Latest shell installer alias: `GET /install`
 - Latest bridge runtime alias: `GET /install/bridge-runtime.ts`
 
 ## Runtime Defaults
@@ -22,7 +22,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
-- User-facing local install/start command now comes from `/install/manifest.json` and resolves to a versioned `bunx phodex-bridge-installer@... --relay ... --token ...` invocation.
+- User-facing local install/start command now comes from `/install/manifest.json` and resolves to a Bun-style `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...` invocation.
 
 ## Verification Expectations
 

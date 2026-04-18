@@ -59,7 +59,7 @@ type InstallManifest = {
   version: string;
   relayOrigin: string;
   relayLabel: string;
-  installerUrl: string;
+  installScriptUrl: string;
   bridgeRuntimeUrl: string;
   setupToken?: string;
   setupTokenExpiresAt?: string;
@@ -348,7 +348,7 @@ const onboardingScreens = [
     step: "Step 1",
     icon: "relay",
     title: "Sign In To Mint Bridge Setup",
-    subtitle: "Email verification comes first. After you sign in, the app generates a one-time Bun command tied to your account.",
+    subtitle: "Email verification comes first. After you sign in, the app generates a one-time install command tied to your account.",
     commandKey: "bridge",
   },
 ] as const;
@@ -490,17 +490,17 @@ onBeforeUnmount(() => {
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
 const onboardingBridgeCommand = computed(
-  () => "Sign in with email first. The app will mint a one-time bridge command that only this account can claim."
+  () => "Sign in with email first. The app will mint a one-time install command that only this account can claim."
 );
-const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound bridge command…");
+const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound install command…");
 const showBridgeInstallCard = computed(() => isAuthenticated.value && !state.snapshot?.connection.bridgeOnline);
 const showBridgeLinkedWarning = computed(
   () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
 );
 const bridgeInstallCopy = computed(() =>
   installManifest.value?.command
-    ? 'Run this one-time Bun command on your Mac. It switches into your Home folder first, then installs the bridge, writes the relay settings, and binds the bridge to your signed-in account. If you previously installed from another account, rerun the command from this signed-in session.'
-    : "Signed in. Minting a one-time bridge command for this account…"
+    ? "Run this one-time install command on your Mac. It downloads the bridge shell installer, writes the relay settings, and binds the bridge to your signed-in account. If you previously installed from another account, rerun the command from this signed-in session."
+    : "Signed in. Minting a one-time install command for this account…"
 );
 const bridgeInstallCopyLabel = computed(() => {
   switch (installCommandCopyState.value) {
@@ -740,8 +740,8 @@ const homeStatusCopy = computed(() => {
       return "The relay is still rehydrating thread state from the desktop side.";
     case "disconnected":
       return installManifest.value?.command
-        ? "Your phone is signed in, but this account does not have an active Mac bridge yet. Run the account-bound command below on your Mac."
-        : "Your phone is signed in. The relay is minting an account-bound bridge command for this session.";
+        ? "Your phone is signed in, but this account does not have an active Mac bridge yet. Run the account-bound install command below on your Mac."
+        : "Your phone is signed in. The relay is minting an account-bound install command for this session.";
     default:
       return "Sign in first, then install the local bridge from the command generated for your account.";
   }
