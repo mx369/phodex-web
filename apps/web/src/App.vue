@@ -2,6 +2,7 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
+  InputImageAttachment,
   ProjectDiffFile,
   ProjectDiffPayload,
   ProjectFilePayload,
@@ -273,6 +274,7 @@ const dialogState = ref<AppDialogState | null>(null);
 const dialogInput = ref("");
 const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
+const composerImageInputEl = ref<HTMLInputElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
 const conversationInnerEl = ref<HTMLElement | null>(null);
 const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
@@ -280,6 +282,7 @@ const isScrolledToBottom = ref(true);
 
 const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
+const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
 
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
@@ -664,7 +667,9 @@ const composerPlaceholder = computed(() => {
     : "Ask anything... @files, $skills, /commands";
 });
 const composerHasText = computed(() => Boolean(state.ui.composerText.trim()));
-const composerSendDisabled = computed(() => isCurrentThreadPendingCreate.value || !composerHasText.value);
+const composerHasImage = computed(() => state.ui.composerImages.length > 0);
+const composerHasContent = computed(() => composerHasText.value || composerHasImage.value);
+const composerSendDisabled = computed(() => isCurrentThreadPendingCreate.value || !composerHasContent.value);
 const composerSendTone = computed(() => {
   if (composerSendDisabled.value) {
     return "idle";
@@ -675,8 +680,8 @@ const composerSendTitle = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
     return "Starting";
   }
-  if (!composerHasText.value) {
-    return "Compose first";
+  if (!composerHasContent.value) {
+    return "Compose or attach first";
   }
   return currentThread.value?.state === "running" ? "Queue" : "Send";
 });
@@ -1218,6 +1223,18 @@ function splitParagraphs(text: string) {
     .filter(Boolean);
 }
 
+function pushUiToast(tone: "info" | "success" | "error", message: string) {
+  const toast = {
+    id: crypto.randomUUID(),
+    tone,
+    message,
+  };
+  state.ui.toasts.push(toast);
+  window.setTimeout(() => {
+    state.ui.toasts = state.ui.toasts.filter((item) => item.id !== toast.id);
+  }, 3600);
+}
+
 function findThreadRecord(threadId: string) {
   return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
 }
@@ -1528,6 +1545,95 @@ function modelOptionCopy(model: string) {
 
 function speedOptionCopy(fastMode: boolean) {
   return fastMode ? "Lower latency using Codex Fast Mode." : "Balanced latency for standard turns.";
+}
+
+function formatImageCountLabel(count: number) {
+  return count === 1 ? "1 image attached" : `${count} images attached`;
+}
+
+function formatInputImageLabel(image: InputImageAttachment, index: number) {
+  return image.name?.trim() || image.fileId?.trim() || `Image ${index + 1}`;
+}
+
+function inputImageSource(image: InputImageAttachment) {
+  return image.imageUrl ?? "";
+}
+
+function draftSummary(draft: { text: string; images?: InputImageAttachment[] }) {
+  const trimmed = draft.text.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  return formatImageCountLabel(draft.images?.length ?? 0);
+}
+
+function resetComposerImageInput() {
+  if (composerImageInputEl.value) {
+    composerImageInputEl.value.value = "";
+  }
+}
+
+function removeComposerImage(index = 0) {
+  state.ui.composerImages = state.ui.composerImages.filter((_image, imageIndex) => imageIndex !== index);
+  resetComposerImageInput();
+}
+
+function openComposerImagePicker() {
+  if (isCurrentThreadPendingCreate.value) {
+    return;
+  }
+  composerImageInputEl.value?.click();
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Unable to read this image."));
+    };
+    reader.onerror = () => reject(new Error("Unable to read this image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleComposerImageSelection(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  if (!file.type.startsWith("image/")) {
+    pushUiToast("error", "Only image files can be attached.");
+    resetComposerImageInput();
+    return;
+  }
+
+  if (file.size > MAX_COMPOSER_IMAGE_BYTES) {
+    pushUiToast("error", "Images must stay under 5 MB for this mobile shell.");
+    resetComposerImageInput();
+    return;
+  }
+
+  try {
+    const imageUrl = await readFileAsDataUrl(file);
+    state.ui.composerImages = [
+      {
+        imageUrl,
+        name: file.name,
+        mimeType: file.type || undefined,
+        detail: "auto",
+      },
+    ];
+  } catch (error) {
+    pushUiToast("error", error instanceof Error ? error.message : "Unable to attach this image.");
+  } finally {
+    resetComposerImageInput();
+  }
 }
 
 function closeModelPicker() {
@@ -2684,6 +2790,17 @@ function handleScrollToLatest() {
                               <span v-if="message.isStreaming" class="stream-cursor"></span>
                             </div>
 
+                            <div v-if="message.inputImages?.length" class="message-input-images">
+                              <figure
+                                v-for="(image, index) in message.inputImages"
+                                :key="`${message.id}-image-${index}`"
+                                class="message-input-image"
+                              >
+                                <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
+                              </figure>
+                            </div>
+
                             <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
 
                             <div v-if="message.fileChanges?.length" class="file-change-stack">
@@ -2713,6 +2830,17 @@ function handleScrollToLatest() {
                           </div>
 
                           <div class="phone-message__card">
+                            <div v-if="currentPendingRunFeedback.images.length" class="message-input-images">
+                              <figure
+                                v-for="(image, index) in currentPendingRunFeedback.images"
+                                :key="`pending-image-${index}`"
+                                class="message-input-image"
+                              >
+                                <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
+                              </figure>
+                            </div>
+
                             <div class="phone-message__copy">
                               <p
                                 v-for="paragraph in splitParagraphs(currentPendingRunFeedback.prompt)"
@@ -2870,7 +2998,8 @@ function handleScrollToLatest() {
 
                           <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
                             <div class="queued-draft__copy">
-                              <strong>{{ draft.text }}</strong>
+                              <strong>{{ draftSummary(draft) }}</strong>
+                              <span v-if="draft.images?.length">{{ formatImageCountLabel(draft.images.length) }}</span>
                               <span>{{ formatRelativeTime(draft.createdAt) }}</span>
                             </div>
                             <div class="queued-draft__actions">
@@ -2902,6 +3031,36 @@ function handleScrollToLatest() {
                       </div>
 
                       <div class="phone-composer">
+                        <input
+                          ref="composerImageInputEl"
+                          class="composer-image-input"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          @change="handleComposerImageSelection"
+                        />
+
+                        <div v-if="state.ui.composerImages.length" class="composer-image-strip">
+                          <div
+                            v-for="(image, index) in state.ui.composerImages"
+                            :key="`${image.name ?? 'image'}-${index}`"
+                            class="composer-image-card"
+                          >
+                            <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                            <div class="composer-image-card__copy">
+                              <strong>{{ formatInputImageLabel(image, index) }}</strong>
+                              <span>{{ image.mimeType || "Image attachment" }}</span>
+                            </div>
+                            <button
+                              class="icon-button icon-button--tiny composer-image-card__remove"
+                              type="button"
+                              aria-label="Remove image"
+                              @click="removeComposerImage(index)"
+                            >
+                              <AppIcon name="close" />
+                            </button>
+                          </div>
+                        </div>
+
                         <textarea
                           v-model="state.ui.composerText"
                           class="phone-composer__input"
@@ -2913,6 +3072,16 @@ function handleScrollToLatest() {
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
+                            <button
+                              class="composer-action composer-action--attach"
+                              type="button"
+                              aria-label="Attach image"
+                              :disabled="isCurrentThreadPendingCreate"
+                              @click="openComposerImagePicker"
+                            >
+                              <AppIcon name="file" />
+                            </button>
+
                             <div ref="modelPickerEl" class="model-picker">
                               <button
                                 class="model-picker__trigger"
@@ -3023,8 +3192,8 @@ function handleScrollToLatest() {
                               :aria-label="
                                 isCurrentThreadPendingCreate
                                   ? 'Starting'
-                                  : !composerHasText
-                                    ? 'Compose something first'
+                                  : !composerHasContent
+                                    ? 'Compose or attach first'
                                     : currentThread?.state === 'running'
                                       ? 'Queue draft'
                                       : 'Send'

@@ -1582,6 +1582,46 @@ button {
   text-transform: uppercase;
 }
 
+.message-input-images {
+  display: grid;
+  gap: 10px;
+}
+
+.phone-message__copy + .message-input-images,
+.message-input-images + .phone-message__copy {
+  margin-top: 12px;
+}
+
+.message-input-image {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.message-input-image img {
+  display: block;
+  width: min(100%, 240px);
+  max-height: 260px;
+  border-radius: 18px;
+  object-fit: cover;
+  background: rgba(18, 18, 18, 0.06);
+}
+
+.message-input-image figcaption {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.phone-message--user .message-input-image img {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.phone-message--user .message-input-image figcaption {
+  color: rgba(255, 255, 255, 0.74);
+}
+
 .message-card-stack {
   display: grid;
   gap: 10px;
@@ -2458,6 +2498,65 @@ button {
   box-shadow: 0 18px 44px rgba(18, 18, 18, 0.09);
 }
 
+.composer-image-input {
+  display: none;
+}
+
+.composer-image-strip {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.composer-image-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(250, 247, 240, 0.96);
+}
+
+.composer-image-card img {
+  display: block;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: rgba(18, 18, 18, 0.06);
+}
+
+.composer-image-card__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.composer-image-card__copy strong,
+.composer-image-card__copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-image-card__copy strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.composer-image-card__copy span {
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.composer-image-card__remove {
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .phone-composer__input {
   min-height: 44px;
   padding: 3px 2px 8px;
@@ -2704,6 +2803,15 @@ button {
   color: rgba(255, 255, 255, 0.96);
   border-color: rgba(18, 18, 18, 0.2);
   box-shadow: 0 10px 18px rgba(18, 18, 18, 0.18);
+}
+
+.composer-action--attach {
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+  border-color: rgba(18, 18, 18, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 8px 18px rgba(18, 18, 18, 0.08);
 }
 
 .send-cta--ready {

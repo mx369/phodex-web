@@ -17,6 +17,7 @@ import type {
   DeliveryMode,
   DiffStats,
   FileChangeSummary,
+  InputImageAttachment,
   ProjectDiffFile,
   ProjectDiffPayload,
   ProjectFilePayload,
@@ -697,10 +698,12 @@ async function handleThreadArchive(user: PersistedUser, threadId: string) {
 
 async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent, { type: "message:send" }>) {
   const text = event.text.trim();
-  if (!text) {
+  const images = normalizeInputImages(event.images);
+  if (!text && !images.length) {
     sendToast(user.profile.id, "error", "Compose something first.");
     return;
   }
+  const preview = summarizeMessagePreview(text, images);
 
   try {
     ensureCodexReady();
@@ -715,6 +718,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
       local.queuedDrafts.unshift({
         id: randomUUID(),
         text,
+        images,
         createdAt: new Date().toISOString(),
         model: event.model,
         planArmed: event.planArmed,
@@ -723,7 +727,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
       });
       thread.queuedDrafts = local.queuedDrafts;
       thread.state = "running";
-      thread.preview = text;
+      thread.preview = preview;
       thread.lastActivityAt = new Date().toISOString();
       schedulePersist();
       broadcastThreadToAllUsers(thread.id);
@@ -736,7 +740,7 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
       selectedThreadId: thread.id,
       banner: null,
     });
-    markThreadRunning(thread.id, text);
+    markThreadRunning(thread.id, preview);
     const turnMode = deriveRequestedTurnMode(text, event.planArmed);
     pendingTurnModes.set(thread.id, turnMode);
     schedulePersist();
@@ -788,6 +792,7 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
     type: "message:send",
     threadId,
     text: draft.text,
+    images: draft.images,
     model: draft.model ?? "GPT-5.4",
     planArmed: draft.planArmed ?? false,
     fastMode: draft.fastMode ?? false,
@@ -801,9 +806,10 @@ async function startTurn(
   event: Extract<ClientEvent, { type: "message:send" }>,
   userId: string
 ) {
+  const input = buildTurnInput(text, normalizeInputImages(event.images));
   const baseParams = {
     threadId: thread.id,
-    input: [{ type: "text", text }],
+    input,
     model: normalizeModel(event.model),
     approvalPolicy: mapApprovalPolicy(event.accessMode),
     sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
@@ -1372,11 +1378,13 @@ function mapLiveItemToMessage(
 ) {
   const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
+    const inputImages = readUserItemImages(item);
     return {
       id: itemId,
       role: "user",
       kind: "chat",
       text: readUserItemText(item),
+      inputImages,
       createdAt,
     } satisfies ThreadMessage;
   }
@@ -1466,7 +1474,7 @@ function appendMessage(threadId: string, nextMessage: ThreadMessage) {
       ...nextMessage,
     };
   }
-  thread.preview = nextMessage.text || thread.preview;
+  thread.preview = summarizeMessagePreview(nextMessage.text, nextMessage.inputImages) || thread.preview;
   thread.lastActivityAt = nextMessage.createdAt;
   return thread;
 }
@@ -2443,12 +2451,86 @@ function dedupeMessages(messages: ThreadMessage[]) {
 }
 
 function readUserItemText(item: any) {
-  const content = Array.isArray(item?.content) ? item.content : [];
-  return content
-    .filter((entry) => entry?.type === "text" && typeof entry.text === "string")
+  return readUserContentEntries(item)
+    .filter(
+      (entry) =>
+        (entry?.type === "text" || entry?.type === "input_text") &&
+        typeof entry.text === "string" &&
+        entry.text.trim() !== "<image>"
+    )
     .map((entry) => entry.text)
     .join("\n\n")
     .trim();
+}
+
+function readUserItemImages(item: any): InputImageAttachment[] {
+  return readUserContentEntries(item)
+    .filter((entry) => entry?.type === "input_image" || entry?.type === "image")
+    .map((entry) => ({
+      imageUrl: readString(entry?.image_url) || readString(entry?.url) || undefined,
+      fileId: readString(entry?.file_id) || readString(entry?.fileId) || undefined,
+      detail: readImageDetail(entry?.detail),
+    }))
+    .filter((entry) => Boolean(entry.imageUrl || entry.fileId));
+}
+
+function readUserContentEntries(item: any) {
+  return Array.isArray(item?.content) ? item.content : [];
+}
+
+function normalizeInputImages(images: InputImageAttachment[] | undefined) {
+  return (images ?? [])
+    .map((image) => ({
+      imageUrl: readString(image.imageUrl) || undefined,
+      fileId: readString(image.fileId) || undefined,
+      name: readString(image.name) || undefined,
+      mimeType: readString(image.mimeType) || undefined,
+      detail: readImageDetail(image.detail),
+    }))
+    .filter((image) => Boolean(image.imageUrl || image.fileId));
+}
+
+function readImageDetail(value: unknown): InputImageAttachment["detail"] {
+  return value === "low" || value === "high" || value === "auto" ? value : undefined;
+}
+
+function summarizeMessagePreview(text: string, images: InputImageAttachment[] | undefined) {
+  const trimmed = text.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  if ((images?.length ?? 0) === 1) {
+    return "Sent an image";
+  }
+  if ((images?.length ?? 0) > 1) {
+    return `Sent ${images!.length} images`;
+  }
+  return "";
+}
+
+function buildTurnInput(text: string, images: InputImageAttachment[]) {
+  const input: Array<Record<string, string>> = [];
+  if (text) {
+    input.push({ type: "text", text });
+  }
+  for (const image of images) {
+    if (image.fileId) {
+      input.push({
+        type: "image",
+        fileId: image.fileId,
+        ...(image.detail ? { detail: image.detail } : {}),
+      });
+      continue;
+    }
+    if (image.imageUrl) {
+      input.push({
+        type: "image",
+        url: image.imageUrl,
+        ...(image.detail ? { detail: image.detail } : {}),
+      });
+    }
+  }
+  return input;
 }
 
 function mapCommandExecutionMessage(item: any, itemId: string, createdAt: string, stage: "history" | "started" | "completed") {

@@ -6,6 +6,7 @@ import type {
   AuthSession,
   ClientEvent,
   DeliveryMode,
+  InputImageAttachment,
   RequestCodeResponse,
   ServerEvent,
   ThreadCreateMode,
@@ -32,6 +33,7 @@ type PendingThreadCreate = {
 type PendingRunFeedback = {
   threadId: string;
   prompt: string;
+  images: InputImageAttachment[];
   startedAt: string;
   promptAcknowledged: boolean;
 };
@@ -60,6 +62,7 @@ export const state = reactive({
     sendingCode: false,
     verifyingCode: false,
     composerText: "",
+    composerImages: [] as InputImageAttachment[],
     search: "",
     selectedModel: "GPT-5.4",
     fastMode: false,
@@ -182,6 +185,7 @@ export function createAppClient() {
     state.snapshot = null;
     state.auth.phase = "idle";
     state.ui.composerText = "";
+    state.ui.composerImages = [];
     state.ui.settingsOpen = false;
     state.ui.authStatus = "";
     state.ui.authStatusTone = "neutral";
@@ -555,10 +559,11 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   }
 }
 
-function beginPendingRunFeedback(threadId: string, prompt: string) {
+function beginPendingRunFeedback(threadId: string, prompt: string, images: InputImageAttachment[]) {
   state.ui.pendingRunFeedback = {
     threadId,
     prompt,
+    images,
     startedAt: new Date().toISOString(),
     promptAcknowledged: false,
   };
@@ -618,7 +623,8 @@ function flushComposer(threadId: string) {
   }
 
   const text = state.ui.composerText.trim();
-  if (!text) {
+  const images = state.ui.composerImages.map((image) => ({ ...image }));
+  if (!text && !images.length) {
     pushToast("error", "Compose something first.");
     return false;
   }
@@ -629,6 +635,7 @@ function flushComposer(threadId: string) {
     type: "message:send",
     threadId,
     text,
+    images,
     model: state.ui.selectedModel,
     planArmed: state.ui.planArmed,
     fastMode: state.ui.fastMode,
@@ -638,9 +645,10 @@ function flushComposer(threadId: string) {
     return false;
   }
   if (!willQueueDraft) {
-    beginPendingRunFeedback(threadId, text);
+    beginPendingRunFeedback(threadId, text, images);
   }
   state.ui.composerText = "";
+  state.ui.composerImages = [];
   return true;
 }
 

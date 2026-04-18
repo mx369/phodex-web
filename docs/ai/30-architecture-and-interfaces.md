@@ -35,6 +35,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - `thread:create` accepts `mode` (`local` or `worktree`) and an optional `cwd` seed from the selected drawer project target.
 - Other client events: `thread:select`, `thread:clearSelection`, `thread:rename`, `thread:delete`, `thread:archive`, `message:send`, `draft:resume`, `draft:remove`, `run:stop`, `settings:update`.
+- `message:send` now accepts optional `images`. The current web composer supports one attached image and sends it as a data URL plus metadata.
 
 ## Runtime Behaviors
 
@@ -53,6 +54,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.
 - If Codex `thread/read` omits completed tool items, the server backfills diff/file summaries from the session JSONL plus live git state.
 - The web shell inserts local pending placeholders for both `thread:create` and `message:send` until real server items arrive.
+- The client/relay/bridge shared protocol uses `InputImageAttachment` records, but the local bridge must translate them to Codex app-server `turn/start.input` items shaped like `{ type: "text", text }` and `{ type: "image", url, detail? }`.
+- `thread/read` user history may come back with image entries on `userMessage.content`, so the bridge keeps a separate mapping layer when rehydrating `ThreadMessage.inputImages`.
 - `thread:create` resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that root.
 - Local chats create missing directories with `mkdir -p`; worktree chats run `git worktree add` under `~/.codex/worktrees/<repo>/...`.
 - Thread grouping follows the Git common-dir root so worktree chats stay grouped under the main project.

@@ -82,6 +82,14 @@ export interface CodeBlock {
   content: string;
 }
 
+export interface InputImageAttachment {
+  imageUrl?: string;
+  fileId?: string;
+  name?: string;
+  mimeType?: string;
+  detail?: "auto" | "low" | "high";
+}
+
 export interface StatusMessageCard {
   type: "status";
   title: string;
@@ -133,6 +141,7 @@ export interface ThreadMessage {
   kind: MessageKind;
   text: string;
   createdAt: string;
+  inputImages?: InputImageAttachment[];
   isStreaming?: boolean;
   codeBlock?: CodeBlock;
   fileChanges?: FileChangeSummary[];
@@ -145,6 +154,7 @@ export interface QueuedDraft {
   id: string;
   text: string;
   createdAt: string;
+  images?: InputImageAttachment[];
   model?: string;
   planArmed?: boolean;
   fastMode?: boolean;
@@ -238,6 +248,7 @@ export type ClientEvent =
       type: "message:send";
       threadId: string;
       text: string;
+      images?: InputImageAttachment[];
       model: string;
       planArmed: boolean;
       fastMode: boolean;

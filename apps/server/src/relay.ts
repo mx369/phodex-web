@@ -624,7 +624,7 @@ function appendMirroredMessage(userId: string, threadId: string, message: Thread
       ...message,
     };
   }
-  thread.preview = message.text || thread.preview;
+  thread.preview = summarizeMessagePreview(message) || thread.preview;
   thread.lastActivityAt = message.createdAt;
 }
 
@@ -636,7 +636,7 @@ function applyMirroredDelta(userId: string, threadId: string, messageId: string,
   }
   message.text += delta;
   message.isStreaming = true;
-  thread.preview = message.text || thread.preview;
+  thread.preview = summarizeMessagePreview(message) || thread.preview;
   thread.lastActivityAt = new Date().toISOString();
 }
 
@@ -648,6 +648,20 @@ function finishMirroredMessage(userId: string, threadId: string, messageId: stri
   }
   message.isStreaming = false;
   thread.lastActivityAt = new Date().toISOString();
+}
+
+function summarizeMessagePreview(message: ThreadMessage) {
+  const trimmed = message.text.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  if ((message.inputImages?.length ?? 0) === 1) {
+    return "Sent an image";
+  }
+  if ((message.inputImages?.length ?? 0) > 1) {
+    return `Sent ${message.inputImages!.length} images`;
+  }
+  return "";
 }
 
 function ensureMirroredThread(userId: string, threadId: string) {

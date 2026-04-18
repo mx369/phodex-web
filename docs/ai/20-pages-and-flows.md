@@ -12,8 +12,8 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Email OTP | Real | Request-code and verify-code are live; OTP uses real mail delivery when configured, and verification failures now render an inline error in the form instead of relying on toast only | UI is still approximate |
 | Home empty | Partial | Real bridge/account state drives the full-page mobile shell; the bridge install card only appears when the signed-in account has no bound bridge socket, and a linked-but-not-ready Mac now renders as a warning instead of another install prompt | Final spacing and disconnected-state parity still differ |
 | Sidebar | Partial | Real thread list, select, rename, archive, and project-targeted local/worktree create | Drawer polish and parity details still differ |
-| Turn empty | Partial | Real selected thread, empty timeline block, composer, pending-thread state, and `Normal / Fast` runtime toggle | Structured-input replacement and final polish are still missing |
-| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, a single inline pending-send -> thinking handoff, queued drafts, pinned plan, and thread-scoped project diff/file inspectors | Some empty branches, queue states, and toolbar/sheet parity still differ |
+| Turn empty | Partial | Real selected thread, empty timeline block, composer, pending-thread state, `Normal / Fast` runtime toggle, and single-image attachment send | Structured-input replacement and final polish are still missing |
+| Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, a single inline pending-send -> thinking handoff, queued drafts, pinned plan, thread-scoped project diff/file inspectors, and inline rendering of user-sent images | Some empty branches, queue states, and toolbar/sheet parity still differ |
 | Settings | Partial | Real setting patches persist in a dedicated page | Visual and IA parity still differ |
 | Archived chats | Partial | Real archived list and restore | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Dedicated informational page exists | Still simplified versus upstream |
@@ -27,6 +27,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Email OTP login | Real | Uses `/api/auth/request-code` and `/api/auth/verify-code`; request-code requires configured live email delivery and no longer exposes any local bypass path |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | Local pending thread state appears immediately, then resolves to the real Codex thread |
+| Attach image -> send | Real | Composer can attach one local image, sends it with the prompt through the relay/bridge, and re-renders the returned user image in the timeline |
 | Drawer create sheet | Real | Creation mode and target project are chosen before `thread:create` is sent |
 | Drawer worktree create | Real | Creates a real git worktree under `~/.codex/worktrees/<repo>/...` before starting the thread |
 | Drawer custom project create | Real | Accepts either a folder name or a full path for the new local chat cwd |
