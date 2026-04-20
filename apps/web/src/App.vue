@@ -832,6 +832,9 @@ const turnEmptyCopy = computed(() =>
     ? "The relay is asking Codex to start a fresh thread. The composer will unlock as soon as it lands."
     : "Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands."
 );
+const turnEmptyHelperLabel = computed(() =>
+  isCurrentThreadPendingCreate.value ? "Available Once Ready" : "Composer Shortcuts"
+);
 const pendingRunStatus = computed(() => {
   const pending = currentPendingRunFeedback.value;
   if (!pending || !currentThread.value) {
@@ -2956,10 +2959,13 @@ function handleScrollToLatest() {
                           <span class="section-label">{{ turnEmptyLabel }}</span>
                           <h2>{{ turnEmptyTitle }}</h2>
                           <p>{{ turnEmptyCopy }}</p>
-                          <div class="turn-empty-state__chips">
-                            <span class="turn-empty-state__chip">/plan</span>
-                            <span class="turn-empty-state__chip">@files</span>
-                            <span class="turn-empty-state__chip">$skills</span>
+                          <div class="turn-empty-state__helper">
+                            <span class="turn-empty-state__helper-label">{{ turnEmptyHelperLabel }}</span>
+                            <div class="turn-empty-state__chips">
+                              <span class="turn-empty-state__chip">/plan</span>
+                              <span class="turn-empty-state__chip">@files</span>
+                              <span class="turn-empty-state__chip">$skills</span>
+                            </div>
                           </div>
                         </div>
                       </div>
