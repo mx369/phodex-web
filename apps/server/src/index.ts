@@ -184,8 +184,10 @@ let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
 let serviceTierUnsupportedToastSent = false;
-void ensureCodexBridge();
 connectRelaySocket();
+// Bun can fail the remote WSS handshake if the localhost ready probe and relay
+// socket race during startup, so establish the relay first.
+void ensureCodexBridge();
 
 console.log(`[phodex-bridge] Local bridge starting for ${PUBLIC_RELAY_URL}`);
 console.log(`[phodex-bridge] Codex target ${CODEX_WS_URL}`);
