@@ -1490,7 +1490,8 @@ button {
 
 .phone-conversation {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px 18px 8px;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -1537,6 +1538,7 @@ button {
 }
 
 .phone-message__card {
+  min-width: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1585,6 +1587,7 @@ button {
 .message-input-images {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .phone-message__copy + .message-input-images,
@@ -1596,6 +1599,7 @@ button {
   display: grid;
   gap: 8px;
   margin: 0;
+  min-width: 0;
 }
 
 .message-input-image img {
@@ -1788,9 +1792,11 @@ button {
 
 .phone-message__copy p {
   margin: 0;
-  font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
-  line-height: 1.72;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.58;
   letter-spacing: -0.01em;
 }
 
@@ -1798,11 +1804,31 @@ button {
   margin-top: 10px;
 }
 
+.phone-message__copy span {
+  white-space: pre-wrap;
+}
+
+.phone-inline-code {
+  display: inline-block;
+  margin: 0 0.08em;
+  padding: 0.14em 0.42em;
+  border-radius: 10px;
+  background: rgba(18, 18, 18, 0.08);
+  color: var(--text-strong);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 0.92em;
+  line-height: 1.2;
+  white-space: break-spaces;
+  vertical-align: baseline;
+}
+
 .phone-message--user .phone-message__copy p {
-  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.phone-message--user .phone-inline-code {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .pending-inline-state {
@@ -3820,15 +3846,10 @@ button {
 }
 
 .toast-stack {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  z-index: 24;
   display: grid;
-  width: min(calc(100% - 32px), 340px);
+  width: min(calc(100% - 36px), 428px);
+  margin: 4px auto 12px;
   gap: 8px;
-  pointer-events: none;
-  transform: translateX(-50%);
 }
 
 .toast-card {

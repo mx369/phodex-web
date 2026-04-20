@@ -28,7 +28,9 @@ type AuthPhase = "idle" | "requested" | "authenticated";
 type PendingThreadCreate = {
   tempId: string;
   previousSelectedThreadId: string | null;
-  timeoutId: number;
+  slowTimerId: number;
+  failureTimerId: number | null;
+  isSlow: boolean;
 };
 type PendingRunFeedback = {
   threadId: string;
@@ -40,7 +42,8 @@ type PendingRunFeedback = {
 
 const SESSION_STORAGE_KEY = "phodex.session";
 const PENDING_THREAD_PREFIX = "pending-thread:";
-const PENDING_THREAD_TIMEOUT_MS = 12_000;
+const PENDING_THREAD_SLOW_MS = 18_000;
+const PENDING_THREAD_FAILURE_MS = 45_000;
 const runtimeHost = window.location.hostname || "localhost";
 const inferredApiOrigin =
   import.meta.env.DEV && window.location.port !== "3443"
@@ -506,10 +509,11 @@ function beginPendingThreadCreate(projectLabel: string, mode: ThreadCreateMode) 
   pendingThreadCreate = {
     tempId,
     previousSelectedThreadId,
-    timeoutId: window.setTimeout(() => {
-      rollbackPendingThreadCreate(false);
-      pushToast("error", "Starting the new chat took too long. Try again.");
-    }, PENDING_THREAD_TIMEOUT_MS),
+    slowTimerId: window.setTimeout(() => {
+      markPendingThreadCreateSlow(tempId, mode);
+    }, PENDING_THREAD_SLOW_MS),
+    failureTimerId: null,
+    isSlow: false,
   };
 }
 
@@ -528,7 +532,10 @@ function resolvePendingThreadCreate(selectedThreadId: string | null) {
     state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
   }
 
-  window.clearTimeout(pendingThreadCreate.timeoutId);
+  window.clearTimeout(pendingThreadCreate.slowTimerId);
+  if (pendingThreadCreate.failureTimerId !== null) {
+    window.clearTimeout(pendingThreadCreate.failureTimerId);
+  }
   pendingThreadCreate = null;
 }
 
@@ -537,8 +544,11 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
     return;
   }
 
-  const { tempId, previousSelectedThreadId, timeoutId } = pendingThreadCreate;
-  window.clearTimeout(timeoutId);
+  const { tempId, previousSelectedThreadId, slowTimerId, failureTimerId } = pendingThreadCreate;
+  window.clearTimeout(slowTimerId);
+  if (failureTimerId !== null) {
+    window.clearTimeout(failureTimerId);
+  }
 
   if (state.snapshot) {
     state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
@@ -557,6 +567,29 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   if (pushFallbackToast) {
     pushToast("error", "Unable to keep the pending chat open.");
   }
+}
+
+function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
+  if (!pendingThreadCreate || pendingThreadCreate.tempId !== tempId || pendingThreadCreate.isSlow) {
+    return;
+  }
+
+  pendingThreadCreate.isSlow = true;
+
+  const thread = findThread(tempId);
+  if (thread) {
+    thread.preview =
+      mode === "worktree"
+        ? "Still creating your worktree chat on the Mac…"
+        : "Still starting the new chat on the Mac…";
+    thread.lastActivityAt = new Date().toISOString();
+  }
+
+  pushToast("error", "Starting the new chat is taking longer than usual. Still waiting on your Mac.");
+  pendingThreadCreate.failureTimerId = window.setTimeout(() => {
+    rollbackPendingThreadCreate(false);
+    pushToast("error", "Starting the new chat failed. Try again.");
+  }, Math.max(PENDING_THREAD_FAILURE_MS - PENDING_THREAD_SLOW_MS, 0));
 }
 
 function beginPendingRunFeedback(threadId: string, prompt: string, images: InputImageAttachment[]) {

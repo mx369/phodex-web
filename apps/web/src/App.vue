@@ -66,6 +66,11 @@ type InstallManifest = {
   command: string;
 };
 
+type MessageInlineSegment = {
+  type: "text" | "code";
+  text: string;
+};
+
 const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   archive: {
     lines: [
@@ -1221,6 +1226,40 @@ function splitParagraphs(text: string) {
     .split("\n")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function splitInlineSegments(text: string): MessageInlineSegment[] {
+  const segments: MessageInlineSegment[] = [];
+  const pattern = /`([^`\n]+)`/g;
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      segments.push({
+        type: "text",
+        text: text.slice(cursor, index),
+      });
+    }
+
+    if (match[1]) {
+      segments.push({
+        type: "code",
+        text: match[1],
+      });
+    }
+
+    cursor = index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    segments.push({
+      type: "text",
+      text: text.slice(cursor),
+    });
+  }
+
+  return segments.length ? segments : [{ type: "text", text }];
 }
 
 function pushUiToast(tone: "info" | "success" | "error", message: string) {
@@ -2691,6 +2730,17 @@ function handleScrollToLatest() {
                     <span v-else class="phone-topbar__spacer" aria-hidden="true"></span>
                   </header>
 
+                  <div v-if="floatingToasts.length" class="toast-stack">
+                    <div
+                      v-for="toast in floatingToasts"
+                      :key="toast.id"
+                      class="toast-card"
+                      :class="`toast-card--${toast.tone}`"
+                    >
+                      {{ toast.message }}
+                    </div>
+                  </div>
+
                   <section v-if="currentThread" class="turn-toolbar">
                     <div class="turn-toolbar__inner">
                       <div class="turn-toolbar__strip">
@@ -2783,13 +2833,6 @@ function handleScrollToLatest() {
                               </div>
                             </div>
 
-                            <div v-if="message.text" class="phone-message__copy">
-                              <p v-for="paragraph in splitParagraphs(message.text)" :key="`${message.id}-${paragraph}`">
-                                {{ paragraph }}
-                              </p>
-                              <span v-if="message.isStreaming" class="stream-cursor"></span>
-                            </div>
-
                             <div v-if="message.inputImages?.length" class="message-input-images">
                               <figure
                                 v-for="(image, index) in message.inputImages"
@@ -2799,6 +2842,22 @@ function handleScrollToLatest() {
                                 <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
                                 <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
                               </figure>
+                            </div>
+
+                            <div v-if="message.text" class="phone-message__copy">
+                              <p
+                                v-for="(paragraph, paragraphIndex) in splitParagraphs(message.text)"
+                                :key="`${message.id}-${paragraphIndex}`"
+                              >
+                                <template
+                                  v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
+                                  :key="`${message.id}-${paragraphIndex}-${segment.type}-${segmentIndex}`"
+                                >
+                                  <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
+                                  <span v-else>{{ segment.text }}</span>
+                                </template>
+                              </p>
+                              <span v-if="message.isStreaming" class="stream-cursor"></span>
                             </div>
 
                             <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
@@ -2843,10 +2902,16 @@ function handleScrollToLatest() {
 
                             <div class="phone-message__copy">
                               <p
-                                v-for="paragraph in splitParagraphs(currentPendingRunFeedback.prompt)"
-                                :key="`pending-run-${paragraph}`"
+                                v-for="(paragraph, paragraphIndex) in splitParagraphs(currentPendingRunFeedback.prompt)"
+                                :key="`pending-run-${paragraphIndex}`"
                               >
-                                {{ paragraph }}
+                                <template
+                                  v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
+                                  :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
+                                >
+                                  <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
+                                  <span v-else>{{ segment.text }}</span>
+                                </template>
                               </p>
                             </div>
 
@@ -3523,16 +3588,6 @@ function handleScrollToLatest() {
                 </div>
               </transition>
 
-              <div class="toast-stack">
-                <div
-                  v-for="toast in floatingToasts"
-                  :key="toast.id"
-                  class="toast-card"
-                  :class="`toast-card--${toast.tone}`"
-                >
-                  {{ toast.message }}
-                </div>
-              </div>
         </template>
     </div>
   </div>
