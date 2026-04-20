@@ -232,10 +232,36 @@ start_bridge() {
 
   if [[ $(uname -s) == Darwin ]]; then
     local plist_path
+    local bootstrap_ok=0
+    local kickstart_ok=0
     plist_path="$(launch_agent_plist_path)"
     write_launch_agent_plist "$plist_path"
-    launchctl bootstrap "gui/$(id -u)" "$plist_path" >/dev/null
-    launchctl kickstart -k "$(launch_agent_domain)" >/dev/null
+
+    for _ in $(seq 1 5); do
+      if launchctl bootstrap "gui/$(id -u)" "$plist_path" >/dev/null 2>&1; then
+        bootstrap_ok=1
+        break
+      fi
+      launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
+      sleep 0.2
+    done
+
+    [[ $bootstrap_ok -eq 1 ]] || error "Failed to register launch agent with launchctl."
+
+    for _ in $(seq 1 5); do
+      if launchctl kickstart -k "$(launch_agent_domain)" >/dev/null 2>&1; then
+        kickstart_ok=1
+        break
+      fi
+      pid="$(launch_agent_pid || true)"
+      if [[ $pid =~ ^[0-9]+$ ]]; then
+        kickstart_ok=1
+        break
+      fi
+      sleep 0.2
+    done
+
+    [[ $kickstart_ok -eq 1 ]] || error "Failed to start launch agent with launchctl."
 
     for _ in $(seq 1 20); do
       pid="$(launch_agent_pid || true)"
