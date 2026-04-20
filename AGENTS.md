@@ -22,7 +22,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 
 - If another repo document conflicts with this file, follow this file.
 - Use current code and current behavior as the baseline. Do not rely on stale plans or memory.
-- Make the smallest change that actually solves the task.
+- Prefer the smallest, simplest change with the smallest diff that actually solves the task.
 - If a task changes architecture, commands, ownership, page truth, or acceptance flow, update the relevant AI docs in the same commit.
 - Do not bypass existing security or deployment boundaries unless the user explicitly asks.
 - Commit each intentional change separately.
