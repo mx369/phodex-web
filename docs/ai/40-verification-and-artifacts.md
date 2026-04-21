@@ -31,7 +31,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
-- For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token cannot be reused, and unauthenticated health checks do not expose another account's bridge state.
+- For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token can mint multiple per-device bridge tokens until expiry, and unauthenticated health checks do not expose another account's bridge state.
+- For multi-device bridge changes, prefer proving one local install plus one CNB install (or another genuinely separate second machine) against the same signed-in account.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.

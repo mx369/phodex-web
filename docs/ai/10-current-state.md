@@ -14,6 +14,7 @@ Broad status snapshot for planning and handoff.
 - Email code request, live Resend delivery when mail config is available, and OTP verify.
 - On this workstation, the operator may refer to the provisioned Resend-backed OTP sender as `Email Scale`; treat that as existing mail capability, not a separate missing integration.
 - Public bootstrap/API plus relay websocket, with a separate bridge websocket for the local client machine.
+- Bridge install manifest + claim now allow the same signed-in account to register multiple bridge devices without revoking earlier device tokens.
 - Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt through the outbound bridge.
 - Conversation send, stream, stop, queue, resume, rename, and archive.
 - Real browser-based CDP screenshots and acceptance artifacts.

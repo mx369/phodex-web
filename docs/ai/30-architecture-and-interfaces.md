@@ -19,8 +19,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `GET /api/thread/:threadId/project/diff[?path=...]`: authenticated working-tree diff, optionally narrowed to one path.
 - `POST /api/auth/request-code`: issue OTP and send it through Resend when mail config is available.
 - `POST /api/auth/verify-code`: verify OTP and mint session.
-- `GET /install/manifest.json`: authenticated bridge-install manifest; only available after login and used to mint an account-bound one-time setup token.
-- `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus the long-lived user-bound bridge token.
+- `GET /install/manifest.json`: authenticated bridge-install manifest; only available after login and used to mint an account-bound short-lived setup token.
+- `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus a long-lived per-device bridge token. The same setup token may be claimed multiple times until expiry so one signed-in account can register multiple machines from the same install command.
 - `GET /install`: latest shell installer alias.
 - `GET /install/bridge-runtime.ts`: latest local bridge runtime alias.
 - `GET /relay?token=...`: WSS upgrade endpoint.
@@ -44,8 +44,9 @@ Read this file for relay, auth, client, and Codex bridge work.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
 - The public relay now publishes a Bun-style `curl -fsSL ... | bash` installer script and bundled bridge runtime so the authenticated shell can point Mac users at a single local install/start command.
-- The install manifest is no longer public. It is fetched only after login, issues a short-lived single-use setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
-- Bridge connections are now account-bound on the relay. Each logged-in user gets an isolated bridge socket, isolated bridge connection state, and an isolated mirrored thread cache.
+- The install manifest is no longer public. It is fetched only after login, issues a short-lived reusable setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
+- Bridge connections are account-bound but no longer single-device. Each logged-in user can retain multiple registered bridge devices, each device keeps its own bridge token and connection record, and the relay picks one active bridge for mirrored thread state plus command dispatch.
+- Non-active bridge devices may stay registered and online without replacing the active device unless they are in a strictly better readiness state than the current active bridge.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.

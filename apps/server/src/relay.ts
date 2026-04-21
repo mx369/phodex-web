@@ -28,11 +28,26 @@ type PersistedUser = {
   settings: AppSettings;
   selectedThreadId: string | null;
   banner: CompletionBanner | null;
-  bridgeAuth: {
-    tokenHash: string;
-    issuedAt: string;
-    lastConnectedAt: string | null;
-  } | null;
+  bridgeDevices: Record<string, PersistedBridgeDevice>;
+};
+
+type PersistedBridgeDevice = {
+  id: string;
+  tokenHash: string;
+  issuedAt: string;
+  lastConnectedAt: string | null;
+  macLabel: string | null;
+};
+
+type LegacyBridgeAuth = {
+  tokenHash: string;
+  issuedAt: string;
+  lastConnectedAt: string | null;
+};
+
+type LegacyPersistedUser = Omit<PersistedUser, "bridgeDevices"> & {
+  bridgeDevices?: Record<string, PersistedBridgeDevice> | null;
+  bridgeAuth?: LegacyBridgeAuth | null;
 };
 
 type SessionRecord = {
@@ -61,6 +76,7 @@ type ClientSocketData = {
 type BridgeSocketData = {
   kind: "bridge";
   userId: string;
+  bridgeId: string;
 };
 
 type SocketData = ClientSocketData | BridgeSocketData;
@@ -74,11 +90,13 @@ type OtpMailConfig = {
 type SetupTokenRecord = {
   userId: string;
   expiresAt: string;
-  usedAt: string | null;
+  claimCount: number;
+  lastClaimedAt: string | null;
 };
 
 type PendingProjectRequest = {
   userId: string;
+  bridgeId: string;
   resolve: (value: ProjectResourcePayload) => void;
   reject: (error: Error & { status?: number }) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -127,9 +145,10 @@ let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const threadMirrorsByUserId = new Map<string, Map<string, ThreadRecord>>();
-const bridgeSocketsByUserId = new Map<string, ServerWebSocket<SocketData>>();
+const bridgeSocketsByUserId = new Map<string, Map<string, ServerWebSocket<SocketData>>>();
 const installSetupTokens = new Map<string, SetupTokenRecord>();
-const bridgeConnectionsByUserId = new Map<string, RelayConnection>();
+const bridgeConnectionsByUserId = new Map<string, Map<string, RelayConnection>>();
+const activeBridgeIdsByUserId = new Map<string, string>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
 
 const server = Bun.serve<SocketData>({
@@ -159,15 +178,16 @@ const server = Bun.serve<SocketData>({
     if (url.pathname === "/bridge") {
       refreshPersisted();
       const bridgeToken = url.searchParams.get("token")?.trim() ?? "";
-      const bridgeUserId = resolveBridgeUserId(bridgeToken);
-      if (!bridgeUserId) {
+      const bridgeIdentity = resolveBridgeIdentity(bridgeToken);
+      if (!bridgeIdentity) {
         return withCors(req, json({ ok: false, error: "Unauthorized" }, 401));
       }
 
       const upgraded = serverInstance.upgrade(req, {
         data: {
           kind: "bridge",
-          userId: bridgeUserId,
+          userId: bridgeIdentity.userId,
+          bridgeId: bridgeIdentity.bridgeId,
         } satisfies BridgeSocketData,
       });
       return upgraded ? undefined : withCors(req, json({ ok: false, error: "Upgrade failed" }, 400));
@@ -192,13 +212,19 @@ const server = Bun.serve<SocketData>({
         );
       }
 
-      const connection = healthIdentity.userId ? getBridgeConnection(healthIdentity.userId) : disconnectedBridgeConnection();
+      const connection = healthIdentity.userId
+        ? getBridgeConnection(healthIdentity.userId, healthIdentity.bridgeId)
+        : disconnectedBridgeConnection();
       return withCors(
         req,
         json({
           ok: true,
           relay: RELAY_LABEL,
-          bridgeConnected: healthIdentity.userId ? bridgeSocketsByUserId.has(healthIdentity.userId) : false,
+          bridgeConnected: healthIdentity.userId
+            ? healthIdentity.bridgeId
+              ? hasBridgeSocket(healthIdentity.userId, healthIdentity.bridgeId)
+              : hasAnyBridgeSocket(healthIdentity.userId)
+            : false,
           connection,
           users: Object.keys(persisted.users).length,
         })
@@ -271,22 +297,20 @@ const server = Bun.serve<SocketData>({
   websocket: {
     open(ws) {
       if (ws.data.kind === "bridge") {
-        const existing = bridgeSocketsByUserId.get(ws.data.userId);
-        if (existing && existing !== ws) {
-          existing.close(1000, "Superseded by a newer bridge connection.");
-        }
-        bridgeSocketsByUserId.set(ws.data.userId, ws);
-        bridgeConnectionsByUserId.set(ws.data.userId, {
-          ...getBridgeConnection(ws.data.userId),
+        getBridgeSockets(ws.data.userId).set(ws.data.bridgeId, ws);
+        getBridgeConnectionMap(ws.data.userId).set(ws.data.bridgeId, {
+          ...getBridgeConnection(ws.data.userId, ws.data.bridgeId),
           bridgeOnline: true,
+          state: "connecting",
         });
-        const user = persisted.users[ws.data.userId];
-        if (user?.bridgeAuth) {
-          user.bridgeAuth.lastConnectedAt = new Date().toISOString();
+        const bridgeDevice = getBridgeDevice(ws.data.userId, ws.data.bridgeId);
+        if (bridgeDevice) {
+          bridgeDevice.lastConnectedAt = new Date().toISOString();
           schedulePersist();
         }
+        maybePromoteBridge(ws.data.userId, ws.data.bridgeId);
         broadcastPresence(ws.data.userId);
-        sendBridgeCommand(ws.data.userId, { type: "bridge:sync-all" });
+        sendBridgeCommand(ws.data.userId, { type: "bridge:sync-all" }, ws.data.bridgeId);
         return;
       }
 
@@ -309,16 +333,27 @@ const server = Bun.serve<SocketData>({
     },
     close(ws) {
       if (ws.data.kind === "bridge") {
-        if (bridgeSocketsByUserId.get(ws.data.userId) === ws) {
-          bridgeSocketsByUserId.delete(ws.data.userId);
+        const bridgeSockets = bridgeSocketsByUserId.get(ws.data.userId);
+        if (bridgeSockets?.get(ws.data.bridgeId) === ws) {
+          bridgeSockets.delete(ws.data.bridgeId);
+          if (bridgeSockets.size === 0) {
+            bridgeSocketsByUserId.delete(ws.data.userId);
+          }
         }
-        rejectPendingProjectRequestsForUser(ws.data.userId, "The local bridge went offline.");
-        bridgeConnectionsByUserId.set(ws.data.userId, {
-          ...getBridgeConnection(ws.data.userId),
+        rejectPendingProjectRequestsForBridge(ws.data.userId, ws.data.bridgeId, "The selected bridge went offline.");
+        getBridgeConnectionMap(ws.data.userId).set(ws.data.bridgeId, {
+          ...getBridgeConnection(ws.data.userId, ws.data.bridgeId),
           bridgeOnline: false,
           state: "disconnected",
           latencyMs: 0,
         });
+        if (activeBridgeIdsByUserId.get(ws.data.userId) === ws.data.bridgeId) {
+          activeBridgeIdsByUserId.delete(ws.data.userId);
+          const fallbackBridgeId = getActiveBridgeId(ws.data.userId);
+          if (fallbackBridgeId) {
+            sendBridgeCommand(ws.data.userId, { type: "bridge:sync-all" }, fallbackBridgeId);
+          }
+        }
         broadcastPresence(ws.data.userId);
         return;
       }
@@ -427,7 +462,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
   switch (event.type) {
     case "bootstrap":
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
-      if (bridgeSocketsByUserId.has(user.profile.id)) {
+      if (hasAnyBridgeSocket(user.profile.id)) {
         sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" });
         if (user.selectedThreadId) {
           sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
@@ -472,7 +507,8 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
 }
 
 function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
-  const bridgeSocket = bridgeSocketsByUserId.get(user.profile.id);
+  const activeBridgeId = getActiveBridgeId(user.profile.id);
+  const bridgeSocket = activeBridgeId ? bridgeSocketsByUserId.get(user.profile.id)?.get(activeBridgeId) : null;
   if (!bridgeSocket) {
     sendToast(user.profile.id, "error", "The local bridge is offline.");
     return false;
@@ -506,11 +542,12 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
   }
 
   const bridgeUserId = ws.data.userId;
+  const bridgeId = ws.data.bridgeId;
 
   switch (event.type) {
     case "bridge:project:response": {
       const pending = pendingProjectRequests.get(event.requestId);
-      if (!pending || pending.userId !== bridgeUserId) {
+      if (!pending || pending.userId !== bridgeUserId || pending.bridgeId !== bridgeId) {
         break;
       }
       pendingProjectRequests.delete(event.requestId);
@@ -524,25 +561,37 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     }
-    case "bridge:state":
+    case "bridge:state": {
+      getBridgeConnectionMap(bridgeUserId).set(bridgeId, {
+        ...event.connection,
+        bridgeOnline: true,
+      });
+      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, event.connection);
+      const promoted = maybePromoteBridge(bridgeUserId, bridgeId);
+      if (!promoted && getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       getThreadMirror(bridgeUserId).clear();
       for (const thread of event.threads) {
         getThreadMirror(bridgeUserId).set(thread.id, thread);
       }
-      bridgeConnectionsByUserId.set(bridgeUserId, {
-        ...event.connection,
-        bridgeOnline: true,
-      });
       normalizeSelectionForUser(bridgeUserId);
       broadcastSnapshot(bridgeUserId);
       broadcastPresence(bridgeUserId);
       break;
+    }
     case "bridge:thread:updated":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       getThreadMirror(bridgeUserId).set(event.thread.id, event.thread);
       normalizeSelectionForUser(bridgeUserId);
       broadcastThreadToUser(bridgeUserId, event.thread.id);
       break;
     case "bridge:message:appended":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       appendMirroredMessage(bridgeUserId, event.threadId, event.message);
       if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
         broadcast(bridgeUserId, { type: "message:appended", threadId: event.threadId, message: event.message });
@@ -551,12 +600,18 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     case "bridge:message:delta":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       applyMirroredDelta(bridgeUserId, event.threadId, event.messageId, event.delta);
       if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
         broadcast(bridgeUserId, { type: "message:delta", threadId: event.threadId, messageId: event.messageId, delta: event.delta });
       }
       break;
     case "bridge:message:finished":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       finishMirroredMessage(bridgeUserId, event.threadId, event.messageId);
       if (persisted.users[bridgeUserId]?.selectedThreadId === event.threadId) {
         broadcast(bridgeUserId, { type: "message:finished", threadId: event.threadId, messageId: event.messageId });
@@ -565,18 +620,28 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     case "bridge:presence":
-      bridgeConnectionsByUserId.set(bridgeUserId, {
+      getBridgeConnectionMap(bridgeUserId).set(bridgeId, {
         ...event.connection,
         bridgeOnline: true,
       });
-      broadcastPresence(bridgeUserId);
+      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, event.connection);
+      maybePromoteBridge(bridgeUserId, bridgeId);
+      if (getActiveBridgeId(bridgeUserId) === bridgeId) {
+        broadcastPresence(bridgeUserId);
+      }
       break;
     case "bridge:banner":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       persisted.users[bridgeUserId].banner = event.banner;
       schedulePersist();
       broadcastBanner(bridgeUserId);
       break;
     case "bridge:user-patch": {
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       if (event.userId !== bridgeUserId) {
         break;
       }
@@ -596,6 +661,9 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       break;
     }
     case "bridge:toast":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
+        break;
+      }
       if (event.userId && event.userId !== bridgeUserId) {
         break;
       }
@@ -733,7 +801,7 @@ function ensureUser(email: string): PersistedUser {
       },
       selectedThreadId: null,
       banner: null,
-      bridgeAuth: null,
+      bridgeDevices: {},
     };
     normalizeSelectionForUser(userId);
     schedulePersist();
@@ -776,50 +844,197 @@ function getThreadMirror(userId: string) {
   return mirror;
 }
 
-function disconnectedBridgeConnection(): RelayConnection {
+function disconnectedBridgeConnection(macLabel = DEFAULT_MAC_LABEL): RelayConnection {
   return {
     bridgeOnline: false,
     state: "disconnected",
     relayLabel: RELAY_LABEL,
-    macLabel: DEFAULT_MAC_LABEL,
+    macLabel,
     latencyMs: 0,
     lastSyncAt: null,
   };
 }
 
-function getBridgeConnection(userId: string) {
-  return bridgeConnectionsByUserId.get(userId) ?? disconnectedBridgeConnection();
+function getBridgeSockets(userId: string) {
+  let sockets = bridgeSocketsByUserId.get(userId);
+  if (!sockets) {
+    sockets = new Map<string, ServerWebSocket<SocketData>>();
+    bridgeSocketsByUserId.set(userId, sockets);
+  }
+  return sockets;
+}
+
+function getBridgeConnectionMap(userId: string) {
+  let connections = bridgeConnectionsByUserId.get(userId);
+  if (!connections) {
+    connections = new Map<string, RelayConnection>();
+    bridgeConnectionsByUserId.set(userId, connections);
+  }
+  return connections;
+}
+
+function getBridgeDevice(userId: string, bridgeId: string) {
+  return persisted.users[userId]?.bridgeDevices[bridgeId] ?? null;
+}
+
+function hasBridgeSocket(userId: string, bridgeId: string) {
+  return bridgeSocketsByUserId.get(userId)?.has(bridgeId) ?? false;
+}
+
+function hasAnyBridgeSocket(userId: string) {
+  return (bridgeSocketsByUserId.get(userId)?.size ?? 0) > 0;
+}
+
+function getBridgeConnection(userId: string, bridgeId?: string | null) {
+  if (bridgeId) {
+    const macLabel = getBridgeDevice(userId, bridgeId)?.macLabel ?? DEFAULT_MAC_LABEL;
+    return getBridgeConnectionMap(userId).get(bridgeId) ?? disconnectedBridgeConnection(macLabel);
+  }
+
+  const activeBridgeId = getActiveBridgeId(userId);
+  if (activeBridgeId) {
+    return getBridgeConnection(userId, activeBridgeId);
+  }
+
+  const fallbackBridgeId = pickBestBridgeId(userId);
+  return fallbackBridgeId ? getBridgeConnection(userId, fallbackBridgeId) : disconnectedBridgeConnection();
+}
+
+function getActiveBridgeId(userId: string) {
+  const activeBridgeId = activeBridgeIdsByUserId.get(userId) ?? "";
+  if (activeBridgeId && hasBridgeSocket(userId, activeBridgeId)) {
+    return activeBridgeId;
+  }
+  if (activeBridgeId) {
+    activeBridgeIdsByUserId.delete(userId);
+  }
+
+  const nextBridgeId = pickBestBridgeId(userId, [...(bridgeSocketsByUserId.get(userId)?.keys() ?? [])]);
+  if (nextBridgeId) {
+    activeBridgeIdsByUserId.set(userId, nextBridgeId);
+  }
+  return nextBridgeId;
+}
+
+function maybePromoteBridge(userId: string, candidateBridgeId: string) {
+  if (!hasBridgeSocket(userId, candidateBridgeId)) {
+    return false;
+  }
+
+  const activeBridgeId = getActiveBridgeId(userId);
+  if (!activeBridgeId) {
+    activeBridgeIdsByUserId.set(userId, candidateBridgeId);
+    return true;
+  }
+  if (activeBridgeId === candidateBridgeId) {
+    return false;
+  }
+
+  const candidateScore = bridgeConnectionScore(getBridgeConnection(userId, candidateBridgeId));
+  const activeScore = bridgeConnectionScore(getBridgeConnection(userId, activeBridgeId));
+  if (candidateScore > activeScore) {
+    activeBridgeIdsByUserId.set(userId, candidateBridgeId);
+    return true;
+  }
+
+  return false;
+}
+
+function pickBestBridgeId(userId: string, candidateBridgeIds?: string[]) {
+  const user = persisted.users[userId];
+  if (!user) {
+    return "";
+  }
+
+  const connectionMap = bridgeConnectionsByUserId.get(userId);
+  const bridgeIds = new Set<string>(candidateBridgeIds ?? []);
+  for (const bridgeId of Object.keys(user.bridgeDevices)) {
+    bridgeIds.add(bridgeId);
+  }
+  for (const bridgeId of connectionMap?.keys() ?? []) {
+    bridgeIds.add(bridgeId);
+  }
+
+  return [...bridgeIds]
+    .sort((left, right) => {
+      const scoreDelta = bridgeConnectionScore(getBridgeConnection(userId, right)) - bridgeConnectionScore(getBridgeConnection(userId, left));
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+      const lastConnectedDelta = bridgeLastConnectedAt(userId, right) - bridgeLastConnectedAt(userId, left);
+      if (lastConnectedDelta !== 0) {
+        return lastConnectedDelta;
+      }
+      return left.localeCompare(right);
+    })
+    .at(0) ?? "";
+}
+
+function bridgeConnectionScore(connection: RelayConnection) {
+  if (!connection.bridgeOnline) {
+    return 0;
+  }
+  if (connection.state === "connected") {
+    return 3;
+  }
+  if (connection.state === "connecting") {
+    return 2;
+  }
+  return 1;
+}
+
+function bridgeLastConnectedAt(userId: string, bridgeId: string) {
+  const lastConnectedAt = getBridgeDevice(userId, bridgeId)?.lastConnectedAt;
+  return lastConnectedAt ? Date.parse(lastConnectedAt) || 0 : 0;
+}
+
+function updatePersistedBridgeDeviceMeta(userId: string, bridgeId: string, connection: RelayConnection) {
+  const bridgeDevice = getBridgeDevice(userId, bridgeId);
+  if (!bridgeDevice) {
+    return;
+  }
+
+  const nextMacLabel = connection.macLabel?.trim() || bridgeDevice.macLabel || null;
+  if (nextMacLabel === bridgeDevice.macLabel) {
+    return;
+  }
+
+  bridgeDevice.macLabel = nextMacLabel;
+  schedulePersist();
 }
 
 function resolveHealthIdentity(req: Request) {
   const session = authenticate(req);
   if (session) {
-    return { userId: session.userId, invalidBridgeToken: false };
+    return { userId: session.userId, bridgeId: null, invalidBridgeToken: false };
   }
 
   const bridgeToken = req.headers.get("x-phodex-bridge-token")?.trim() ?? "";
   if (!bridgeToken) {
-    return { userId: "", invalidBridgeToken: false };
+    return { userId: "", bridgeId: null, invalidBridgeToken: false };
   }
 
-  const userId = resolveBridgeUserId(bridgeToken);
+  const bridgeIdentity = resolveBridgeIdentity(bridgeToken);
   return {
-    userId,
-    invalidBridgeToken: !userId,
+    userId: bridgeIdentity?.userId ?? "",
+    bridgeId: bridgeIdentity?.bridgeId ?? null,
+    invalidBridgeToken: !bridgeIdentity,
   };
 }
 
-function resolveBridgeUserId(token: string) {
+function resolveBridgeIdentity(token: string) {
   if (!token) {
-    return "";
+    return null;
   }
   const tokenHash = hashBridgeToken(token);
   for (const user of Object.values(persisted.users)) {
-    if (user.bridgeAuth?.tokenHash === tokenHash) {
-      return user.profile.id;
+    for (const bridgeDevice of Object.values(user.bridgeDevices)) {
+      if (bridgeDevice.tokenHash === tokenHash) {
+        return { userId: user.profile.id, bridgeId: bridgeDevice.id };
+      }
     }
   }
-  return "";
+  return null;
 }
 
 function issueBridgeAccessToken(userId: string) {
@@ -828,11 +1043,14 @@ function issueBridgeAccessToken(userId: string) {
     throw new Error("Bridge user not found.");
   }
 
+  const bridgeId = `bridge-${randomUUID()}`;
   const token = `${randomUUID()}${randomUUID()}`.replace(/-/g, "");
-  user.bridgeAuth = {
+  user.bridgeDevices[bridgeId] = {
+    id: bridgeId,
     tokenHash: hashBridgeToken(token),
     issuedAt: new Date().toISOString(),
-    lastConnectedAt: user.bridgeAuth?.lastConnectedAt ?? null,
+    lastConnectedAt: null,
+    macLabel: null,
   };
   return token;
 }
@@ -947,7 +1165,8 @@ function projectErrorResponse(error: unknown) {
 }
 
 function requestProjectResource(userId: string, request: Extract<BridgeCommand, { type: "bridge:project:request" }>["request"]) {
-  const bridgeSocket = bridgeSocketsByUserId.get(userId);
+  const bridgeId = getActiveBridgeId(userId);
+  const bridgeSocket = bridgeId ? bridgeSocketsByUserId.get(userId)?.get(bridgeId) : null;
   if (!bridgeSocket) {
     throw httpError(503, "The local bridge is offline.");
   }
@@ -968,6 +1187,7 @@ function requestProjectResource(userId: string, request: Extract<BridgeCommand, 
 
     pendingProjectRequests.set(requestId, {
       userId,
+      bridgeId,
       resolve,
       reject,
       timer,
@@ -977,9 +1197,9 @@ function requestProjectResource(userId: string, request: Extract<BridgeCommand, 
   });
 }
 
-function rejectPendingProjectRequestsForUser(userId: string, message: string) {
+function rejectPendingProjectRequestsForBridge(userId: string, bridgeId: string, message: string) {
   for (const [requestId, pending] of pendingProjectRequests.entries()) {
-    if (pending.userId !== userId) {
+    if (pending.userId !== userId || pending.bridgeId !== bridgeId) {
       continue;
     }
     pendingProjectRequests.delete(requestId);
@@ -1008,8 +1228,8 @@ function unregisterSocket(ws: ServerWebSocket<SocketData>) {
   }
 }
 
-function sendBridgeCommand(userId: string, command: BridgeCommand) {
-  const bridgeSocket = bridgeSocketsByUserId.get(userId);
+function sendBridgeCommand(userId: string, command: BridgeCommand, bridgeId = getActiveBridgeId(userId)) {
+  const bridgeSocket = bridgeId ? bridgeSocketsByUserId.get(userId)?.get(bridgeId) : null;
   if (!bridgeSocket) {
     return;
   }
@@ -1190,12 +1410,11 @@ async function handleInstallClaim(req: Request) {
     installSetupTokens.delete(token);
     return json({ ok: false, error: "Invalid or expired setup token." }, 401);
   }
-  if (record.usedAt) {
-    return json({ ok: false, error: "Setup token has already been used." }, 409);
-  }
 
   const user = persisted.users[record.userId];
-  const previousBridgeAuth = user?.bridgeAuth ? { ...user.bridgeAuth } : null;
+  const previousBridgeDevices = user ? { ...user.bridgeDevices } : null;
+  const previousClaimCount = record.claimCount;
+  const previousLastClaimedAt = record.lastClaimedAt;
 
   try {
     const version = computeInstallAssetsVersion();
@@ -1206,7 +1425,8 @@ async function handleInstallClaim(req: Request) {
     }
 
     const bridgeToken = issueBridgeAccessToken(record.userId);
-    record.usedAt = new Date().toISOString();
+    record.claimCount += 1;
+    record.lastClaimedAt = new Date().toISOString();
     persistNow();
     return json({
       ok: true,
@@ -1217,9 +1437,10 @@ async function handleInstallClaim(req: Request) {
       version,
     });
   } catch (error) {
-    record.usedAt = null;
+    record.claimCount = previousClaimCount;
+    record.lastClaimedAt = previousLastClaimedAt;
     if (user) {
-      user.bridgeAuth = previousBridgeAuth;
+      user.bridgeDevices = previousBridgeDevices ?? {};
     }
     return json({ ok: false, error: `Install setup claim failed: ${readErrorMessage(error)}` }, 500);
   }
@@ -1257,7 +1478,8 @@ function issueInstallSetupToken(userId: string) {
   installSetupTokens.set(token, {
     userId,
     expiresAt,
-    usedAt: null,
+    claimCount: 0,
+    lastClaimedAt: null,
   });
   return { token, expiresAt };
 }
@@ -1265,7 +1487,7 @@ function issueInstallSetupToken(userId: string) {
 function pruneExpiredInstallSetupTokens() {
   const now = Date.now();
   for (const [token, record] of installSetupTokens.entries()) {
-    if (record.usedAt || Date.parse(record.expiresAt) <= now) {
+    if (Date.parse(record.expiresAt) <= now) {
       installSetupTokens.delete(token);
     }
   }
@@ -1449,6 +1671,38 @@ function refreshPersisted() {
   return persisted;
 }
 
+function normalizePersistedBridgeDevices(user: LegacyPersistedUser | undefined) {
+  const bridgeDevices = Object.fromEntries(
+    Object.entries(user?.bridgeDevices ?? {})
+      .filter(([, bridgeDevice]) => Boolean(bridgeDevice?.tokenHash))
+      .map(([bridgeId, bridgeDevice]) => [
+        bridgeId,
+        {
+          id: bridgeDevice?.id || bridgeId,
+          tokenHash: bridgeDevice?.tokenHash ?? "",
+          issuedAt: bridgeDevice?.issuedAt ?? new Date(0).toISOString(),
+          lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
+          macLabel: bridgeDevice?.macLabel ?? null,
+        } satisfies PersistedBridgeDevice,
+      ])
+  );
+
+  if (Object.keys(bridgeDevices).length > 0 || !user?.bridgeAuth?.tokenHash) {
+    return bridgeDevices;
+  }
+
+  const legacyBridgeId = `bridge-${user.bridgeAuth.tokenHash.slice(0, 12)}`;
+  return {
+    [legacyBridgeId]: {
+      id: legacyBridgeId,
+      tokenHash: user.bridgeAuth.tokenHash,
+      issuedAt: user.bridgeAuth.issuedAt,
+      lastConnectedAt: user.bridgeAuth.lastConnectedAt ?? null,
+      macLabel: null,
+    },
+  } satisfies Record<string, PersistedBridgeDevice>;
+}
+
 function loadState(): PersistedState {
   try {
     if (!existsSync(dataFile)) {
@@ -1461,13 +1715,16 @@ function loadState(): PersistedState {
 
     const parsed = JSON.parse(readFileSync(dataFile, "utf8")) as Partial<PersistedState>;
     const users = Object.fromEntries(
-      Object.entries(parsed.users ?? {}).map(([userId, user]) => [
+      Object.entries(parsed.users ?? {}).map(([userId, rawUser]) => {
+        const user = rawUser as LegacyPersistedUser | undefined;
+        return [
         userId,
         {
           ...user,
-          bridgeAuth: user?.bridgeAuth ?? null,
-        } satisfies PersistedUser,
-      ])
+          bridgeDevices: normalizePersistedBridgeDevices(user),
+        } as PersistedUser,
+      ];
+      })
     );
     return {
       users,
