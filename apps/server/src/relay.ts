@@ -308,7 +308,6 @@ const server = Bun.serve<SocketData>({
           bridgeDevice.lastConnectedAt = new Date().toISOString();
           schedulePersist();
         }
-        maybePromoteBridge(ws.data.userId, ws.data.bridgeId);
         broadcastPresence(ws.data.userId);
         sendBridgeCommand(ws.data.userId, { type: "bridge:sync-all" }, ws.data.bridgeId);
         return;
@@ -930,9 +929,11 @@ function maybePromoteBridge(userId: string, candidateBridgeId: string) {
     return false;
   }
 
-  const candidateScore = bridgeConnectionScore(getBridgeConnection(userId, candidateBridgeId));
-  const activeScore = bridgeConnectionScore(getBridgeConnection(userId, activeBridgeId));
-  if (candidateScore > activeScore) {
+  const candidateConnection = getBridgeConnection(userId, candidateBridgeId);
+  const activeConnection = getBridgeConnection(userId, activeBridgeId);
+  const candidateScore = bridgeConnectionScore(candidateConnection);
+  const activeScore = bridgeConnectionScore(activeConnection);
+  if (candidateScore > activeScore && candidateConnection.state === "connected" && activeConnection.state !== "connected") {
     activeBridgeIdsByUserId.set(userId, candidateBridgeId);
     return true;
   }
