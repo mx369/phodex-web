@@ -71,6 +71,11 @@ type MessageInlineSegment = {
   text: string;
 };
 
+type TurnStarterAction = {
+  label: string;
+  prompt: string;
+};
+
 const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
   archive: {
     lines: [
@@ -280,6 +285,7 @@ const dialogInput = ref("");
 const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
 const composerImageInputEl = ref<HTMLInputElement | null>(null);
+const composerInputEl = ref<HTMLTextAreaElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
 const conversationInnerEl = ref<HTMLElement | null>(null);
 const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
@@ -823,15 +829,15 @@ const planAccessory = computed(() => {
   return null;
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
-const turnEmptyLabel = computed(() => (isCurrentThreadPendingCreate.value ? "Starting Chat" : "Empty Timeline"));
-const turnEmptyTitle = computed(() =>
-  isCurrentThreadPendingCreate.value ? "Creating a new chat on your Mac." : "Start the next turn from the composer."
-);
-const turnEmptyCopy = computed(() =>
-  isCurrentThreadPendingCreate.value
-    ? "The relay is asking Codex to start a fresh thread. The composer will unlock as soon as it lands."
-    : "Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands."
-);
+const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
+  const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
+  return [
+    { label: "Plan", prompt: "/plan " },
+    { label: "Diff review", prompt: "Review the current working tree diff and call out the highest-risk issues first." },
+    { label: "Files", prompt: "@files " },
+    { label: "Repo summary", prompt: `Summarize ${repoName} and tell me where I should start.` },
+  ];
+});
 const pendingRunStatus = computed(() => {
   const pending = currentPendingRunFeedback.value;
   if (!pending || !currentThread.value) {
@@ -845,10 +851,18 @@ const pendingRunStatus = computed(() => {
   }
   return null;
 });
-const turnEmptyHelperLabel = computed(() =>
-  isCurrentThreadPendingCreate.value ? "Available Once Ready" : "Composer Shortcuts"
-);
 const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
+const showTurnStarterRail = computed(
+  () =>
+    Boolean(
+      currentThread.value &&
+        !isCurrentThreadPendingCreate.value &&
+        !showConversationContent.value &&
+        !state.ui.composerText.trim() &&
+        !state.ui.composerImages.length
+    )
+);
+const showPendingThreadRail = computed(() => Boolean(currentThread.value && isCurrentThreadPendingCreate.value && !showConversationContent.value));
 const showScrollToLatestButton = computed(
   () => Boolean(currentThread.value?.messages.length && autoScrollMode.value === "manual" && !isScrolledToBottom.value)
 );
@@ -1920,6 +1934,23 @@ function applyComposerSuggestion(value: string) {
   state.ui.composerText = state.ui.composerText.replace(/(^|\s)([@$/])([^\s]*)$/, (_match, space) => `${space}${value} `);
 }
 
+function focusComposerInput() {
+  const input = composerInputEl.value;
+  if (!input) {
+    return;
+  }
+  input.focus();
+  const cursor = input.value.length;
+  input.setSelectionRange(cursor, cursor);
+}
+
+function applyTurnStarterPrompt(prompt: string) {
+  state.ui.composerText = prompt;
+  void nextTick(() => {
+    focusComposerInput();
+  });
+}
+
 function handleHomePrimaryAction() {
   if (state.snapshot?.connection.state === "connected") {
     client.logout();
@@ -2914,22 +2945,7 @@ function handleScrollToLatest() {
 
                       </template>
 
-                      <div v-else-if="currentThread" class="turn-empty-state">
-                        <div class="turn-empty-state__marker" aria-hidden="true"></div>
-                        <div class="turn-empty-state__card">
-                          <span class="section-label">{{ turnEmptyLabel }}</span>
-                          <h2>{{ turnEmptyTitle }}</h2>
-                          <p>{{ turnEmptyCopy }}</p>
-                          <div class="turn-empty-state__helper">
-                            <span class="turn-empty-state__helper-label">{{ turnEmptyHelperLabel }}</span>
-                            <div class="turn-empty-state__chips">
-                              <span class="turn-empty-state__chip">/plan</span>
-                              <span class="turn-empty-state__chip">@files</span>
-                              <span class="turn-empty-state__chip">$skills</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <div v-else-if="currentThread" class="turn-empty-canvas" aria-hidden="true"></div>
 
                       <div v-else class="home-empty-state">
                         <div class="home-empty-state__tabs">
@@ -3062,6 +3078,29 @@ function handleScrollToLatest() {
                         </button>
                       </div>
 
+                      <div v-else-if="showPendingThreadRail" class="empty-thread-rail empty-thread-rail--status">
+                        <span class="section-label">Starting Chat</span>
+                        <p>The relay is creating a fresh thread on your Mac.</p>
+                      </div>
+
+                      <div v-else-if="showTurnStarterRail" class="empty-thread-rail">
+                        <div class="empty-thread-rail__head">
+                          <span class="section-label">Workspace Actions</span>
+                          <span class="empty-thread-rail__context">{{ currentThreadRepoName || currentThread?.projectLabel }}</span>
+                        </div>
+                        <div class="empty-thread-rail__chips">
+                          <button
+                            v-for="action in emptyThreadStarterActions"
+                            :key="action.label"
+                            class="empty-thread-rail__chip"
+                            type="button"
+                            @click="applyTurnStarterPrompt(action.prompt)"
+                          >
+                            {{ action.label }}
+                          </button>
+                        </div>
+                      </div>
+
                       <div class="phone-composer">
                         <input
                           ref="composerImageInputEl"
@@ -3094,6 +3133,7 @@ function handleScrollToLatest() {
                         </div>
 
                         <textarea
+                          ref="composerInputEl"
                           v-model="state.ui.composerText"
                           class="phone-composer__input"
                           :disabled="isCurrentThreadPendingCreate"
