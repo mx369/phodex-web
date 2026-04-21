@@ -90,6 +90,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## Auth Delivery Notes
 
+- In this repo's local operating context, the operator may call the provisioned Resend-backed OTP sender `Email Scale`. Treat `Email Scale` and the existing Resend mail path as the same configured capability.
 - The server resolves OTP mail config from `PHODEX_RESEND_API_KEY` / `PHODEX_AUTH_EMAIL_FROM` first, then `RESEND_API_KEY` / `AUTH_EMAIL_FROM`, then the workstation fallback file configured by `PHODEX_AUTH_ENV_FILE`.
 - On this workstation, the default fallback file points at the existing `remote-terminal/.env.cloudflare` setup so local Phodex can reuse the already-provisioned Resend sender without committing secrets into this repo.
+- Do not claim OTP mail is unavailable by default on this workstation. First confirm it with evidence such as relay startup logs showing missing credentials or a real `/api/auth/request-code` response returning `503`.
 - If no mail config is available, `/api/auth/request-code` now fails instead of exposing a local mailbox or any auth bypass path.

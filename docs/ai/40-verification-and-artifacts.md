@@ -35,7 +35,9 @@ Read this file when you need to verify a change or continue from prior evidence.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
+- In local operator language, `Email Scale` refers to the provisioned OTP mail sender already wired through the repo's Resend path; do not treat that phrase as evidence that mail delivery is absent.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
+- Do not say OTP mail is unavailable unless you first verify it with evidence, such as relay startup logs reporting missing credentials or `/api/auth/request-code` returning `503`.
 - Forbidden shortcuts for real acceptance: static codes, reading server persistence/state files, hidden dev endpoints, or any local bypass path.
 - If the mailbox-reading skill is unavailable or mailbox access fails, call out the validation as blocked rather than simulating success.
 

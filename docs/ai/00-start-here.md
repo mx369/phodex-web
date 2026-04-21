@@ -14,6 +14,7 @@ Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/p
 ## What Is Real Today
 
 - Email OTP sign-in is real.
+- The operator may refer to the configured OTP mail sender as `Email Scale`; in this repo that means the existing Resend-backed delivery path, not a missing future integration.
 - Public HTTP + WSS relay is real.
 - Local outbound Codex app-server bridge is real.
 - Chat thread creation, message send, streaming reply, stop, queue, resume draft, rename, and archive are real.

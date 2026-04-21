@@ -12,6 +12,7 @@ Broad status snapshot for planning and handoff.
 ## Real Today
 
 - Email code request, live Resend delivery when mail config is available, and OTP verify.
+- On this workstation, the operator may refer to the provisioned Resend-backed OTP sender as `Email Scale`; treat that as existing mail capability, not a separate missing integration.
 - Public bootstrap/API plus relay websocket, with a separate bridge websocket for the local client machine.
 - Local Codex app-server connection, thread listing, thread read, turn start, and turn interrupt through the outbound bridge.
 - Conversation send, stream, stop, queue, resume, rename, and archive.
