@@ -832,37 +832,22 @@ const turnEmptyCopy = computed(() =>
     ? "The relay is asking Codex to start a fresh thread. The composer will unlock as soon as it lands."
     : "Replies, command cards, diffs, and queued follow-ups will stack here after your first message lands."
 );
-const turnEmptyHelperLabel = computed(() =>
-  isCurrentThreadPendingCreate.value ? "Available Once Ready" : "Composer Shortcuts"
-);
 const pendingRunStatus = computed(() => {
   const pending = currentPendingRunFeedback.value;
   if (!pending || !currentThread.value) {
     return null;
   }
-  if (currentThread.value.state !== "running") {
+  if (!pending.promptAcknowledged) {
     return {
-      title: "Syncing to your Mac",
-      detail: "Your message was accepted and is syncing to the desktop session.",
-      label: "Syncing",
+      phase: "syncing" as const,
+      label: null,
     };
   }
-  return pending.promptAcknowledged
-    ? {
-        title: "Codex is thinking",
-        detail: "Preparing the first command, tool call, or reply.",
-        label: "Thinking",
-      }
-    : {
-        title: "Syncing to your Mac",
-        detail: "The relay accepted your message and is waiting for the thread to echo it back.",
-        label: "Running",
-      };
+  return null;
 });
-const pendingRunAgeLabel = computed(() => {
-  const pending = currentPendingRunFeedback.value;
-  return pending ? formatRelativeTime(pending.startedAt) : null;
-});
+const turnEmptyHelperLabel = computed(() =>
+  isCurrentThreadPendingCreate.value ? "Available Once Ready" : "Composer Shortcuts"
+);
 const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
 const showScrollToLatestButton = computed(
   () => Boolean(currentThread.value?.messages.length && autoScrollMode.value === "manual" && !isScrolledToBottom.value)
@@ -2885,72 +2870,48 @@ function handleScrollToLatest() {
                           v-if="currentPendingRunFeedback && !currentPendingRunFeedback.promptAcknowledged"
                           class="phone-message phone-message--user phone-message--pending"
                         >
-                          <div class="phone-message__meta">
+                          <div class="phone-message__meta phone-message__meta--pending-user">
                             <span>You</span>
-                            <span>Pending</span>
-                            <span>chat</span>
                           </div>
 
-                          <div class="phone-message__card">
-                            <div v-if="currentPendingRunFeedback.images.length" class="message-input-images">
-                              <figure
-                                v-for="(image, index) in currentPendingRunFeedback.images"
-                                :key="`pending-image-${index}`"
-                                class="message-input-image"
-                              >
-                                <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
-                                <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
-                              </figure>
-                            </div>
+                          <div class="phone-message__pending-bubble">
+                            <span
+                              v-if="pendingRunStatus"
+                              class="phone-message__status-dot"
+                              :class="`phone-message__status-dot--${pendingRunStatus.phase}`"
+                              aria-hidden="true"
+                            ></span>
 
-                            <div class="phone-message__copy">
-                              <p
-                                v-for="(paragraph, paragraphIndex) in splitParagraphs(currentPendingRunFeedback.prompt)"
-                                :key="`pending-run-${paragraphIndex}`"
-                              >
-                                <template
-                                  v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
-                                  :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
+                            <div class="phone-message__card">
+                              <div v-if="currentPendingRunFeedback.images.length" class="message-input-images">
+                                <figure
+                                  v-for="(image, index) in currentPendingRunFeedback.images"
+                                  :key="`pending-image-${index}`"
+                                  class="message-input-image"
                                 >
-                                  <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
-                                  <span v-else>{{ segment.text }}</span>
-                                </template>
-                              </p>
-                            </div>
+                                  <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
+                                </figure>
+                              </div>
 
-                            <div v-if="pendingRunStatus" class="pending-inline-state">
-                              <span class="pending-inline-state__pulse" aria-hidden="true"></span>
-                              <div class="pending-inline-state__copy">
-                                <strong>{{ pendingRunStatus.title }}</strong>
-                                <span>{{ pendingRunStatus.detail }}</span>
+                              <div class="phone-message__copy">
+                                <p
+                                  v-for="(paragraph, paragraphIndex) in splitParagraphs(currentPendingRunFeedback.prompt)"
+                                  :key="`pending-run-${paragraphIndex}`"
+                                >
+                                  <template
+                                    v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
+                                    :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
+                                  >
+                                    <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
+                                    <span v-else>{{ segment.text }}</span>
+                                  </template>
+                                </p>
                               </div>
                             </div>
                           </div>
                         </article>
 
-                        <article v-else-if="pendingRunStatus" class="phone-message phone-message--assistant phone-message--pending">
-                          <div class="phone-message__meta">
-                            <span>Codex</span>
-                            <span>{{ pendingRunAgeLabel }}</span>
-                            <span>thinking</span>
-                          </div>
-
-                          <div class="phone-message__card">
-                            <div class="pending-assistant-state" role="status" aria-live="polite" aria-atomic="true">
-                              <div class="pending-assistant-state__head">
-                                <span class="section-label">Live run</span>
-                                <span class="pending-assistant-state__badge">{{ pendingRunStatus.label }}</span>
-                              </div>
-                              <p class="pending-assistant-state__title">{{ pendingRunStatus.title }}</p>
-                              <p class="pending-assistant-state__detail">{{ pendingRunStatus.detail }}</p>
-                              <div class="pending-assistant-state__dots" aria-hidden="true">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                              </div>
-                            </div>
-                          </div>
-                        </article>
                       </template>
 
                       <div v-else-if="currentThread" class="turn-empty-state">
