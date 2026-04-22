@@ -299,6 +299,7 @@ let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
 let installCommandCopyTimer: number | null = null;
 const installManifest = ref<InstallManifest | null>(null);
+const installManifestLoading = ref(false);
 const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
@@ -504,13 +505,21 @@ const onboardingBridgeCommand = computed(
   () => "Sign in with email first. The app will mint a short-lived install command that only this account can claim."
 );
 const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound install command…");
-const showBridgeInstallCard = computed(() => isAuthenticated.value && !state.snapshot?.connection.bridgeOnline);
+const showBridgeInstallCard = computed(() => isAuthenticated.value);
 const showBridgeLinkedWarning = computed(
   () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
 );
+const bridgeInstallTitle = computed(() => {
+  if (state.snapshot?.connection.bridgeOnline) {
+    return "Add another Mac";
+  }
+  return "Install bridge for this account";
+});
 const bridgeInstallCopy = computed(() =>
   installManifest.value?.command
-    ? `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal to install the local bridge.`
+    ? state.snapshot?.connection.bridgeOnline
+      ? `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal on another machine to add one more trusted Mac.`
+      : `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal to install the local bridge.`
     : "Signed in. Preparing a secure install command…"
 );
 const bridgeInstallCopyLabel = computed(() => {
@@ -522,6 +531,12 @@ const bridgeInstallCopyLabel = computed(() => {
     default:
       return "Copy";
   }
+});
+const bridgeInstallRefreshLabel = computed(() => {
+  if (installManifestLoading.value) {
+    return "Refreshing…";
+  }
+  return installManifest.value?.command ? "New command" : "Retry";
 });
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
@@ -746,7 +761,7 @@ const homeStatusCopy = computed(() => {
   }
   switch (connection?.state) {
     case "connected":
-      return "Your phone shell is connected. Open a chat or disconnect this trusted session.";
+      return "Your phone shell is connected. Open a chat, disconnect this trusted session, or use the install command below to add another Mac.";
     case "connecting":
       return "The relay is still rehydrating thread state from the desktop side.";
     case "disconnected":
@@ -1104,9 +1119,11 @@ async function loadInstallManifest() {
   const token = state.session?.token?.trim();
   if (!token) {
     installManifest.value = null;
+    installManifestLoading.value = false;
     return;
   }
 
+  installManifestLoading.value = true;
   try {
     const response = await fetch(`${API_ORIGIN}/install/manifest.json`, {
       headers: {
@@ -1118,9 +1135,13 @@ async function loadInstallManifest() {
       return;
     }
     installManifest.value = (await response.json()) as InstallManifest;
+    installCommandCopyState.value = "idle";
+    clearInstallCommandCopyTimer();
   } catch (error) {
     installManifest.value = null;
     console.warn("[phodex-web] install manifest unavailable", error);
+  } finally {
+    installManifestLoading.value = false;
   }
 }
 
@@ -1966,6 +1987,10 @@ function handleHomeSecondaryAction() {
     return;
   }
   restartOnboarding();
+}
+
+function refreshInstallCommand() {
+  void loadInstallManifest();
 }
 
 function switchRootFlow(nextFlow: RootFlowState) {
@@ -2985,21 +3010,31 @@ function handleScrollToLatest() {
                           <div class="home-empty-state__install-header">
                             <div class="home-empty-state__install-heading">
                               <span class="section-label">Bridge Install</span>
-                              <strong>Install bridge for this account</strong>
+                              <strong>{{ bridgeInstallTitle }}</strong>
                               <p>{{ bridgeInstallCopy }}</p>
                             </div>
-                            <button
-                              class="ghost-cta ghost-cta--compact home-empty-state__install-copy"
-                              :class="{
-                                'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
-                                'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
-                              }"
-                              type="button"
-                              :disabled="!installManifest?.command"
-                              @click="copyInstallCommand"
-                            >
-                              {{ bridgeInstallCopyLabel }}
-                            </button>
+                            <div class="home-empty-state__install-actions">
+                              <button
+                                class="ghost-cta ghost-cta--compact"
+                                type="button"
+                                :disabled="installManifestLoading"
+                                @click="refreshInstallCommand"
+                              >
+                                {{ bridgeInstallRefreshLabel }}
+                              </button>
+                              <button
+                                class="ghost-cta ghost-cta--compact home-empty-state__install-copy"
+                                :class="{
+                                  'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
+                                  'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
+                                }"
+                                type="button"
+                                :disabled="!installManifest?.command"
+                                @click="copyInstallCommand"
+                              >
+                                {{ bridgeInstallCopyLabel }}
+                              </button>
+                            </div>
                           </div>
                           <div class="home-empty-state__install-code-shell">
                             <div class="home-empty-state__install-code-top">
@@ -3014,9 +3049,10 @@ function handleScrollToLatest() {
                           <div class="home-empty-state__install-meta">
                             <span>Short-lived secure command</span>
                             <span>Paste it into the machine terminal you want to connect</span>
+                            <span v-if="state.snapshot?.connection.bridgeOnline">Current Mac stays signed in</span>
                           </div>
                         </div>
-                        <div v-else-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
+                        <div v-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
                           <span class="section-label">Mac Linked</span>
                           <strong>{{ state.snapshot?.connection.macLabel }}</strong>
                           <p>
