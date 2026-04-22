@@ -8,6 +8,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Install: `bun install`
 - Web dev: `bun run dev:web`
 - Web build: `bun run build:web`
+- Bridge runtime build: `bun run build:bridge-runtime`
 - Relay dev: `bun run dev:relay`
 - Relay start: `bun run start:relay`
 - Bridge dev: `bun run dev:bridge`
@@ -15,14 +16,15 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
 - Latest shell installer alias: `GET /install`
-- Latest bridge runtime alias: `GET /install/bridge-runtime.ts`
+- Latest bridge runtime alias: `GET /install/bridge-runtime?target=<target-id>`
 
 ## Runtime Defaults
 
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
-- User-facing local install/start command now comes from `/install/manifest.json` and resolves to a Bun-style `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...` invocation.
+- User-facing local install/start command now comes from `/install/manifest.json` and resolves to `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...`.
+- The public install script no longer requires `bun` on the target machine. Real install verification should cover at least one clean environment where the installer downloads the compiled bridge executable and starts it successfully.
 - Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
 ## Verification Expectations

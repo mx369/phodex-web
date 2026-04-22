@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -18,7 +19,7 @@ const DEFAULT_INSTALL_DIR = resolve(homedir(), ".phodex-bridge");
 const DEFAULT_PID_FILE = "bridge.pid";
 const DEFAULT_ENV_FILE = "bridge.env";
 const DEFAULT_LOG_FILE = "logs/bridge.log";
-const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.ts";
+const DEFAULT_RUNTIME_FILE = "current/phodex-bridge-runtime";
 const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
 const LAUNCH_AGENT_ENV_KEYS = new Set([
@@ -67,21 +68,23 @@ async function main() {
   const installDir = resolveInstallDir(args.options.dir);
   const relayOrigin = resolveRelayOrigin(installDir, args.options.relay);
   const setup = await resolveInstallSetup(relayOrigin, args.options.token, args.options.secret);
-  const bunBin = process.execPath;
   const macLabel = args.options["mac-label"] || hostname();
+  const bridgeTarget = detectBridgeTarget();
 
   mkdirSync(installDir, { recursive: true });
   mkdirSync(resolve(installDir, "current"), { recursive: true });
   mkdirSync(resolve(installDir, "logs"), { recursive: true });
   mkdirSync(resolve(installDir, "data"), { recursive: true });
 
-  const runtimeUrl = setup.bridgeRuntimeUrl;
+  const runtimeUrl = appendTargetQuery(setup.bridgeRuntimeUrl, bridgeTarget);
   const runtimeResponse = await fetch(runtimeUrl);
   if (!runtimeResponse.ok) {
     throw new Error(`Failed to download bridge runtime: ${runtimeResponse.status} ${runtimeResponse.statusText}`);
   }
-  const runtimeSource = await runtimeResponse.text();
-  writeFileSync(resolve(installDir, DEFAULT_RUNTIME_FILE), runtimeSource, "utf8");
+  const runtimeBuffer = Buffer.from(await runtimeResponse.arrayBuffer());
+  const runtimePath = resolve(installDir, DEFAULT_RUNTIME_FILE);
+  writeFileSync(runtimePath, runtimeBuffer);
+  chmodSync(runtimePath, 0o755);
 
   const envLines = [
     `PHODEX_RELAY_URL=${setup.relayOrigin}`,
@@ -115,7 +118,7 @@ async function main() {
         bridgeRuntimeUrl: runtimeUrl,
         relayLabel: setup.relayLabel,
         installedAt: new Date().toISOString(),
-        bunBin,
+        bridgeTarget,
       },
       null,
       2
@@ -124,7 +127,7 @@ async function main() {
   );
 
   stopInstalledBridge(installDir);
-  const pid = startInstalledBridge(installDir, bunBin);
+  const pid = startInstalledBridge(installDir);
   const health = await waitForRelayBridgeHealth(setup.relayOrigin, setup.bridgeToken);
 
   console.log(`[phodex-bridge] Installed to ${installDir}`);
@@ -247,12 +250,34 @@ function isLocalRelayHost(hostname) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
+function detectBridgeTarget() {
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "darwin-arm64";
+  }
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return "darwin-x64";
+  }
+  if (process.platform === "linux" && process.arch === "arm64") {
+    return "linux-arm64";
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "linux-x64";
+  }
+  throw new Error(`Unsupported bridge target ${process.platform}/${process.arch}`);
+}
+
+function appendTargetQuery(url, target) {
+  const next = new URL(url);
+  next.searchParams.set("target", target);
+  return next.toString();
+}
+
 async function resolveInstallSetup(relayOrigin, setupToken, explicitSecret) {
   if (explicitSecret) {
     return {
       relayOrigin,
       relayLabel: "Phodex Public Relay",
-      bridgeRuntimeUrl: new URL("/install/bridge-runtime.js", relayOrigin).toString(),
+      bridgeRuntimeUrl: new URL("/install/bridge-runtime", relayOrigin).toString(),
       bridgeToken: explicitSecret,
     };
   }
@@ -297,7 +322,7 @@ async function readResponseError(response, fallback) {
   return `${fallback}: ${response.status} ${response.statusText}`;
 }
 
-function startInstalledBridge(installDir, bunBin) {
+function startInstalledBridge(installDir) {
   const runtimeFile = resolve(installDir, DEFAULT_RUNTIME_FILE);
   const envFile = resolve(installDir, DEFAULT_ENV_FILE);
   const pidFile = resolve(installDir, DEFAULT_PID_FILE);
@@ -307,7 +332,7 @@ function startInstalledBridge(installDir, bunBin) {
       ...process.env,
       ...readEnvFile(envFile),
     },
-    bunBin
+    runtimeFile
   );
 
   if (!existsSync(runtimeFile)) {
@@ -315,21 +340,20 @@ function startInstalledBridge(installDir, bunBin) {
   }
 
   if (process.platform === "darwin") {
-    const pid = startBridgeViaLaunchAgent(installDir, bunBin, runtimeFile, logFile, env);
+    const pid = startBridgeViaLaunchAgent(installDir, runtimeFile, logFile, env);
     writeFileSync(pidFile, `${pid}\n`, "utf8");
     return pid;
   }
 
   const launched = spawnSync(
-    "/bin/sh",
-    [
-      "-lc",
-      'nohup "$1" "$2" >> "$3" 2>&1 < /dev/null & echo $!',
-      "sh",
-      bunBin,
-      runtimeFile,
-      logFile,
-    ],
+      "/bin/sh",
+      [
+        "-lc",
+        'nohup "$1" >> "$2" 2>&1 < /dev/null & echo $!',
+        "sh",
+        runtimeFile,
+        logFile,
+      ],
     {
       cwd: installDir,
       env,
@@ -350,7 +374,7 @@ function startInstalledBridge(installDir, bunBin) {
   return pid;
 }
 
-function sanitizeBridgeEnv(env, bunBin) {
+function sanitizeBridgeEnv(env, runtimeFile) {
   const next = { ...env };
 
   for (const key of Object.keys(next)) {
@@ -366,7 +390,7 @@ function sanitizeBridgeEnv(env, bunBin) {
       .join(":");
   }
 
-  next._ = bunBin;
+  next._ = runtimeFile;
   return next;
 }
 
@@ -510,13 +534,13 @@ function readEnvFile(filePath) {
   return values;
 }
 
-function startBridgeViaLaunchAgent(installDir, bunBin, runtimeFile, logFile, env) {
+function startBridgeViaLaunchAgent(installDir, runtimeFile, logFile, env) {
   const label = buildLaunchAgentLabel(installDir);
   const plistPath = resolveLaunchAgentPlistPath(label);
   const domain = buildLaunchAgentDomain(label);
 
   mkdirSync(resolve(homedir(), "Library/LaunchAgents"), { recursive: true });
-  writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, env), "utf8");
+  writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, runtimeFile, logFile, env), "utf8");
 
   spawnSync("launchctl", ["bootout", domain], { stdio: "ignore" });
 
@@ -584,13 +608,12 @@ function readLaunchAgentPid(label) {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-function buildLaunchAgentPlist(label, installDir, bunBin, runtimeFile, logFile, env) {
+function buildLaunchAgentPlist(label, installDir, runtimeFile, logFile, env) {
   const launchEnv = selectLaunchAgentEnv(env);
   const programArguments = [
     "/usr/bin/env",
     "-i",
     ...Object.entries(launchEnv).map(([key, value]) => `${key}=${String(value)}`),
-    bunBin,
     runtimeFile,
   ];
   const programArgumentsXml = programArguments.map((value) => `    <string>${xmlEscape(value)}</string>`).join("\n");

@@ -94,6 +94,42 @@ choose_ca_bundle() {
   done
 }
 
+detect_bridge_target() {
+  local platform arch
+  platform="$(uname -s)"
+  arch="$(uname -m)"
+
+  case "$platform:$arch" in
+    Darwin:arm64 | Darwin:aarch64)
+      printf 'darwin-arm64\n'
+      ;;
+    Darwin:x86_64 | Darwin:amd64)
+      printf 'darwin-x64\n'
+      ;;
+    Linux:arm64 | Linux:aarch64)
+      printf 'linux-arm64\n'
+      ;;
+    Linux:x86_64 | Linux:amd64)
+      printf 'linux-x64\n'
+      ;;
+    *)
+      error "Unsupported target platform ${platform}/${arch}. Install phodex-bridge from a Mac or Linux machine."
+      ;;
+  esac
+}
+
+append_target_query() {
+  local url=$1
+  local target=$2
+
+  if [[ $url == *\?* ]]; then
+    printf '%s&target=%s\n' "$url" "$target"
+    return
+  fi
+
+  printf '%s?target=%s\n' "$url" "$target"
+}
+
 is_pid_alive() {
   kill -0 "$1" 2>/dev/null
 }
@@ -222,8 +258,8 @@ write_env_value() {
 }
 
 write_start_script() {
-  printf '#!/bin/bash\nset -euo pipefail\nset -a\n. %q\nset +a\nexec %q %q\n' \
-    "$ENV_FILE" "$BUN_BIN" "$RUNTIME_FILE" > "$START_SCRIPT"
+  printf '#!/bin/bash\nset -euo pipefail\nset -a\n. %q\nset +a\nexec %q\n' \
+    "$ENV_FILE" "$RUNTIME_FILE" > "$START_SCRIPT"
   chmod +x "$START_SCRIPT"
 }
 
@@ -366,17 +402,15 @@ EOF
 done
 
 command -v curl >/dev/null || error "curl is required to install phodex-bridge"
-command -v bun >/dev/null || error "bun is required to run phodex-bridge. Install it first with: curl -fsSL https://bun.com/install | bash"
 
 [[ -n $RELAY_ORIGIN ]] || error "Missing --relay. Copy the install command from the signed-in phone session."
 RELAY_ORIGIN="$(normalize_origin "$RELAY_ORIGIN")"
-BUN_BIN="$(command -v bun)"
 CA_BUNDLE="$(choose_ca_bundle "$RELAY_ORIGIN" || true)"
 
 if [[ -n $BRIDGE_SECRET ]]; then
   BRIDGE_TOKEN="$BRIDGE_SECRET"
   RELAY_LABEL="Phodex Public Relay"
-  BRIDGE_RUNTIME_URL="${RELAY_ORIGIN}/install/bridge-runtime.ts"
+  BRIDGE_RUNTIME_URL="${RELAY_ORIGIN}/install/bridge-runtime"
 else
   [[ -n $SETUP_TOKEN ]] || error "Missing --token. Copy the install command from the signed-in phone session."
   CLAIM_BODY=$(printf '{"token":"%s"}' "$SETUP_TOKEN")
@@ -395,17 +429,20 @@ else
 fi
 
 INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+TARGET_ID="$(detect_bridge_target)"
 PID_FILE="${INSTALL_DIR}/bridge.pid"
 ENV_FILE="${INSTALL_DIR}/bridge.env"
 LOG_FILE="${INSTALL_DIR}/logs/bridge.log"
-RUNTIME_FILE="${INSTALL_DIR}/current/bridge-runtime.ts"
+RUNTIME_FILE="${INSTALL_DIR}/current/phodex-bridge-runtime"
 START_SCRIPT="${INSTALL_DIR}/current/start-bridge.sh"
 STATE_FILE="${INSTALL_DIR}/data/bridge-state.json"
+BRIDGE_RUNTIME_URL="$(append_target_query "$BRIDGE_RUNTIME_URL" "$TARGET_ID")"
 
 mkdir -p "$INSTALL_DIR/current" "$INSTALL_DIR/logs" "$INSTALL_DIR/data"
 
-info "Downloading bridge runtime..."
+info "Downloading bridge runtime for ${TARGET_ID}..."
 curl --fail --location --progress-bar --output "$RUNTIME_FILE" "$BRIDGE_RUNTIME_URL" || error "Failed to download bridge runtime"
+chmod +x "$RUNTIME_FILE"
 
 write_env_file
 write_start_script
