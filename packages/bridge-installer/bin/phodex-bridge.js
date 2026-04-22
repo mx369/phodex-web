@@ -21,6 +21,8 @@ const DEFAULT_LOG_FILE = "logs/bridge.log";
 const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.ts";
 const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
+const DEFAULT_CODEX_WS_URL = "ws://127.0.0.1:8765";
+const DEFAULT_CODEX_READY_URL = DEFAULT_CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const LAUNCH_AGENT_ENV_KEYS = new Set([
   "DISPLAY",
   "HOME",
@@ -69,6 +71,8 @@ async function main() {
   const setup = await resolveInstallSetup(relayOrigin, args.options.token, args.options.secret);
   const bunBin = resolveBunBinary();
   const macLabel = args.options["mac-label"] || hostname();
+  const explicitCodexWsUrl = normalizeCodexWsUrl(args.options["codex-ws-url"]);
+  const detectedCodexWsUrl = explicitCodexWsUrl || (await detectExistingCodexWsUrl());
 
   mkdirSync(installDir, { recursive: true });
   mkdirSync(resolve(installDir, "current"), { recursive: true });
@@ -95,8 +99,8 @@ async function main() {
     envLines.push(`PHODEX_CODEX_BIN=${args.options["codex-bin"]}`);
   }
 
-  if (args.options["codex-ws-url"]) {
-    envLines.push(`PHODEX_CODEX_WS_URL=${args.options["codex-ws-url"]}`);
+  if (detectedCodexWsUrl) {
+    envLines.push(`PHODEX_CODEX_WS_URL=${detectedCodexWsUrl}`);
     envLines.push("PHODEX_MANAGE_CODEX=false");
   }
 
@@ -218,6 +222,22 @@ function normalizeRelayOrigin(value) {
   } catch {
     return "";
   }
+}
+
+function normalizeCodexWsUrl(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+async function detectExistingCodexWsUrl() {
+  try {
+    const response = await fetch(DEFAULT_CODEX_READY_URL);
+    if (response.ok) {
+      return DEFAULT_CODEX_WS_URL;
+    }
+  } catch {
+    // Fall back to managed Codex when no local app-server is listening.
+  }
+  return "";
 }
 
 function chooseSystemCaBundle(relayOrigin) {
