@@ -3,7 +3,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -19,7 +18,7 @@ const DEFAULT_INSTALL_DIR = resolve(homedir(), ".phodex-bridge");
 const DEFAULT_PID_FILE = "bridge.pid";
 const DEFAULT_ENV_FILE = "bridge.env";
 const DEFAULT_LOG_FILE = "logs/bridge.log";
-const DEFAULT_RUNTIME_FILE = "current/phodex-bridge-runtime";
+const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.ts";
 const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
 const LAUNCH_AGENT_ENV_KEYS = new Set([
@@ -68,23 +67,21 @@ async function main() {
   const installDir = resolveInstallDir(args.options.dir);
   const relayOrigin = resolveRelayOrigin(installDir, args.options.relay);
   const setup = await resolveInstallSetup(relayOrigin, args.options.token, args.options.secret);
+  const bunBin = resolveBunBinary();
   const macLabel = args.options["mac-label"] || hostname();
-  const bridgeTarget = detectBridgeTarget();
 
   mkdirSync(installDir, { recursive: true });
   mkdirSync(resolve(installDir, "current"), { recursive: true });
   mkdirSync(resolve(installDir, "logs"), { recursive: true });
   mkdirSync(resolve(installDir, "data"), { recursive: true });
 
-  const runtimeUrl = appendTargetQuery(setup.bridgeRuntimeUrl, bridgeTarget);
+  const runtimeUrl = setup.bridgeRuntimeUrl;
   const runtimeResponse = await fetch(runtimeUrl);
   if (!runtimeResponse.ok) {
     throw new Error(`Failed to download bridge runtime: ${runtimeResponse.status} ${runtimeResponse.statusText}`);
   }
-  const runtimeBuffer = Buffer.from(await runtimeResponse.arrayBuffer());
-  const runtimePath = resolve(installDir, DEFAULT_RUNTIME_FILE);
-  writeFileSync(runtimePath, runtimeBuffer);
-  chmodSync(runtimePath, 0o755);
+  const runtimeSource = await runtimeResponse.text();
+  writeFileSync(resolve(installDir, DEFAULT_RUNTIME_FILE), runtimeSource, "utf8");
 
   const envLines = [
     `PHODEX_RELAY_URL=${setup.relayOrigin}`,
@@ -118,7 +115,7 @@ async function main() {
         bridgeRuntimeUrl: runtimeUrl,
         relayLabel: setup.relayLabel,
         installedAt: new Date().toISOString(),
-        bridgeTarget,
+        bunBin,
       },
       null,
       2
@@ -127,7 +124,7 @@ async function main() {
   );
 
   stopInstalledBridge(installDir);
-  const pid = startInstalledBridge(installDir);
+  const pid = startInstalledBridge(installDir, bunBin);
   const health = await waitForRelayBridgeHealth(setup.relayOrigin, setup.bridgeToken);
 
   console.log(`[phodex-bridge] Installed to ${installDir}`);
@@ -250,26 +247,36 @@ function isLocalRelayHost(hostname) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-function detectBridgeTarget() {
-  if (process.platform === "darwin" && process.arch === "arm64") {
-    return "darwin-arm64";
-  }
-  if (process.platform === "darwin" && process.arch === "x64") {
-    return "darwin-x64";
-  }
-  if (process.platform === "linux" && process.arch === "arm64") {
-    return "linux-arm64";
-  }
-  if (process.platform === "linux" && process.arch === "x64") {
-    return "linux-x64";
-  }
-  throw new Error(`Unsupported bridge target ${process.platform}/${process.arch}`);
-}
+function resolveBunBinary() {
+  const candidates = [];
 
-function appendTargetQuery(url, target) {
-  const next = new URL(url);
-  next.searchParams.set("target", target);
-  return next.toString();
+  if (typeof Bun.which === "function") {
+    const bunFromPath = Bun.which("bun");
+    if (bunFromPath) {
+      candidates.push(bunFromPath);
+    }
+  }
+
+  if (process.env.BUN_INSTALL?.trim()) {
+    candidates.push(resolve(process.env.BUN_INSTALL.trim(), "bin", "bun"));
+  }
+
+  candidates.push(
+    process.execPath,
+    resolve(homedir(), ".bun", "bin", "bun"),
+    "/opt/homebrew/bin/bun",
+    "/usr/local/bin/bun",
+    "/usr/bin/bun",
+    "/bin/bun"
+  );
+
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("bun is required to run phodex-bridge. Install it first with the official command: curl -fsSL https://bun.com/install | bash");
 }
 
 async function resolveInstallSetup(relayOrigin, setupToken, explicitSecret) {
@@ -277,7 +284,7 @@ async function resolveInstallSetup(relayOrigin, setupToken, explicitSecret) {
     return {
       relayOrigin,
       relayLabel: "Phodex Public Relay",
-      bridgeRuntimeUrl: new URL("/install/bridge-runtime", relayOrigin).toString(),
+      bridgeRuntimeUrl: new URL("/install/bridge-runtime.ts", relayOrigin).toString(),
       bridgeToken: explicitSecret,
     };
   }
@@ -322,7 +329,7 @@ async function readResponseError(response, fallback) {
   return `${fallback}: ${response.status} ${response.statusText}`;
 }
 
-function startInstalledBridge(installDir) {
+function startInstalledBridge(installDir, bunBin) {
   const runtimeFile = resolve(installDir, DEFAULT_RUNTIME_FILE);
   const envFile = resolve(installDir, DEFAULT_ENV_FILE);
   const pidFile = resolve(installDir, DEFAULT_PID_FILE);

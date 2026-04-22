@@ -8,7 +8,6 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Install: `bun install`
 - Web dev: `bun run dev:web`
 - Web build: `bun run build:web`
-- Bridge runtime build: `bun run build:bridge-runtime`
 - Relay dev: `bun run dev:relay`
 - Relay start: `bun run start:relay`
 - Bridge dev: `bun run dev:bridge`
@@ -16,7 +15,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
 - Latest shell installer alias: `GET /install`
-- Latest bridge runtime alias: `GET /install/bridge-runtime?target=<target-id>`
+- Latest bridge runtime alias: `GET /install/bridge-runtime.ts`
 
 ## Runtime Defaults
 
@@ -24,7 +23,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
 - User-facing local install/start command now comes from `/install/manifest.json` and resolves to `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...`.
-- The public install script no longer requires `bun` on the target machine. Real install verification should cover at least one clean environment where the installer downloads the compiled bridge executable and starts it successfully.
+- The public install script should prefer an existing host `bun` binary even if the current non-interactive shell PATH is incomplete. Real install verification should cover at least one environment where `bun` is absent from PATH but still available at `~/.bun/bin/bun`.
+- If `bun` cannot be found in PATH or the common host fallback locations, the installer should fail fast and print the official Bun install command `curl -fsSL https://bun.com/install | bash` instead of auto-installing it.
 - Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
 ## Verification Expectations

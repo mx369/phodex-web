@@ -102,21 +102,6 @@ type PendingProjectRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-type BridgeRuntimeBuildManifest = {
-  version?: string;
-  bunVersion?: string;
-  builtAt?: string;
-  targets?: Record<
-    string,
-    {
-      filename?: string;
-      bunTarget?: string;
-      sha256?: string;
-      size?: number;
-    }
-  >;
-};
-
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -128,9 +113,6 @@ const bridgeRuntimeSourcePath = resolve(serverRoot, "src/index.ts");
 const bridgeInstallerPackageDir = resolve(appRoot, "packages/bridge-installer");
 const bridgeInstallScriptSourcePath = resolve(bridgeInstallerPackageDir, "install.sh");
 const bridgeInstallerPackageJsonPath = resolve(bridgeInstallerPackageDir, "package.json");
-const bridgeInstallerDistDir = resolve(bridgeInstallerPackageDir, "dist");
-const bridgeRuntimeBuildScriptPath = resolve(bridgeInstallerPackageDir, "build-runtime.ts");
-const bridgeRuntimeBuildManifestPath = resolve(bridgeInstallerDistDir, "manifest.json");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
@@ -279,16 +261,6 @@ const server = Bun.serve<SocketData>({
       req.method === "GET"
     ) {
       return withCors(req, serveInstallSource(bridgeInstallScriptSourcePath, "text/plain; charset=utf-8"));
-    }
-
-    if (
-      (url.pathname === "/install/bridge-runtime" ||
-        (url.pathname.startsWith("/install/bridge-runtime-") &&
-          !url.pathname.endsWith(".js") &&
-          !url.pathname.endsWith(".ts"))) &&
-      req.method === "GET"
-    ) {
-      return withCors(req, serveBridgeRuntimeBinary(url));
     }
 
     if (
@@ -1403,21 +1375,11 @@ async function handleInstallManifest(req: Request) {
     return json({ ok: false, error: "Sign in first to generate a bridge install command." }, 401);
   }
 
-  if (!hasBuiltBridgeRuntime()) {
-    return json(
-      {
-        ok: false,
-        error: "Bridge executable bundle not found. Run `bun run build:bridge-runtime` from the project root, then restart the relay.",
-      },
-      503
-    );
-  }
-
   try {
     const version = computeInstallAssetsVersion();
     const origin = buildOrigin(req);
     const installScriptUrl = `${origin}/install`;
-    const bridgeRuntimeUrl = `${origin}/install/bridge-runtime-${version}`;
+    const bridgeRuntimeUrl = `${origin}/install/bridge-runtime-${version}.ts`;
     const { token, expiresAt } = issueInstallSetupToken(session.userId);
     return json({
       version,
@@ -1455,16 +1417,6 @@ async function handleInstallClaim(req: Request) {
   const previousClaimCount = record.claimCount;
   const previousLastClaimedAt = record.lastClaimedAt;
 
-  if (!hasBuiltBridgeRuntime()) {
-    return json(
-      {
-        ok: false,
-        error: "Bridge executable bundle not found. Run `bun run build:bridge-runtime` from the project root, then restart the relay.",
-      },
-      503
-    );
-  }
-
   try {
     const version = computeInstallAssetsVersion();
     const origin = buildOrigin(req);
@@ -1482,7 +1434,7 @@ async function handleInstallClaim(req: Request) {
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
       bridgeToken,
-      bridgeRuntimeUrl: `${origin}/install/bridge-runtime-${version}`,
+      bridgeRuntimeUrl: `${origin}/install/bridge-runtime-${version}.ts`,
       version,
     });
   } catch (error) {
@@ -1508,77 +1460,6 @@ function serveInstallSource(filePath: string, contentType: string) {
   });
 }
 
-function serveBridgeRuntimeBinary(url: URL) {
-  const target = url.searchParams.get("target")?.trim() ?? "";
-  if (!target) {
-    return new Response("Missing bridge runtime target.", { status: 400 });
-  }
-
-  const manifest = readBridgeRuntimeBuildManifest();
-  if (!manifest?.targets) {
-    return new Response(
-      "Bridge executable bundle not found. Run `bun run build:bridge-runtime` from the project root, then restart the relay.",
-      { status: 503 }
-    );
-  }
-
-  const requestedVersion = readRequestedBridgeRuntimeVersion(url.pathname);
-  const currentVersion = computeInstallAssetsVersion();
-  if (requestedVersion && requestedVersion !== currentVersion) {
-    return new Response("Not found", { status: 404 });
-  }
-
-  const asset = manifest.targets[target];
-  const filename = asset?.filename?.trim() ?? "";
-  if (!filename) {
-    return new Response(`Unsupported bridge runtime target: ${target}`, { status: 400 });
-  }
-
-  const filePath = resolve(bridgeInstallerDistDir, filename);
-  if (!existsSync(filePath)) {
-    return new Response("Not found", { status: 404 });
-  }
-
-  return new Response(Bun.file(filePath), {
-    headers: {
-      "content-type": "application/octet-stream",
-      "cache-control": "no-store",
-      "content-disposition": `attachment; filename="${filename}"`,
-      "x-phodex-runtime-target": target,
-      "x-phodex-runtime-version": currentVersion,
-    },
-  });
-}
-
-function readRequestedBridgeRuntimeVersion(pathname: string) {
-  if (pathname === "/install/bridge-runtime") {
-    return "";
-  }
-
-  const prefix = "/install/bridge-runtime-";
-  if (!pathname.startsWith(prefix)) {
-    return "";
-  }
-
-  return pathname.slice(prefix.length);
-}
-
-function hasBuiltBridgeRuntime() {
-  return Boolean(readBridgeRuntimeBuildManifest()?.targets);
-}
-
-function readBridgeRuntimeBuildManifest() {
-  if (!existsSync(bridgeRuntimeBuildManifestPath)) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(readFileSync(bridgeRuntimeBuildManifestPath, "utf8")) as BridgeRuntimeBuildManifest;
-  } catch {
-    return null;
-  }
-}
-
 function computeInstallAssetsVersion() {
   const packageJson = JSON.parse(readFileSync(bridgeInstallerPackageJsonPath, "utf8")) as { version?: string };
   const packageVersion = packageJson.version || "0.1.0";
@@ -1586,19 +1467,9 @@ function computeInstallAssetsVersion() {
     statSync(currentFile).mtimeMs,
     statSync(bridgeRuntimeSourcePath).mtimeMs,
     statSync(bridgeInstallerPackageJsonPath).mtimeMs,
-    statSync(bridgeInstallScriptSourcePath).mtimeMs,
-    statSync(bridgeRuntimeBuildScriptPath).mtimeMs,
-    readOptionalMtime(bridgeRuntimeBuildManifestPath)
+    statSync(bridgeInstallScriptSourcePath).mtimeMs
   );
   return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
-}
-
-function readOptionalMtime(filePath: string) {
-  try {
-    return statSync(filePath).mtimeMs;
-  } catch {
-    return 0;
-  }
 }
 
 function issueInstallSetupToken(userId: string) {

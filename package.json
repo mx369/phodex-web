@@ -9,7 +9,6 @@
   "scripts": {
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",
-    "build:bridge-runtime": "bun run ./packages/bridge-installer/build-runtime.ts",
     "dev:server": "bun run --cwd apps/server dev",
     "start:server": "bun run --cwd apps/server start",
     "dev:relay": "bun run --cwd apps/server dev:relay",
