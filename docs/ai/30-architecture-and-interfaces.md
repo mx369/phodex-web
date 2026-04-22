@@ -48,6 +48,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Bridge connections are account-bound but no longer single-device. Each logged-in user can retain multiple registered bridge devices, each device keeps its own bridge token and connection record, and the relay picks one active bridge for mirrored thread state plus command dispatch.
 - Non-active bridge devices may stay registered and online without replacing the active device unless they are in a strictly better readiness state than the current active bridge.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
+- The production web bundle should call relay HTTP routes via same-origin paths and derive the relay websocket from the current page origin. Do not bake loopback client targets such as `127.0.0.1:3443` into a public build.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.
 - Thread changes rebroadcast updated thread records.

@@ -45,12 +45,14 @@ const PENDING_THREAD_PREFIX = "pending-thread:";
 const PENDING_THREAD_SLOW_MS = 18_000;
 const PENDING_THREAD_FAILURE_MS = 45_000;
 const runtimeHost = window.location.hostname || "localhost";
-const inferredApiOrigin =
+const inferredDevApiOrigin =
   import.meta.env.DEV && window.location.port !== "3443"
     ? `${window.location.protocol === "https:" ? "https" : "http"}://${runtimeHost}:3443`
     : window.location.origin;
-export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || inferredApiOrigin;
-const WS_ORIGIN = API_ORIGIN.replace(/^http/, "ws");
+export const API_ORIGIN = import.meta.env.DEV ? import.meta.env.VITE_API_ORIGIN || inferredDevApiOrigin : "";
+const WS_ORIGIN = import.meta.env.DEV
+  ? API_ORIGIN.replace(/^http/, "ws")
+  : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
 export const state = reactive({
   auth: {

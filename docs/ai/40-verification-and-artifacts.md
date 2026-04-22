@@ -23,10 +23,12 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
 - User-facing local install/start command now comes from `/install/manifest.json` and resolves to a Bun-style `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...` invocation.
+- Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
 ## Verification Expectations
 
 - UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
+- For public web deploys, also inspect the emitted bundle or runtime requests to confirm the production build did not embed a local-only API origin.
 - Shared-control / polish changes: check `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`, then verify the real mobile viewport for paired button height consistency, radius-scale consistency, icon-style consistency, and floating-helper sizing.
 - Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
