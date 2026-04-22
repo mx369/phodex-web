@@ -35,8 +35,8 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Turn auto-scroll and scroll-to-latest | Real | Uses internal shell scrolling, follows bottom across message growth and composer/work-state height changes, and only shows the latest-jump button after the user intentionally leaves bottom |
 | Stop run | Real | Sends turn interrupt to local Codex |
 | Runtime speed selection | Real | Exposes `Normal / Fast`; `Fast` falls back when the bridge cannot accept the fast tier field |
-| Queue while running | Real | Stores the draft locally and preserves its runtime settings |
-| Resume queued draft | Real | Replays the queued text with its saved runtime settings once the active run has settled; while a run is still active, queued drafts stay in a waiting state and only expose removal |
+| Queue while running | Real | Stores the draft locally, preserves its runtime settings, and automatically drains the oldest queued draft after the active run completes |
+| Resume queued draft | Real | Manual resume still replays the saved text with its runtime settings if a queued draft remains after the run has settled or a flush did not start; while a run is still active, queued drafts stay in a waiting state and only expose removal |
 | Rich execution activity surfaces | Real | Shows structured command, file, tool, image, and subagent cards; history also backfills missing diff/file rows |
 | Project browser and diff inspector | Real | The current thread toolbar can open a lazy project file browser or working-tree diff sheet; `message.fileChanges` rows deep-link into filtered diff for that file |
 | Pinned plan accessory | Real | Latest `/plan` summary can pin above the composer |

@@ -107,6 +107,7 @@ type OtpMailConfig = {
 };
 
 type ThreadCreateRequest = Extract<ClientEvent, { type: "thread:create" }>;
+type MessageSendResult = "queued" | "started" | "failed";
 
 type ProjectContext = {
   requestedCwd: string;
@@ -705,57 +706,85 @@ async function handleThreadArchive(user: PersistedUser, threadId: string) {
   }
 }
 
-async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent, { type: "message:send" }>) {
-  const text = event.text.trim();
-  const images = normalizeInputImages(event.images);
-  if (!text && !images.length) {
-    sendToast(user.profile.id, "error", "Compose something first.");
-    return;
+function buildQueuedDraft(
+  text: string,
+  images: InputImageAttachment[],
+  event: Extract<ClientEvent, { type: "message:send" }>
+): QueuedDraft {
+  return {
+    id: randomUUID(),
+    text,
+    images,
+    createdAt: new Date().toISOString(),
+    model: event.model,
+    planArmed: event.planArmed,
+    fastMode: event.fastMode,
+    accessMode: event.accessMode,
+  };
+}
+
+function buildQueuedDraftEvent(threadId: string, draft: QueuedDraft): Extract<ClientEvent, { type: "message:send" }> {
+  return {
+    type: "message:send",
+    threadId,
+    text: draft.text,
+    images: draft.images,
+    model: draft.model ?? "GPT-5.4",
+    planArmed: draft.planArmed ?? false,
+    fastMode: draft.fastMode ?? false,
+    accessMode: draft.accessMode ?? "full-access",
+  };
+}
+
+function queueDraft(
+  thread: ThreadRecord,
+  text: string,
+  images: InputImageAttachment[],
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  preview: string
+) {
+  const local = ensureThreadLocal(thread.id);
+  local.queuedDrafts.unshift(buildQueuedDraft(text, images, event));
+  thread.queuedDrafts = local.queuedDrafts;
+  thread.state = "running";
+  thread.preview = preview;
+  thread.lastActivityAt = new Date().toISOString();
+  schedulePersist();
+  broadcastThreadToAllUsers(thread.id);
+}
+
+function restoreQueuedDraft(threadId: string, draft: QueuedDraft, draftIndex: number) {
+  const local = ensureThreadLocal(threadId);
+  local.queuedDrafts.splice(draftIndex, 0, draft);
+  const thread = threadCache.get(threadId);
+  if (thread) {
+    thread.queuedDrafts = local.queuedDrafts;
+    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
+    broadcastThreadToAllUsers(threadId);
   }
-  const preview = summarizeMessagePreview(text, images);
+  schedulePersist();
+}
+
+async function startThreadRun(
+  user: PersistedUser,
+  thread: ThreadRecord,
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  text: string,
+  preview: string
+) {
+  user.selectedThreadId = thread.id;
+  sendUserPatch(user.profile.id, {
+    selectedThreadId: thread.id,
+    banner: null,
+  });
+  markThreadRunning(thread.id, preview);
+  const turnMode = deriveRequestedTurnMode(text, event.planArmed);
+  pendingTurnModes.set(thread.id, turnMode);
+  schedulePersist();
+  broadcastThreadToAllUsers(thread.id);
+  broadcastSnapshotsToAllUsers();
 
   try {
-    ensureCodexReady();
-    const thread = threadCache.get(event.threadId) ?? await syncThreadFromCodex(event.threadId, false);
-    if (!thread) {
-      sendToast(user.profile.id, "error", "Thread not found.");
-      return;
-    }
-
-    if (thread.state === "running") {
-      const local = ensureThreadLocal(thread.id);
-      local.queuedDrafts.unshift({
-        id: randomUUID(),
-        text,
-        images,
-        createdAt: new Date().toISOString(),
-        model: event.model,
-        planArmed: event.planArmed,
-        fastMode: event.fastMode,
-        accessMode: event.accessMode,
-      });
-      thread.queuedDrafts = local.queuedDrafts;
-      thread.state = "running";
-      thread.preview = preview;
-      thread.lastActivityAt = new Date().toISOString();
-      schedulePersist();
-      broadcastThreadToAllUsers(thread.id);
-      sendToast(user.profile.id, "info", "Draft queued while the current run finishes.");
-      return;
-    }
-
-    user.selectedThreadId = thread.id;
-    sendUserPatch(user.profile.id, {
-      selectedThreadId: thread.id,
-      banner: null,
-    });
-    markThreadRunning(thread.id, preview);
-    const turnMode = deriveRequestedTurnMode(text, event.planArmed);
-    pendingTurnModes.set(thread.id, turnMode);
-    schedulePersist();
-    broadcastThreadToAllUsers(thread.id);
-    broadcastSnapshotsToAllUsers();
-
     const turnResponse = await startTurn(thread, text, event, user.profile.id);
     const turnId = readString(turnResponse?.turn?.id);
     if (turnId) {
@@ -771,6 +800,43 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
     }
     codexLastSyncAt = new Date().toISOString();
     publishPresenceToAllUsers();
+    return true;
+  } catch (error) {
+    pendingTurnModes.delete(thread.id);
+    thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
+    broadcastThreadToAllUsers(thread.id);
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+    return false;
+  }
+}
+
+async function handleMessageSend(
+  user: PersistedUser,
+  event: Extract<ClientEvent, { type: "message:send" }>
+): Promise<MessageSendResult> {
+  const text = event.text.trim();
+  const images = normalizeInputImages(event.images);
+  if (!text && !images.length) {
+    sendToast(user.profile.id, "error", "Compose something first.");
+    return "failed";
+  }
+  const preview = summarizeMessagePreview(text, images);
+
+  try {
+    ensureCodexReady();
+    const thread = threadCache.get(event.threadId) ?? await syncThreadFromCodex(event.threadId, false);
+    if (!thread) {
+      sendToast(user.profile.id, "error", "Thread not found.");
+      return "failed";
+    }
+
+    if (thread.state === "running") {
+      queueDraft(thread, text, images, event, preview);
+      sendToast(user.profile.id, "info", "Draft queued while the current run finishes.");
+      return "queued";
+    }
+
+    return (await startThreadRun(user, thread, event, text, preview)) ? "started" : "failed";
   } catch (error) {
     const thread = threadCache.get(event.threadId);
     if (thread) {
@@ -778,40 +844,75 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
       broadcastThreadToAllUsers(thread.id);
     }
     sendToast(user.profile.id, "error", readErrorMessage(error));
+    return "failed";
   }
 }
 
 async function handleDraftResume(user: PersistedUser, threadId: string, draftId: string) {
+  try {
+    ensureCodexReady();
+    const thread = threadCache.get(threadId) ?? await syncThreadFromCodex(threadId, false);
+    if (!thread) {
+      sendToast(user.profile.id, "error", "Thread not found.");
+      return false;
+    }
+    if (thread.state === "running") {
+      sendToast(user.profile.id, "info", "This draft will be ready after the current run finishes.");
+      return false;
+    }
+
+    const local = ensureThreadLocal(threadId);
+    const draftIndex = local.queuedDrafts.findIndex((draft) => draft.id === draftId);
+    if (draftIndex === -1) {
+      return false;
+    }
+
+    const [draft] = local.queuedDrafts.splice(draftIndex, 1);
+    thread.queuedDrafts = local.queuedDrafts;
+    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
+    broadcastThreadToAllUsers(threadId);
+    schedulePersist();
+
+    const nextEvent = buildQueuedDraftEvent(threadId, draft);
+    const nextText = nextEvent.text.trim();
+    const nextPreview = summarizeMessagePreview(nextText, normalizeInputImages(nextEvent.images));
+    const started = await startThreadRun(user, thread, nextEvent, nextText, nextPreview);
+    if (!started) {
+      restoreQueuedDraft(threadId, draft, draftIndex);
+    }
+    return started;
+  } catch (error) {
+    sendToast(user.profile.id, "error", readErrorMessage(error));
+    return false;
+  }
+}
+
+async function resumeNextQueuedDraft(userId: string | undefined, threadId: string) {
+  try {
+    await syncThreadFromCodex(threadId, true);
+  } catch (error) {
+    console.error(`[phodex] Failed to sync thread ${threadId} before resuming queued draft: ${readErrorMessage(error)}`);
+    return;
+  }
+
+  if (!userId) {
+    return;
+  }
+
+  const user = bridgeUsers.get(userId) ?? persisted.users[userId];
   const thread = threadCache.get(threadId);
-  if (thread?.state === "running") {
-    sendToast(user.profile.id, "info", "This draft will be ready after the current run finishes.");
+  if (!user || !thread || thread.state === "running") {
     return;
   }
 
   const local = ensureThreadLocal(threadId);
-  const draftIndex = local.queuedDrafts.findIndex((draft) => draft.id === draftId);
-  if (draftIndex === -1) {
+  // New queued drafts are unshifted, so auto-drain from the tail to preserve send order.
+  const nextDraft = local.queuedDrafts.at(-1);
+  if (!nextDraft) {
     return;
   }
 
-  const [draft] = local.queuedDrafts.splice(draftIndex, 1);
-  if (thread) {
-    thread.queuedDrafts = local.queuedDrafts;
-    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
-    broadcastThreadToAllUsers(threadId);
-  }
-  schedulePersist();
-
-  await handleMessageSend(user, {
-    type: "message:send",
-    threadId,
-    text: draft.text,
-    images: draft.images,
-    model: draft.model ?? "GPT-5.4",
-    planArmed: draft.planArmed ?? false,
-    fastMode: draft.fastMode ?? false,
-    accessMode: draft.accessMode ?? "full-access",
-  });
+  await handleDraftResume(user, threadId, nextDraft.id);
 }
 
 async function startTurn(
@@ -1191,21 +1292,22 @@ function handleTurnCompleted(params: any) {
   pendingTurnModes.delete(threadId);
   const thread = ensureThreadRecord(threadId);
   const local = ensureThreadLocal(threadId);
-  thread.state = local.queuedDrafts.length > 0 ? "queued" : "idle";
+  const hasQueuedDrafts = local.queuedDrafts.length > 0;
+  thread.state = hasQueuedDrafts ? "queued" : "idle";
   thread.lastActivityAt = new Date().toISOString();
 
   const banner: CompletionBanner = {
     id: randomUUID(),
     threadId,
     title: thread.title,
-    subtitle: local.queuedDrafts.length > 0 ? "Run finished. One queued draft is ready." : "Run completed and synced.",
+    subtitle: hasQueuedDrafts ? "Run finished. Resuming the next queued draft." : "Run completed and synced.",
   };
   if (completedTurn?.userId) {
     sendUserPatch(completedTurn.userId, { banner });
   }
   schedulePersist();
   broadcastThreadToAllUsers(threadId);
-  void syncThreadFromCodex(threadId, true);
+  void resumeNextQueuedDraft(completedTurn?.userId, threadId);
 }
 
 async function syncAllThreadsFromCodex() {
