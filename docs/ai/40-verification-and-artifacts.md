@@ -31,6 +31,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Verification Expectations
 
 - UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
+- For transient UI bugs such as flicker, auto-scroll loss, disappearing cards, or tap-state regressions, capture a short mp4 or ordered frame sequence plus a timestamped state log.
+  Do not treat a single screenshot as sufficient evidence for those cases.
 - For public web deploys, also inspect the emitted bundle or runtime requests to confirm the production build did not embed a local-only API origin.
 - Shared-control / polish changes: check `/Users/young/mx/tmp/phodex-web/docs/ui-design-standards.md`, then verify the real mobile viewport for paired button height consistency, radius-scale consistency, icon-style consistency, and floating-helper sizing.
 - Overlay UI changes: for dialogs, drawers, menus, and sheets in the mobile viewport, verify the real runtime path with content long enough to force overflow.
@@ -68,3 +70,4 @@ Read this file when you need to verify a change or continue from prior evidence.
 
 - If page truth is unclear, read `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`.
 - If protocol behavior is unclear, read `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`.
+- If the task is a bugfix or regression pass, read `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md`.

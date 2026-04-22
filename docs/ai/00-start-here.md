@@ -31,6 +31,7 @@ Before doing any auth, onboarding, or security work, read `/Users/young/mx/tmp/p
 - Editing `apps/web`: read `/Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md` next.
 - Editing `apps/server`: read `/Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md` next.
 - Doing planning, auditing, or handoff work: read `/Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md` next.
+- Doing bug reproduction or state-machine polish: read `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md` next.
 
 ## Non-Negotiables
 
