@@ -373,27 +373,30 @@ function send(event: ClientEvent) {
 
 function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
-    case "snapshot":
-      applySnapshot(event.snapshot);
+    case "snapshot": {
+      const nextSnapshot = mergeSnapshotWithPendingThread(event.snapshot);
+      applySnapshot(nextSnapshot);
       reconcilePendingRunFeedback();
-      resolvePendingThreadCreate(event.snapshot.selectedThreadId);
-      if (pendingSendAfterThreadCreate && event.snapshot.selectedThreadId) {
-        const thread = event.snapshot.threads.find((entry) => entry.id === event.snapshot.selectedThreadId);
+      resolvePendingThreadCreate(nextSnapshot.selectedThreadId);
+      if (pendingSendAfterThreadCreate && nextSnapshot.selectedThreadId) {
+        const thread = nextSnapshot.threads.find((entry) => entry.id === nextSnapshot.selectedThreadId);
         if (thread && thread.messages.length === 0) {
           pendingSendAfterThreadCreate = false;
           flushComposer(thread.id);
         }
       }
       break;
+    }
     case "thread:updated":
       if (!state.snapshot) {
         return;
       }
       upsertThread(event.thread);
       reconcilePendingRunFeedback(event.thread.id);
-      state.snapshot.selectedThreadId = event.selectedThreadId;
-      resolvePendingThreadCreate(event.selectedThreadId);
-      if (pendingSendAfterThreadCreate && event.selectedThreadId === event.thread.id && event.thread.messages.length === 0) {
+      const nextSelectedThreadId = coercePendingThreadSelection(event.selectedThreadId);
+      state.snapshot.selectedThreadId = nextSelectedThreadId;
+      resolvePendingThreadCreate(nextSelectedThreadId);
+      if (pendingSendAfterThreadCreate && nextSelectedThreadId === event.thread.id && event.thread.messages.length === 0) {
         pendingSendAfterThreadCreate = false;
         flushComposer(event.thread.id);
       }
@@ -451,6 +454,42 @@ function handleServerEvent(event: ServerEvent) {
 function applySnapshot(snapshot: AppSnapshot) {
   state.snapshot = snapshot;
   updateConnectionState(snapshot.connection.state);
+}
+
+function mergeSnapshotWithPendingThread(snapshot: AppSnapshot) {
+  const nextSelectedThreadId = coercePendingThreadSelection(snapshot.selectedThreadId);
+  if (!pendingThreadCreate || nextSelectedThreadId !== pendingThreadCreate.tempId) {
+    return {
+      ...snapshot,
+      selectedThreadId: nextSelectedThreadId,
+    };
+  }
+
+  const tempThread = state.snapshot?.threads.find((thread) => thread.id === pendingThreadCreate?.tempId) ?? null;
+  if (!tempThread) {
+    return {
+      ...snapshot,
+      selectedThreadId: nextSelectedThreadId,
+    };
+  }
+
+  return {
+    ...snapshot,
+    selectedThreadId: nextSelectedThreadId,
+    threads: [tempThread, ...snapshot.threads.filter((thread) => thread.id !== tempThread.id)],
+  };
+}
+
+function coercePendingThreadSelection(selectedThreadId: string | null) {
+  if (
+    pendingThreadCreate &&
+    (!selectedThreadId ||
+      selectedThreadId === pendingThreadCreate.tempId ||
+      selectedThreadId === pendingThreadCreate.previousSelectedThreadId)
+  ) {
+    return pendingThreadCreate.tempId;
+  }
+  return selectedThreadId;
 }
 
 function upsertThread(nextThread: ThreadRecord) {
