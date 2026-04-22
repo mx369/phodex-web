@@ -510,8 +510,8 @@ const showBridgeLinkedWarning = computed(
 );
 const bridgeInstallCopy = computed(() =>
   installManifest.value?.command
-    ? "Run this short-lived install command on each machine you want to register. It downloads the bridge shell installer, writes the relay settings, and binds that bridge to your signed-in account."
-    : "Signed in. Minting a short-lived install command for this account…"
+    ? `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal to install the local bridge.`
+    : "Signed in. Preparing a secure install command…"
 );
 const bridgeInstallCopyLabel = computed(() => {
   switch (installCommandCopyState.value) {
@@ -751,8 +751,8 @@ const homeStatusCopy = computed(() => {
       return "The relay is still rehydrating thread state from the desktop side.";
     case "disconnected":
       return installManifest.value?.command
-        ? "Your phone is signed in, but this account does not have an active Mac bridge yet. Run the account-bound install command below on one or more machines."
-        : "Your phone is signed in. The relay is minting an account-bound install command for this session.";
+        ? "Your phone is signed in, but this account does not have an active Mac bridge yet. Run the account-bound install command below in Terminal."
+        : "Your phone is signed in. The relay is preparing an account-bound install command for this session.";
     default:
       return "Sign in first, then install the local bridge from the command generated for your account.";
   }
@@ -2981,20 +2981,39 @@ function handleScrollToLatest() {
                           </div>
                         </div>
                         <p class="home-empty-state__copy">{{ homeStatusCopy }}</p>
-                        <div v-if="showBridgeInstallCard" class="home-empty-state__install-card">
-                          <span class="section-label">Bridge Install</span>
-                          <strong>Bind this Mac to {{ state.snapshot?.user.email }}</strong>
-                          <p>{{ bridgeInstallCopy }}</p>
-                          <div class="home-empty-state__install-actions">
-                            <div class="onboarding-command-card onboarding-command-card--inline">{{ bridgeInstallCommand }}</div>
+                        <div v-if="showBridgeInstallCard" class="home-empty-state__install-card home-empty-state__install-card--command">
+                          <div class="home-empty-state__install-header">
+                            <div class="home-empty-state__install-heading">
+                              <span class="section-label">Bridge Install</span>
+                              <strong>Install bridge for this account</strong>
+                              <p>{{ bridgeInstallCopy }}</p>
+                            </div>
                             <button
-                              class="icon-button icon-button--ghost home-empty-state__install-copy"
+                              class="ghost-cta ghost-cta--compact home-empty-state__install-copy"
+                              :class="{
+                                'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
+                                'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
+                              }"
                               type="button"
                               :disabled="!installManifest?.command"
                               @click="copyInstallCommand"
                             >
                               {{ bridgeInstallCopyLabel }}
                             </button>
+                          </div>
+                          <div class="home-empty-state__install-code-shell">
+                            <div class="home-empty-state__install-code-top">
+                              <span class="section-label">Shell</span>
+                              <span class="home-empty-state__install-code-hint">Run in Terminal</span>
+                            </div>
+                            <pre
+                              class="home-empty-state__install-code"
+                              :class="{ 'home-empty-state__install-code--pending': !installManifest?.command }"
+                            ><code>{{ bridgeInstallCommand }}</code></pre>
+                          </div>
+                          <div class="home-empty-state__install-meta">
+                            <span>Short-lived secure command</span>
+                            <span>Paste it into the machine terminal you want to connect</span>
                           </div>
                         </div>
                         <div v-else-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
