@@ -22,7 +22,9 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 
 - If another repo document conflicts with this file, follow this file.
 - Use current code and current behavior as the baseline. Do not rely on stale plans or memory.
+- When the user asks to add or revise standing AI rules, first condense them into the smallest durable, non-redundant version before writing them into repo docs.
 - Prefer the smallest, simplest change with the smallest diff that actually solves the task.
+  Smallest diff means narrow scope and normal readable code, not code golf, one-letter names, or collapsing code into one line.
 - If a task changes architecture, commands, ownership, page truth, or acceptance flow, update the relevant AI docs in the same commit.
 - Do not bypass existing security or deployment boundaries unless the user explicitly asks.
 - Commit each intentional change separately.
