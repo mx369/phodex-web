@@ -782,6 +782,12 @@ async function handleMessageSend(user: PersistedUser, event: Extract<ClientEvent
 }
 
 async function handleDraftResume(user: PersistedUser, threadId: string, draftId: string) {
+  const thread = threadCache.get(threadId);
+  if (thread?.state === "running") {
+    sendToast(user.profile.id, "info", "This draft will be ready after the current run finishes.");
+    return;
+  }
+
   const local = ensureThreadLocal(threadId);
   const draftIndex = local.queuedDrafts.findIndex((draft) => draft.id === draftId);
   if (draftIndex === -1) {
@@ -789,7 +795,6 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
   }
 
   const [draft] = local.queuedDrafts.splice(draftIndex, 1);
-  const thread = threadCache.get(threadId);
   if (thread) {
     thread.queuedDrafts = local.queuedDrafts;
     thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");

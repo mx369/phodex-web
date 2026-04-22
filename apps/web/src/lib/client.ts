@@ -391,9 +391,9 @@ function handleServerEvent(event: ServerEvent) {
       if (!state.snapshot) {
         return;
       }
-      upsertThread(event.thread);
-      reconcilePendingRunFeedback(event.thread.id);
       const nextSelectedThreadId = coercePendingThreadSelection(event.selectedThreadId);
+      upsertThread(event.thread, nextSelectedThreadId);
+      reconcilePendingRunFeedback(event.thread.id);
       state.snapshot.selectedThreadId = nextSelectedThreadId;
       resolvePendingThreadCreate(nextSelectedThreadId);
       if (pendingSendAfterThreadCreate && nextSelectedThreadId === event.thread.id && event.thread.messages.length === 0) {
@@ -458,10 +458,12 @@ function applySnapshot(snapshot: AppSnapshot) {
 
 function mergeSnapshotWithPendingThread(snapshot: AppSnapshot) {
   const nextSelectedThreadId = coercePendingThreadSelection(snapshot.selectedThreadId);
+  const nextThreads = snapshot.threads.map((thread) => stabilizeIncomingThread(thread, nextSelectedThreadId));
   if (!pendingThreadCreate || nextSelectedThreadId !== pendingThreadCreate.tempId) {
     return {
       ...snapshot,
       selectedThreadId: nextSelectedThreadId,
+      threads: nextThreads,
     };
   }
 
@@ -470,13 +472,14 @@ function mergeSnapshotWithPendingThread(snapshot: AppSnapshot) {
     return {
       ...snapshot,
       selectedThreadId: nextSelectedThreadId,
+      threads: nextThreads,
     };
   }
 
   return {
     ...snapshot,
     selectedThreadId: nextSelectedThreadId,
-    threads: [tempThread, ...snapshot.threads.filter((thread) => thread.id !== tempThread.id)],
+    threads: [tempThread, ...nextThreads.filter((thread) => thread.id !== tempThread.id)],
   };
 }
 
@@ -492,16 +495,38 @@ function coercePendingThreadSelection(selectedThreadId: string | null) {
   return selectedThreadId;
 }
 
-function upsertThread(nextThread: ThreadRecord) {
+function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
+  const existing = state.snapshot?.threads.find((thread) => thread.id === nextThread.id) ?? null;
+  if (!existing) {
+    return nextThread;
+  }
+
+  const shouldPreserveSelectedMessages =
+    nextThread.id === selectedThreadId &&
+    nextThread.messages.length === 0 &&
+    existing.messages.length > 0;
+
+  if (!shouldPreserveSelectedMessages) {
+    return nextThread;
+  }
+
+  return {
+    ...nextThread,
+    messages: existing.messages,
+  };
+}
+
+function upsertThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
   if (!state.snapshot) {
     return;
   }
-  const index = state.snapshot.threads.findIndex((thread) => thread.id === nextThread.id);
+  const stableThread = stabilizeIncomingThread(nextThread, selectedThreadId);
+  const index = state.snapshot.threads.findIndex((thread) => thread.id === stableThread.id);
   if (index === -1) {
-    state.snapshot.threads.unshift(nextThread);
+    state.snapshot.threads.unshift(stableThread);
     return;
   }
-  state.snapshot.threads[index] = nextThread;
+  state.snapshot.threads[index] = stableThread;
 }
 
 function updateConnectionState(next: AppSnapshot["connection"]["state"]) {

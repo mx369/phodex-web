@@ -297,6 +297,8 @@ const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
 
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
+let lastConversationScrollTop = 0;
+let ignoreManualAutoScrollUntil = 0;
 let installCommandCopyTimer: number | null = null;
 const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
@@ -866,7 +868,16 @@ const pendingRunStatus = computed(() => {
   }
   return null;
 });
-const showConversationContent = computed(() => Boolean(currentThread.value?.messages.length || currentPendingRunFeedback.value));
+const showConversationContent = computed(
+  () =>
+    Boolean(
+      currentThread.value &&
+        (currentThread.value.messages.length ||
+          currentPendingRunFeedback.value ||
+          currentThread.value.state === "running" ||
+          currentThread.value.state === "queued")
+    )
+);
 const showTurnStarterRail = computed(
   () =>
     Boolean(
@@ -1074,30 +1085,43 @@ watch(
   { flush: "post" }
 );
 
+function observeConversationResizeTarget(nextEl: HTMLElement | null, previousEl: HTMLElement | null) {
+  if (previousEl && previousEl !== nextEl) {
+    conversationResizeObserver?.unobserve(previousEl);
+  }
+
+  if (!nextEl || typeof ResizeObserver === "undefined") {
+    return;
+  }
+
+  if (!conversationResizeObserver) {
+    conversationResizeObserver = new ResizeObserver(() => {
+      if (autoScrollMode.value === "followBottom") {
+        // Keep the CTA hidden while runtime chrome or message growth is auto-followed.
+        isScrolledToBottom.value = true;
+        queueFollowBottomScroll();
+        return;
+      }
+      isScrolledToBottom.value = isConversationPinnedToBottom();
+    });
+  }
+
+  conversationResizeObserver.observe(nextEl);
+}
+
 watch(
   () => conversationInnerEl.value,
   (nextEl, previousEl) => {
-    if (previousEl) {
-      conversationResizeObserver?.unobserve(previousEl);
-    }
+    observeConversationResizeTarget(nextEl, previousEl);
+  },
+  { flush: "post" }
+);
 
-    if (!nextEl || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    if (!conversationResizeObserver) {
-      conversationResizeObserver = new ResizeObserver(() => {
-        if (autoScrollMode.value === "followBottom") {
-          // Keep the CTA hidden while streaming/resize updates are auto-followed.
-          isScrolledToBottom.value = true;
-          queueFollowBottomScroll();
-          return;
-        }
-        isScrolledToBottom.value = isConversationPinnedToBottom();
-      });
-    }
-
-    conversationResizeObserver.observe(nextEl);
+watch(
+  () => conversationScrollEl.value,
+  (nextEl, previousEl) => {
+    observeConversationResizeTarget(nextEl, previousEl);
+    lastConversationScrollTop = nextEl?.scrollTop ?? 0;
   },
   { flush: "post" }
 );
@@ -2093,20 +2117,39 @@ function clearFollowBottomFrame() {
   }
 }
 
+function markProgrammaticConversationScroll() {
+  ignoreManualAutoScrollUntil = window.performance.now() + 180;
+}
+
 function scrollConversationToBottom() {
   const scrollEl = conversationScrollEl.value;
   if (!scrollEl) {
     return;
   }
   const targetTop = maxConversationScrollTop(scrollEl);
+  markProgrammaticConversationScroll();
   scrollEl.scrollTop = targetTop;
+  lastConversationScrollTop = targetTop;
   isScrolledToBottom.value = true;
 }
 
 function handleConversationScroll() {
+  const scrollEl = conversationScrollEl.value;
+  if (!scrollEl) {
+    return;
+  }
+  const nextTop = scrollEl.scrollTop;
+  const movingUp = nextTop + 1 < lastConversationScrollTop;
+  lastConversationScrollTop = nextTop;
   const pinnedToBottom = isConversationPinnedToBottom();
   isScrolledToBottom.value = pinnedToBottom;
-  autoScrollMode.value = pinnedToBottom ? "followBottom" : "manual";
+  if (pinnedToBottom) {
+    autoScrollMode.value = "followBottom";
+    return;
+  }
+  if (autoScrollMode.value === "followBottom" && movingUp && window.performance.now() >= ignoreManualAutoScrollUntil) {
+    autoScrollMode.value = "manual";
+  }
 }
 
 function handleScrollToLatest() {
@@ -3106,13 +3149,16 @@ function handleScrollToLatest() {
                               <span>{{ formatRelativeTime(draft.createdAt) }}</span>
                             </div>
                             <div class="queued-draft__actions">
+                              <span v-if="currentThread?.state === 'running'" class="queued-draft__status">Waiting</span>
                               <button
+                                v-else
                                 class="ghost-cta ghost-cta--compact"
+                                type="button"
                                 @click="client.resumeDraft(currentThread.id, draft.id)"
                               >
                                 Resume
                               </button>
-                              <button class="queued-draft__remove" @click="client.removeDraft(currentThread.id, draft.id)">
+                              <button class="queued-draft__remove" type="button" @click="client.removeDraft(currentThread.id, draft.id)">
                                 Remove
                               </button>
                             </div>

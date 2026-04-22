@@ -32,11 +32,11 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Drawer worktree create | Real | Creates a real git worktree under `~/.codex/worktrees/<repo>/...` before starting the thread |
 | Drawer custom project create | Real | Accepts either a folder name or a full path for the new local chat cwd |
 | Streaming assistant reply | Real | Consumes Codex app-server streaming deltas |
-| Turn auto-scroll and scroll-to-latest | Real | Uses internal shell scrolling with a latest-jump button when the user leaves bottom |
+| Turn auto-scroll and scroll-to-latest | Real | Uses internal shell scrolling, follows bottom across message growth and composer/work-state height changes, and only shows the latest-jump button after the user intentionally leaves bottom |
 | Stop run | Real | Sends turn interrupt to local Codex |
 | Runtime speed selection | Real | Exposes `Normal / Fast`; `Fast` falls back when the bridge cannot accept the fast tier field |
 | Queue while running | Real | Stores the draft locally and preserves its runtime settings |
-| Resume queued draft | Real | Replays the queued text with its saved runtime settings |
+| Resume queued draft | Real | Replays the queued text with its saved runtime settings once the active run has settled; while a run is still active, queued drafts stay in a waiting state and only expose removal |
 | Rich execution activity surfaces | Real | Shows structured command, file, tool, image, and subagent cards; history also backfills missing diff/file rows |
 | Project browser and diff inspector | Real | The current thread toolbar can open a lazy project file browser or working-tree diff sheet; `message.fileChanges` rows deep-link into filtered diff for that file |
 | Pinned plan accessory | Real | Latest `/plan` summary can pin above the composer |
