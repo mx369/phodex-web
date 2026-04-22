@@ -25,6 +25,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - User-facing local install/start command now comes from `/install/manifest.json` and resolves to `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...`.
 - The public install script should prefer an existing host `bun` binary even if the current non-interactive shell PATH is incomplete. Real install verification should cover at least one environment where `bun` is absent from PATH but still available at `~/.bun/bin/bun`.
 - If `bun` cannot be found in PATH or the common host fallback locations, the installer should fail fast and print the official Bun install command `curl -fsSL https://bun.com/install | bash` instead of auto-installing it.
+- Installer verification should also capture which Codex permission mode was chosen: reused existing `CODEX_WS_URL` only, or managed background Codex fallback with a warning about separate macOS permissions.
 - Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
 ## Verification Expectations
@@ -36,6 +37,8 @@ Read this file when you need to verify a change or continue from prior evidence.
   Check that the intended internal region scrolls, fixed footer actions stay visible, and critical inputs do not fall below the viewport.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token can mint multiple per-device bridge tokens until expiry, and unauthenticated health checks do not expose another account's bridge state.
+- For bridge-install UX changes around Codex permissions, verify the shell output in both cases you can reproduce:
+  when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, and when the installer must fall back to managed background Codex.
 - For multi-device bridge changes, prefer proving one local install plus one CNB install (or another genuinely separate second machine) against the same signed-in account.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.

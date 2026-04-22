@@ -191,6 +191,13 @@ void ensureCodexBridge();
 
 console.log(`[phodex-bridge] Local bridge starting for ${PUBLIC_RELAY_URL}`);
 console.log(`[phodex-bridge] Codex target ${CODEX_WS_URL}`);
+if (MANAGE_CODEX) {
+  console.warn(
+    `[phodex-bridge] Managed Codex fallback is enabled. If no app-server is already running at ${CODEX_WS_URL}, the bridge will launch a background Codex process that may need its own macOS file or automation permissions.`
+  );
+} else {
+  console.log(`[phodex-bridge] Reusing external Codex app-server ${CODEX_WS_URL} with managed fallback disabled.`);
+}
 if (legacyOtpCodesPruned) {
   schedulePersist();
 }
@@ -873,6 +880,7 @@ async function ensureCodexBridge() {
   setCodexConnectionState("connecting");
 
   if (await probeCodexReady()) {
+    console.log(`[phodex] Reusing existing Codex app-server at ${CODEX_WS_URL}.`);
     connectCodexSocket();
     return;
   }

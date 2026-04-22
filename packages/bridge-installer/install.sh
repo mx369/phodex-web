@@ -97,6 +97,21 @@ normalize_origin() {
   printf '%s\n' "$value"
 }
 
+codex_ready_url() {
+  local ws_url=${1%/}
+  ws_url="${ws_url/#ws:\/\//http://}"
+  ws_url="${ws_url/#wss:\/\//https://}"
+  printf '%s/readyz\n' "$ws_url"
+}
+
+probe_existing_codex_ready() {
+  local ws_url=$1
+  local ready_url
+  ready_url="$(codex_ready_url "$ws_url")"
+  http_request --silent --show-error --location --max-time 1.5 "$ready_url"
+  [[ $RESPONSE_STATUS == 200 ]]
+}
+
 choose_ca_bundle() {
   local relay_origin=$1
   local host
@@ -332,6 +347,7 @@ wait_for_bridge_health() {
 }
 
 DEFAULT_INSTALL_DIR="${HOME}/.phodex-bridge"
+DEFAULT_CODEX_WS_URL="ws://127.0.0.1:8765"
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 RELAY_ORIGIN=""
 SETUP_TOKEN=""
@@ -339,6 +355,7 @@ BRIDGE_SECRET=""
 MAC_LABEL="$(hostname)"
 CODEX_BIN=""
 CODEX_WS_URL=""
+DETECTED_EXISTING_CODEX_WS_URL=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -433,9 +450,25 @@ STATE_FILE="${INSTALL_DIR}/data/bridge-state.json"
 
 resolve_bun
 
+if [[ -z $CODEX_WS_URL ]] && probe_existing_codex_ready "$DEFAULT_CODEX_WS_URL"; then
+  DETECTED_EXISTING_CODEX_WS_URL="$DEFAULT_CODEX_WS_URL"
+fi
+
 mkdir -p "$INSTALL_DIR/current" "$INSTALL_DIR/logs" "$INSTALL_DIR/data"
 
 info "Using bun at $(tildify "$BUN_BIN")"
+if [[ -n $CODEX_WS_URL ]]; then
+  info "Using external Codex app-server at ${CODEX_WS_URL}"
+elif [[ -n $DETECTED_EXISTING_CODEX_WS_URL ]]; then
+  info_bold "Detected a running Codex app-server at ${DETECTED_EXISTING_CODEX_WS_URL}."
+  info "This install keeps managed fallback enabled, so the bridge can still launch a background Codex process later if that server is unavailable."
+  info "If you want to pin this install to a Codex app-server that was started by the foreground Codex app, keep Codex.app running and reinstall with:"
+  info "  --codex-ws-url ${DETECTED_EXISTING_CODEX_WS_URL}"
+else
+  info_bold "No running Codex app-server detected."
+  info "The bridge will manage a background Codex process for this install."
+  info "On macOS, that background process may need its own Files & Folders / Full Disk Access / Automation approvals."
+fi
 info "Downloading bridge runtime..."
 curl --fail --location --progress-bar --output "$RUNTIME_FILE" "$BRIDGE_RUNTIME_URL" || error "Failed to download bridge runtime"
 
@@ -455,3 +488,9 @@ info "Runtime: $(tildify "$RUNTIME_FILE")"
 info "Env: $(tildify "$ENV_FILE")"
 info "Log: $(tildify "$LOG_FILE")"
 info_bold "PID: ${BRIDGE_PID}"
+if [[ -z $CODEX_WS_URL ]]; then
+  info_bold "Permission note:"
+  info "If web chats later show 'Operation not permitted' or similar file-access errors, approve any macOS permission prompts for Codex or bun."
+  info "For the closest match with a foreground Codex app session, keep Codex.app running and reinstall with:"
+  info "  --codex-ws-url ${DETECTED_EXISTING_CODEX_WS_URL:-$DEFAULT_CODEX_WS_URL}"
+fi
