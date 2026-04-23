@@ -61,11 +61,15 @@ type InstallManifest = {
   relayOrigin: string;
   relayLabel: string;
   installScriptUrl: string;
+  bridgeInstallerUrl?: string;
   bridgeRuntimeUrl: string;
   setupToken?: string;
   setupTokenExpiresAt?: string;
   command: string;
+  windowsCommand: string;
 };
+
+type InstallCommandPlatform = "shell" | "powershell";
 
 type MessageInlineSegment = {
   type: "text" | "code";
@@ -304,6 +308,7 @@ let installCommandCopyTimer: number | null = null;
 const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
 const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
+const installCommandPlatform = ref<InstallCommandPlatform>("shell");
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
 const projectTreeError = ref("");
@@ -507,22 +512,35 @@ const isAuthenticated = computed(() => Boolean(state.session && state.snapshot))
 const onboardingBridgeCommand = computed(
   () => "Sign in with email first. The app will mint a short-lived install command that only this account can claim."
 );
-const bridgeInstallCommand = computed(() => installManifest.value?.command ?? "Generating account-bound install command…");
+const bridgeInstallShellLabel = computed(() => (installCommandPlatform.value === "powershell" ? "PowerShell" : "Shell"));
+const bridgeInstallRunHint = computed(() =>
+  installCommandPlatform.value === "powershell" ? "Run in PowerShell" : "Run in Terminal"
+);
+const bridgeInstallCommand = computed(() => {
+  const manifest = installManifest.value;
+  if (!manifest) {
+    return "Generating account-bound install command…";
+  }
+  if (installCommandPlatform.value === "powershell") {
+    return manifest.windowsCommand?.trim() || manifest.command;
+  }
+  return manifest.command;
+});
 const showBridgeInstallCard = computed(() => isAuthenticated.value);
 const showBridgeLinkedWarning = computed(
   () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
 );
 const bridgeInstallTitle = computed(() => {
   if (state.snapshot?.connection.bridgeOnline) {
-    return "Add another Mac";
+    return "Add another computer";
   }
   return "Install bridge for this account";
 });
 const bridgeInstallCopy = computed(() =>
   installManifest.value?.command
     ? state.snapshot?.connection.bridgeOnline
-      ? `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal on another machine to add one more trusted Mac.`
-      : `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in Terminal to install the local bridge.`
+      ? `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in ${bridgeInstallRunHint.value === "Run in PowerShell" ? "PowerShell" : "Terminal"} on another machine to add one more trusted device.`
+      : `Generated for ${state.snapshot?.user.email ?? "this account"}. Run it in ${bridgeInstallRunHint.value === "Run in PowerShell" ? "PowerShell" : "Terminal"} to install the local bridge.`
     : "Signed in. Preparing a secure install command…"
 );
 const bridgeInstallCopyLabel = computed(() => {
@@ -1250,7 +1268,7 @@ function resetInstallCommandCopyStateLater() {
 }
 
 async function copyInstallCommand() {
-  const command = installManifest.value?.command?.trim() ?? "";
+  const command = bridgeInstallCommand.value.trim();
   if (!command) {
     return;
   }
@@ -3206,18 +3224,42 @@ function handleScrollToLatest() {
                           </div>
                           <div class="home-empty-state__install-code-shell">
                             <div class="home-empty-state__install-code-top">
-                              <span class="section-label">Shell</span>
-                              <span class="home-empty-state__install-code-hint">Run in Terminal</span>
+                              <div class="home-empty-state__install-code-heading">
+                                <span class="section-label">{{ bridgeInstallShellLabel }}</span>
+                                <span class="home-empty-state__install-code-hint">{{ bridgeInstallRunHint }}</span>
+                              </div>
+                              <div class="home-empty-state__install-platforms" role="tablist" aria-label="Install command platform">
+                                <button
+                                  class="home-empty-state__install-platform"
+                                  :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'shell' }"
+                                  type="button"
+                                  role="tab"
+                                  :aria-selected="installCommandPlatform === 'shell'"
+                                  @click="installCommandPlatform = 'shell'"
+                                >
+                                  Mac / Linux
+                                </button>
+                                <button
+                                  class="home-empty-state__install-platform"
+                                  :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'powershell' }"
+                                  type="button"
+                                  role="tab"
+                                  :aria-selected="installCommandPlatform === 'powershell'"
+                                  @click="installCommandPlatform = 'powershell'"
+                                >
+                                  Windows
+                                </button>
+                              </div>
                             </div>
                             <pre
                               class="home-empty-state__install-code"
-                              :class="{ 'home-empty-state__install-code--pending': !installManifest?.command }"
+                              :class="{ 'home-empty-state__install-code--pending': !bridgeInstallCommand.trim() }"
                             ><code>{{ bridgeInstallCommand }}</code></pre>
                           </div>
                           <div class="home-empty-state__install-meta">
                             <span>Short-lived secure command</span>
-                            <span>Paste it into the machine terminal you want to connect</span>
-                            <span v-if="state.snapshot?.connection.bridgeOnline">Current Mac stays signed in</span>
+                            <span>{{ installCommandPlatform === "powershell" ? "Paste it into PowerShell on the machine you want to connect" : "Paste it into the machine terminal you want to connect" }}</span>
+                            <span v-if="state.snapshot?.connection.bridgeOnline">Current device stays signed in</span>
                           </div>
                         </div>
                         <div v-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">

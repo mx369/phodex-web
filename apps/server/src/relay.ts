@@ -113,6 +113,7 @@ const distDir = resolve(appRoot, "apps/web/dist");
 const bridgeRuntimeSourcePath = resolve(serverRoot, "src/index.ts");
 const bridgeInstallerPackageDir = resolve(appRoot, "packages/bridge-installer");
 const bridgeInstallScriptSourcePath = resolve(bridgeInstallerPackageDir, "install.sh");
+const bridgeInstallerSourcePath = resolve(bridgeInstallerPackageDir, "bin/phodex-bridge.js");
 const bridgeInstallerPackageJsonPath = resolve(bridgeInstallerPackageDir, "package.json");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
@@ -271,6 +272,14 @@ const server = Bun.serve<SocketData>({
       req.method === "GET"
     ) {
       return withCors(req, serveInstallSource(bridgeRuntimeSourcePath, "text/plain; charset=utf-8"));
+    }
+
+    if (
+      (url.pathname === "/install/bridge-installer.js" ||
+        /^\/install\/bridge-installer-[A-Za-z0-9.-]+\.js$/.test(url.pathname)) &&
+      req.method === "GET"
+    ) {
+      return withCors(req, serveInstallSource(bridgeInstallerSourcePath, "text/javascript; charset=utf-8"));
     }
 
     if (url.pathname === "/api/bootstrap" && req.method === "GET") {
@@ -1485,17 +1494,21 @@ async function handleInstallManifest(req: Request) {
     const version = computeInstallAssetsVersion();
     const origin = buildOrigin(req);
     const installScriptUrl = `${origin}/install`;
+    const bridgeInstallerUrl = `${origin}/install/bridge-installer-${version}.js`;
     const bridgeRuntimeUrl = `${origin}/install/bridge-runtime-${version}.ts`;
     const { token, expiresAt } = issueInstallSetupToken(session.userId);
+    const shellCommand = `curl -fsSL "${installScriptUrl}" | bash -s -- --relay "${origin}" --token "${token}"`;
     return json({
       version,
       relayOrigin: origin,
       relayLabel: RELAY_LABEL,
       installScriptUrl,
+      bridgeInstallerUrl,
       bridgeRuntimeUrl,
       setupToken: token,
       setupTokenExpiresAt: expiresAt,
-      command: `curl -fsSL "${installScriptUrl}" | bash -s -- --relay "${origin}" --token "${token}"`,
+      command: shellCommand,
+      windowsCommand: buildWindowsInstallCommand(bridgeInstallerUrl, origin, token),
     });
   } catch (error) {
     return json({ ok: false, error: `Install manifest failed: ${readErrorMessage(error)}` }, 500);
@@ -1573,9 +1586,28 @@ function computeInstallAssetsVersion() {
     statSync(currentFile).mtimeMs,
     statSync(bridgeRuntimeSourcePath).mtimeMs,
     statSync(bridgeInstallerPackageJsonPath).mtimeMs,
+    statSync(bridgeInstallerSourcePath).mtimeMs,
     statSync(bridgeInstallScriptSourcePath).mtimeMs
   );
   return `${packageVersion}-${Math.floor(lastSourceEdit).toString(36)}`;
+}
+
+function buildWindowsInstallCommand(bridgeInstallerUrl: string, relayOrigin: string, setupToken: string) {
+  const bunInstallCommand = `powershell -c 'irm bun.sh/install.ps1 | iex'`;
+  return (
+    `powershell -NoProfile -ExecutionPolicy Bypass -Command ` +
+    `"if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { ` +
+    `Write-Error 'bun is required to run phodex-bridge. Install it first with the official command: ${escapePowerShellSingleQuoted(bunInstallCommand)}'; ` +
+    `exit 1 ` +
+    `}; ` +
+    `$installer = Join-Path $env:TEMP 'phodex-bridge-installer.js'; ` +
+    `Invoke-WebRequest -UseBasicParsing '${escapePowerShellSingleQuoted(bridgeInstallerUrl)}' -OutFile $installer; ` +
+    `bun $installer install --relay '${escapePowerShellSingleQuoted(relayOrigin)}' --token '${escapePowerShellSingleQuoted(setupToken)}'"`
+  );
+}
+
+function escapePowerShellSingleQuoted(value: string) {
+  return value.replaceAll("'", "''");
 }
 
 function issueInstallSetupToken(userId: string) {

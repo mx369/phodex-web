@@ -23,8 +23,8 @@ This file is the UI and flow reference. Read it when you need page-level status 
 
 | Flow | Status | Notes |
 | --- | --- | --- |
-| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; the real `curl -fsSL .../install | bash` bridge installer command is minted only after login, is tied to the signed-in account, and remains available from the post-login empty-home install card so additional Macs can be linked later with a refreshed command |
-| Connected Home -> add another Mac | Real | Home keeps the install card visible after a bridge connects, can mint a fresh command with `New command`, shows one card per Mac even after repeated reinstall attempts on the same host, and lets the user tap a second ready Mac to make it active while leaving `linking` or offline cards disabled |
+| Onboarding -> Email OTP | Real | Fresh unauthenticated users move from onboarding into Email OTP; the real account-bound bridge installer command is minted only after login, now offers `Mac / Linux` and `Windows` variants, and remains available from the post-login empty-home install card so additional computers can be linked later with a refreshed command |
+| Connected Home -> add another computer | Real | Home keeps the install card visible after a bridge connects, can mint a fresh command with `New command`, lets the user switch between `Mac / Linux` shell and `Windows` PowerShell installers, shows one card per machine even after repeated reinstall attempts on the same host, and lets the user tap a second ready device to make it active while leaving `linking` or offline cards disabled |
 | Email OTP login | Real | Uses `/api/auth/request-code` and `/api/auth/verify-code`; request-code requires configured live email delivery and no longer exposes any local bypass path |
 | Relay bootstrap | Real | Snapshot load plus WSS session sync |
 | New chat -> first send | Real | Local pending thread state appears immediately, then resolves to the real Codex thread |

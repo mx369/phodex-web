@@ -2311,11 +2311,55 @@ button {
   gap: 12px;
 }
 
+.home-empty-state__install-code-heading {
+  display: grid;
+  gap: 4px;
+}
+
 .home-empty-state__install-code-hint {
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-weight: 600;
   line-height: 1.2;
+}
+
+.home-empty-state__install-platforms {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.home-empty-state__install-platform {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.home-empty-state__install-platform:hover {
+  transform: translateY(-1px);
+  border-color: rgba(92, 109, 255, 0.18);
+}
+
+.home-empty-state__install-platform--active {
+  border-color: rgba(92, 109, 255, 0.18);
+  background: rgba(242, 245, 255, 0.96);
+  color: #4958d2;
+  box-shadow: 0 10px 20px rgba(92, 109, 255, 0.08);
 }
 
 .home-empty-state__install-code {

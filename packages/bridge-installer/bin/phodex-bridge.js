@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -12,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, hostname } from "node:os";
-import { resolve } from "node:path";
+import { delimiter, resolve } from "node:path";
 
 const DEFAULT_INSTALL_DIR = resolve(homedir(), ".phodex-bridge");
 const DEFAULT_PID_FILE = "bridge.pid";
@@ -284,6 +286,7 @@ function resolveBunBinary() {
   candidates.push(
     process.execPath,
     resolve(homedir(), ".bun", "bin", "bun"),
+    resolve(homedir(), ".bun", "bin", "bun.exe"),
     "/opt/homebrew/bin/bun",
     "/usr/local/bin/bun",
     "/usr/bin/bun",
@@ -296,7 +299,7 @@ function resolveBunBinary() {
     }
   }
 
-  throw new Error("bun is required to run phodex-bridge. Install it first with the official command: curl -fsSL https://bun.com/install | bash");
+  throw new Error(readMissingBunMessage());
 }
 
 async function resolveInstallSetup(relayOrigin, setupToken, explicitSecret) {
@@ -372,27 +375,20 @@ function startInstalledBridge(installDir, bunBin) {
     return pid;
   }
 
-  const launched = spawnSync(
-      "/bin/sh",
-      [
-        "-lc",
-        'nohup "$1" >> "$2" 2>&1 < /dev/null & echo $!',
-        "sh",
-        runtimeFile,
-        logFile,
-      ],
-    {
-      cwd: installDir,
-      env,
-      encoding: "utf8",
-    }
-  );
+  const stdoutFd = openSync(logFile, "a");
+  const stderrFd = openSync(logFile, "a");
+  const launched = spawn(bunBin, [runtimeFile], {
+    cwd: installDir,
+    env,
+    detached: true,
+    stdio: ["ignore", stdoutFd, stderrFd],
+    windowsHide: true,
+  });
+  launched.unref();
+  closeSync(stdoutFd);
+  closeSync(stderrFd);
 
-  if (launched.status !== 0) {
-    throw new Error((launched.stderr || launched.stdout || "Failed to start local bridge.").trim());
-  }
-
-  const pid = Number.parseInt((launched.stdout || "").trim(), 10);
+  const pid = launched.pid;
   if (!Number.isFinite(pid)) {
     throw new Error("Failed to capture local bridge PID.");
   }
@@ -412,9 +408,9 @@ function sanitizeBridgeEnv(env, runtimeFile) {
 
   if (typeof next.PATH === "string" && next.PATH) {
     next.PATH = next.PATH
-      .split(":")
+      .split(delimiter)
       .filter((segment) => segment && !segment.includes("/tmp/bunx-") && !segment.includes("/private/tmp/bunx-"))
-      .join(":");
+      .join(delimiter);
   }
 
   next._ = runtimeFile;
@@ -702,4 +698,10 @@ function readErrorMessage(error) {
     return error.message;
   }
   return String(error);
+}
+
+function readMissingBunMessage() {
+  return process.platform === "win32"
+    ? 'bun is required to run phodex-bridge. Install it first with the official command: powershell -c "irm bun.sh/install.ps1 | iex"'
+    : "bun is required to run phodex-bridge. Install it first with the official command: curl -fsSL https://bun.com/install | bash";
 }

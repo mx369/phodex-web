@@ -22,6 +22,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `GET /install/manifest.json`: authenticated bridge-install manifest; only available after login and used to mint an account-bound short-lived setup token.
 - `POST /install/claim`: exchange a short-lived setup token for the bundled bridge runtime URL plus a long-lived per-device bridge token. The same setup token may be claimed multiple times until expiry so one signed-in account can register multiple machines from the same install command.
 - `GET /install`: latest shell installer alias.
+- `GET /install/bridge-installer.js`: latest Bun-based bridge installer alias used by the Windows PowerShell flow.
 - `GET /install/bridge-runtime.ts`: latest local bridge runtime alias.
 - `GET /relay?token=...`: WSS upgrade endpoint.
 - `GET /bridge?token=...`: local bridge WSS upgrade endpoint.
@@ -46,10 +47,12 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
-- The public relay now publishes a Bun-style `curl -fsSL ... | bash` installer script and bundled bridge runtime so the authenticated shell can point Mac/Linux users at a single local install/start command.
+- The public relay now publishes both a Bun-style `curl -fsSL ... | bash` installer for Mac/Linux and a Bun-based `bridge-installer.js` entrypoint for Windows PowerShell, plus the bundled bridge runtime.
 - The install manifest is no longer public. It is fetched only after login, issues a short-lived reusable setup token for that account, and the installer swaps that token through `/install/claim` before writing local bridge config.
 - The shell installer should be self-contained for normal Mac/Linux targets: it should look for an existing host `bun` binary in `PATH` plus common install locations such as `~/.bun/bin/bun`, then use that Bun runtime to launch the downloaded `bridge-runtime.ts`.
+- The Windows installer command should stay self-contained as well: it downloads the Bun-based installer entrypoint, checks for `bun`, and launches the same bridge runtime without requiring a separate shell script path.
 - If `bun` is still missing after those checks, the installer should stop and print the official Bun install command `curl -fsSL https://bun.com/install | bash` instead of attempting an automatic install.
+- On Windows, the missing-`bun` hint should point to the official PowerShell install command `powershell -c "irm bun.sh/install.ps1 | iex"`.
 - The shell installer auto-detects a local Codex app-server at `ws://127.0.0.1:8765` during install. When found, it writes `PHODEX_CODEX_WS_URL` plus `PHODEX_MANAGE_CODEX=false` so subsequent bridge launches stay pinned to the foreground Codex app behavior without asking the user for extra flags.
 - If no local Codex app-server is detected during install, the bridge runtime still probes `CODEX_WS_URL` first on each launch and otherwise falls back to launching its own background Codex process when `PHODEX_MANAGE_CODEX` is left enabled.
 - Bridge connections are account-bound but no longer single-device. Each logged-in user can retain multiple registered bridge devices, each device keeps its own bridge token and connection record, and the relay picks one active bridge for mirrored thread state plus command dispatch.
