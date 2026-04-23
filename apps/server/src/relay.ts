@@ -469,6 +469,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
         }
       }
       break;
+    case "bridge:select":
+      selectBridgeForUser(user, event.bridgeId);
+      break;
     case "thread:create":
       dispatchToBridge(user, event);
       break;
@@ -522,6 +525,35 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
     event,
   };
   bridgeSocket.send(JSON.stringify(command));
+  return true;
+}
+
+function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
+  if (!user.bridgeDevices[bridgeId]) {
+    sendToast(user.profile.id, "error", "That Mac is no longer registered to this account.");
+    return false;
+  }
+
+  if (!hasBridgeSocket(user.profile.id, bridgeId)) {
+    sendToast(user.profile.id, "error", "That Mac is offline right now.");
+    return false;
+  }
+
+  const previousBridgeId = getActiveBridgeId(user.profile.id);
+  if (previousBridgeId === bridgeId) {
+    sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" }, bridgeId);
+    broadcastPresence(user.profile.id);
+    return true;
+  }
+
+  activeBridgeIdsByUserId.set(user.profile.id, bridgeId);
+  getThreadMirror(user.profile.id).clear();
+  user.selectedThreadId = null;
+  user.banner = null;
+  schedulePersist();
+  broadcastSnapshot(user.profile.id);
+  broadcastPresence(user.profile.id);
+  sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" }, bridgeId);
   return true;
 }
 

@@ -42,6 +42,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - For bridge-install behavior changes around Codex permissions, verify both install outcomes you can reproduce:
   when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, and when the installer must fall back to managed background Codex.
 - For multi-device bridge changes, prefer proving one local install plus one CNB install (or another genuinely separate second machine) against the same signed-in account.
+- For Home registered-device interaction changes, capture a real mobile runtime showing all three cases: tapping the active online device, tapping a second online device to switch `activeBridgeId`, and tapping an offline saved device to confirm it stays inert.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
@@ -55,6 +56,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 
 - CDP screenshots: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/`
 - Latest multi-device pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/multi-device-e2e-20260423`
+- Latest Home device-card click pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/device-card-click-20260423`
 - Prior acceptance docs:
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance.md`
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance-runbook.md`

@@ -205,6 +205,13 @@ export function createAppClient() {
     pushToast("info", "Signed out.");
   }
 
+  function selectBridge(bridgeId: string) {
+    send({
+      type: "bridge:select",
+      bridgeId,
+    });
+  }
+
   function createThread(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
     if (pendingThreadCreate) {
       pushToast("info", "A new chat is already starting on your Mac.");
@@ -313,6 +320,7 @@ export function createAppClient() {
       requestCode,
       verifyCode,
       logout,
+      selectBridge,
       createThread,
       createThreadAndSend,
       selectThread,

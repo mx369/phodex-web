@@ -249,6 +249,7 @@ export interface VerifyCodeResponse {
 
 export type ClientEvent =
   | { type: "bootstrap" }
+  | { type: "bridge:select"; bridgeId: string }
   | { type: "thread:create"; projectLabel?: string; cwd?: string; mode?: ThreadCreateMode }
   | { type: "thread:select"; threadId: string }
   | { type: "thread:clearSelection" }

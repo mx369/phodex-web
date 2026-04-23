@@ -788,6 +788,10 @@ function isActiveBridgeDevice(device: BridgeDeviceSummary) {
   return state.snapshot?.activeBridgeId === device.id;
 }
 
+function canSelectBridgeDevice(device: BridgeDeviceSummary) {
+  return device.bridgeOnline;
+}
+
 function bridgeDeviceLabel(device: BridgeDeviceSummary) {
   return device.macLabel?.trim() || "Awaiting first check-in";
 }
@@ -818,6 +822,19 @@ function bridgeDeviceMeta(device: BridgeDeviceSummary) {
     details.push(`Seen ${formatRelativeTime(device.lastConnectedAt)}`);
   }
   return details.join(" · ");
+}
+
+function selectBridgeDevice(device: BridgeDeviceSummary) {
+  if (!canSelectBridgeDevice(device)) {
+    return;
+  }
+
+  if (isActiveBridgeDevice(device) && device.state === "connected") {
+    handleHomeSecondaryAction();
+    return;
+  }
+
+  client.selectBridge(device.id);
 }
 
 function repoNameFromPath(value: string | null | undefined) {
@@ -3082,7 +3099,15 @@ function handleScrollToLatest() {
                               class="home-empty-state__device-card"
                               :class="{
                                 'home-empty-state__device-card--active': isActiveBridgeDevice(device),
+                                'home-empty-state__device-card--selectable': canSelectBridgeDevice(device),
+                                'home-empty-state__device-card--disabled': !canSelectBridgeDevice(device),
                               }"
+                              :role="canSelectBridgeDevice(device) ? 'button' : undefined"
+                              :tabindex="canSelectBridgeDevice(device) ? 0 : undefined"
+                              :aria-disabled="!canSelectBridgeDevice(device)"
+                              @click="selectBridgeDevice(device)"
+                              @keydown.enter.prevent="selectBridgeDevice(device)"
+                              @keydown.space.prevent="selectBridgeDevice(device)"
                             >
                               <div class="home-empty-state__device-row">
                                 <span class="home-empty-state__trusted-icon">
