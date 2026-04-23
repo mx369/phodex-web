@@ -16,6 +16,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Installer setup-token exchange: `POST /install/claim`
 - Latest shell installer alias: `GET /install`
 - Latest bridge runtime alias: `GET /install/bridge-runtime.ts`
+- For CNB pushes from the Codex shell, prefer `"/Users/young/.codex/skills/cnb-dev-deploy/scripts/cnb-git.sh" push -u cnb HEAD`; raw `git push` may block on `git-credential-osxkeychain get` even when GUI clients can push successfully.
 
 ## Runtime Defaults
 
