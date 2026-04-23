@@ -789,7 +789,7 @@ function isActiveBridgeDevice(device: BridgeDeviceSummary) {
 }
 
 function canSelectBridgeDevice(device: BridgeDeviceSummary) {
-  return device.bridgeOnline;
+  return device.state === "connected";
 }
 
 function bridgeDeviceLabel(device: BridgeDeviceSummary) {

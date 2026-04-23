@@ -539,6 +539,14 @@ function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
     return false;
   }
 
+  const nextConnection = getBridgeConnection(user.profile.id, bridgeId);
+  if (nextConnection.state !== "connected") {
+    sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" }, bridgeId);
+    broadcastPresence(user.profile.id);
+    sendToast(user.profile.id, "info", "That Mac is still starting. Wait for it to finish connecting before switching.");
+    return false;
+  }
+
   const previousBridgeId = getActiveBridgeId(user.profile.id);
   if (previousBridgeId === bridgeId) {
     sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" }, bridgeId);
@@ -965,14 +973,23 @@ function listSortedBridgeIds(userId: string, candidateBridgeIds?: string[]) {
 
 function getActiveBridgeId(userId: string) {
   const activeBridgeId = activeBridgeIdsByUserId.get(userId) ?? "";
+  const bestOnlineBridgeId = pickBestBridgeId(userId, listOnlineBridgeIds(userId));
   if (activeBridgeId && hasBridgeSocket(userId, activeBridgeId)) {
+    if (bestOnlineBridgeId && bestOnlineBridgeId !== activeBridgeId) {
+      const activeConnection = getBridgeConnection(userId, activeBridgeId);
+      const bestOnlineConnection = getBridgeConnection(userId, bestOnlineBridgeId);
+      if (bridgeConnectionScore(bestOnlineConnection) > bridgeConnectionScore(activeConnection)) {
+        activeBridgeIdsByUserId.set(userId, bestOnlineBridgeId);
+        return bestOnlineBridgeId;
+      }
+    }
     return activeBridgeId;
   }
   if (activeBridgeId) {
     activeBridgeIdsByUserId.delete(userId);
   }
 
-  const nextBridgeId = pickBestBridgeId(userId, [...(bridgeSocketsByUserId.get(userId)?.keys() ?? [])]);
+  const nextBridgeId = bestOnlineBridgeId;
   if (nextBridgeId) {
     activeBridgeIdsByUserId.set(userId, nextBridgeId);
   }
@@ -1009,6 +1026,10 @@ function pickBestBridgeId(userId: string, candidateBridgeIds?: string[]) {
   return listSortedBridgeIds(userId, candidateBridgeIds).at(0) ?? "";
 }
 
+function listOnlineBridgeIds(userId: string) {
+  return [...(bridgeSocketsByUserId.get(userId)?.keys() ?? [])];
+}
+
 function bridgeConnectionScore(connection: RelayConnection) {
   if (!connection.bridgeOnline) {
     return 0;
@@ -1027,19 +1048,45 @@ function bridgeLastConnectedAt(userId: string, bridgeId: string) {
   return lastConnectedAt ? Date.parse(lastConnectedAt) || 0 : 0;
 }
 
+function bridgeDeviceSummary(userId: string, bridgeId: string): BridgeDeviceSummary {
+  const bridgeDevice = getBridgeDevice(userId, bridgeId);
+  const connection = getBridgeConnection(userId, bridgeId);
+  return {
+    id: bridgeId,
+    macLabel: bridgeDevice?.macLabel?.trim() || connection.macLabel || DEFAULT_MAC_LABEL,
+    bridgeOnline: connection.bridgeOnline,
+    state: connection.state,
+    lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
+    issuedAt: bridgeDevice?.issuedAt ?? null,
+  };
+}
+
+function bridgeDeviceGroupKey(userId: string, bridgeId: string, device: BridgeDeviceSummary) {
+  const persistedMacLabel = getBridgeDevice(userId, bridgeId)?.macLabel?.trim().toLowerCase() ?? "";
+  if (persistedMacLabel) {
+    return `mac:${persistedMacLabel}`;
+  }
+
+  if (device.bridgeOnline) {
+    const liveMacLabel = device.macLabel.trim().toLowerCase();
+    if (liveMacLabel) {
+      return `mac:${liveMacLabel}`;
+    }
+  }
+
+  return `bridge:${bridgeId}`;
+}
+
 function listBridgeDevicesForUser(userId: string): BridgeDeviceSummary[] {
-  return listSortedBridgeIds(userId).map((bridgeId) => {
-    const bridgeDevice = getBridgeDevice(userId, bridgeId);
-    const connection = getBridgeConnection(userId, bridgeId);
-    return {
-      id: bridgeId,
-      macLabel: bridgeDevice?.macLabel?.trim() || connection.macLabel || DEFAULT_MAC_LABEL,
-      bridgeOnline: connection.bridgeOnline,
-      state: connection.state,
-      lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
-      issuedAt: bridgeDevice?.issuedAt ?? null,
-    };
-  });
+  const bridgeDevices = new Map<string, BridgeDeviceSummary>();
+  for (const bridgeId of listSortedBridgeIds(userId)) {
+    const device = bridgeDeviceSummary(userId, bridgeId);
+    const groupKey = bridgeDeviceGroupKey(userId, bridgeId, device);
+    if (!bridgeDevices.has(groupKey)) {
+      bridgeDevices.set(groupKey, device);
+    }
+  }
+  return [...bridgeDevices.values()];
 }
 
 function updatePersistedBridgeDeviceMeta(userId: string, bridgeId: string, connection: RelayConnection) {
