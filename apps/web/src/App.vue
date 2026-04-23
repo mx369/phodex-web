@@ -1745,6 +1745,10 @@ function formatImageCountLabel(count: number) {
   return count === 1 ? "1 image attached" : `${count} images attached`;
 }
 
+function formatImageCountCompact(count: number) {
+  return count === 1 ? "1 image" : `${count} images`;
+}
+
 function formatInputImageLabel(image: InputImageAttachment, index: number) {
   return image.name?.trim() || image.fileId?.trim() || `Image ${index + 1}`;
 }
@@ -1759,6 +1763,14 @@ function draftSummary(draft: { text: string; images?: InputImageAttachment[] }) 
     return trimmed;
   }
   return formatImageCountLabel(draft.images?.length ?? 0);
+}
+
+function formatQueuedDraftMeta(draft: { text: string; createdAt: string; images?: InputImageAttachment[] }) {
+  const parts = [formatRelativeTime(draft.createdAt)];
+  if (draft.text.trim() && (draft.images?.length ?? 0) > 0) {
+    parts.unshift(formatImageCountCompact(draft.images!.length));
+  }
+  return parts.join(" · ");
 }
 
 function resetComposerImageInput() {
@@ -3360,23 +3372,28 @@ function handleScrollToLatest() {
                           </div>
 
                           <div v-for="draft in currentThread.queuedDrafts" :key="draft.id" class="queued-draft">
-                            <div class="queued-draft__copy">
+                            <div class="queued-draft__copy" :title="draftSummary(draft)">
                               <strong>{{ draftSummary(draft) }}</strong>
-                              <span v-if="draft.images?.length">{{ formatImageCountLabel(draft.images.length) }}</span>
-                              <span>{{ formatRelativeTime(draft.createdAt) }}</span>
+                              <span class="queued-draft__meta">{{ formatQueuedDraftMeta(draft) }}</span>
                             </div>
                             <div class="queued-draft__actions">
                               <span v-if="currentThread?.state === 'running'" class="queued-draft__status">Waiting</span>
                               <button
                                 v-else
-                                class="ghost-cta ghost-cta--compact"
+                                class="queued-draft__resume"
                                 type="button"
+                                aria-label="Resume queued draft"
                                 @click="client.resumeDraft(currentThread.id, draft.id)"
                               >
                                 Resume
                               </button>
-                              <button class="queued-draft__remove" type="button" @click="client.removeDraft(currentThread.id, draft.id)">
-                                Remove
+                              <button
+                                class="queued-draft__remove"
+                                type="button"
+                                aria-label="Remove queued draft"
+                                @click="client.removeDraft(currentThread.id, draft.id)"
+                              >
+                                <AppIcon name="close" />
                               </button>
                             </div>
                           </div>
