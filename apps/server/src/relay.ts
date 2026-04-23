@@ -700,6 +700,9 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       if (Object.prototype.hasOwnProperty.call(event, "selectedThreadId")) {
         user.selectedThreadId = event.selectedThreadId ?? null;
+        if (user.selectedThreadId) {
+          ensureMirroredThread(user.profile.id, user.selectedThreadId);
+        }
       }
       if (Object.prototype.hasOwnProperty.call(event, "banner")) {
         user.banner = event.banner ?? null;
