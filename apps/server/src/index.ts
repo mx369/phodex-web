@@ -1675,6 +1675,8 @@ function snapshotForUser(userId: string): AppSnapshot {
     threads,
     settings: user.settings,
     connection: buildConnection(),
+    activeBridgeId: null,
+    bridgeDevices: [],
     banner: user.banner,
   };
 }

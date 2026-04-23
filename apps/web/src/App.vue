@@ -2,6 +2,7 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
+  BridgeDeviceSummary,
   InputImageAttachment,
   ProjectDiffFile,
   ProjectDiffPayload,
@@ -756,6 +757,7 @@ const homePrimaryLabel = computed(() => {
 const homeSecondaryLabel = computed(() =>
   state.snapshot?.connection.state === "connected" ? "Open chats" : "Replay onboarding"
 );
+const homeBridgeDevices = computed(() => state.snapshot?.bridgeDevices ?? []);
 const homeStatusCopy = computed(() => {
   const connection = state.snapshot?.connection;
   if (connection?.bridgeOnline && connection.state !== "connected") {
@@ -774,6 +776,49 @@ const homeStatusCopy = computed(() => {
       return "Sign in first, then install the local bridge from the command generated for your account.";
   }
 });
+
+function createUiId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `phodex-ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isActiveBridgeDevice(device: BridgeDeviceSummary) {
+  return state.snapshot?.activeBridgeId === device.id;
+}
+
+function bridgeDeviceLabel(device: BridgeDeviceSummary) {
+  return device.macLabel?.trim() || "Awaiting first check-in";
+}
+
+function bridgeDeviceTone(device: BridgeDeviceSummary) {
+  if (device.state === "connected") {
+    return "green";
+  }
+  if (device.bridgeOnline || device.state === "connecting") {
+    return "amber";
+  }
+  return "slate";
+}
+
+function bridgeDeviceStateLabel(device: BridgeDeviceSummary) {
+  if (device.state === "connected") {
+    return isActiveBridgeDevice(device) ? "Active" : "Connected";
+  }
+  if (device.bridgeOnline || device.state === "connecting") {
+    return "Linking";
+  }
+  return "Saved";
+}
+
+function bridgeDeviceMeta(device: BridgeDeviceSummary) {
+  const details = [device.bridgeOnline ? "Bridge online" : "Bridge offline"];
+  if (device.lastConnectedAt) {
+    details.push(`Seen ${formatRelativeTime(device.lastConnectedAt)}`);
+  }
+  return details.join(" · ");
+}
 
 function repoNameFromPath(value: string | null | undefined) {
   const repoLabel = value ?? "";
@@ -1311,7 +1356,7 @@ function splitInlineSegments(text: string): MessageInlineSegment[] {
 
 function pushUiToast(tone: "info" | "success" | "error", message: string) {
   const toast = {
-    id: crypto.randomUUID(),
+    id: createUiId(),
     tone,
     message,
   };
@@ -3028,24 +3073,33 @@ function handleScrollToLatest() {
                           <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>
                           <strong>{{ homeStatusLabel }}</strong>
                         </div>
-                        <div v-if="state.snapshot?.connection.macLabel" class="home-empty-state__trusted-card">
-                          <span class="section-label">
-                            {{
-                              state.snapshot.connection.state === "connected"
-                                ? "Connected To Mac"
-                                : state.snapshot.connection.bridgeOnline
-                                  ? "Linked Mac"
-                                  : "Trusted Mac"
-                            }}
-                          </span>
-                          <div class="home-empty-state__trusted-row">
-                            <span class="home-empty-state__trusted-icon">
-                              <AppIcon name="home" />
-                            </span>
-                            <div class="home-empty-state__trusted">
-                              <strong>{{ state.snapshot?.connection.macLabel }}</strong>
-                              <p>{{ state.snapshot?.connection.relayLabel }}</p>
-                            </div>
+                        <div v-if="homeBridgeDevices.length" class="home-empty-state__device-list">
+                          <span class="section-label">{{ homeBridgeDevices.length > 1 ? "Registered Macs" : "Connected To Mac" }}</span>
+                          <div class="home-empty-state__device-stack">
+                            <article
+                              v-for="device in homeBridgeDevices"
+                              :key="device.id"
+                              class="home-empty-state__device-card"
+                              :class="{
+                                'home-empty-state__device-card--active': isActiveBridgeDevice(device),
+                              }"
+                            >
+                              <div class="home-empty-state__device-row">
+                                <span class="home-empty-state__trusted-icon">
+                                  <AppIcon name="home" />
+                                </span>
+                                <div class="home-empty-state__trusted">
+                                  <strong>{{ bridgeDeviceLabel(device) }}</strong>
+                                  <p>{{ bridgeDeviceMeta(device) }}</p>
+                                </div>
+                                <span
+                                  class="home-empty-state__device-chip"
+                                  :class="`home-empty-state__device-chip--${bridgeDeviceTone(device)}`"
+                                >
+                                  {{ bridgeDeviceStateLabel(device) }}
+                                </span>
+                              </div>
+                            </article>
                           </div>
                         </div>
                         <p class="home-empty-state__copy">{{ homeStatusCopy }}</p>

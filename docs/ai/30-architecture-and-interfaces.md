@@ -40,6 +40,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 ## Runtime Behaviors
 
 - Bootstrap and client websocket open send a full snapshot from the public relay.
+- `AppSnapshot` now carries `activeBridgeId` plus `bridgeDevices[]`, and relay `presence` events rebroadcast those same per-device records so Home can render every registered Mac instead of only the active one.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.

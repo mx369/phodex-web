@@ -87,6 +87,13 @@ let reconnectTimer: number | null = null;
 let pendingSendAfterThreadCreate = false;
 let pendingThreadCreate: PendingThreadCreate | null = null;
 
+function createClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `phodex-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function createAppClient() {
   async function restoreSession() {
     state.ui.loadingSession = true;
@@ -440,6 +447,8 @@ function handleServerEvent(event: ServerEvent) {
     case "presence":
       if (state.snapshot) {
         state.snapshot.connection = event.connection;
+        state.snapshot.activeBridgeId = event.activeBridgeId;
+        state.snapshot.bridgeDevices = event.bridgeDevices;
       }
       break;
     case "toast":
@@ -543,7 +552,7 @@ function beginPendingThreadCreate(projectLabel: string, mode: ThreadCreateMode) 
 
   rollbackPendingThreadCreate(false);
 
-  const tempId = `${PENDING_THREAD_PREFIX}${crypto.randomUUID()}`;
+  const tempId = `${PENDING_THREAD_PREFIX}${createClientId()}`;
   const previousSelectedThreadId = state.snapshot.selectedThreadId;
   const seedThread =
     state.snapshot.threads.find((thread) => thread.id === previousSelectedThreadId) ??
@@ -775,7 +784,7 @@ export async function fetchSessionJson<T>(path: string, init: { method?: string;
 
 function pushToast(tone: ToastTone, message: string) {
   const toast: UiToast = {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     tone,
     message,
   };

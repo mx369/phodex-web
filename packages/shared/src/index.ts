@@ -202,6 +202,15 @@ export interface RelayConnection {
   lastSyncAt: string | null;
 }
 
+export interface BridgeDeviceSummary {
+  id: string;
+  macLabel: string;
+  bridgeOnline: boolean;
+  state: RelayConnection["state"];
+  lastConnectedAt: string | null;
+  issuedAt: string | null;
+}
+
 export interface CompletionBanner {
   id: string;
   threadId: string;
@@ -221,6 +230,8 @@ export interface AppSnapshot {
   threads: ThreadRecord[];
   settings: AppSettings;
   connection: RelayConnection;
+  activeBridgeId: string | null;
+  bridgeDevices: BridgeDeviceSummary[];
   banner: CompletionBanner | null;
 }
 
@@ -326,7 +337,7 @@ export type ServerEvent =
   | { type: "message:delta"; threadId: string; messageId: string; delta: string }
   | { type: "message:finished"; threadId: string; messageId: string }
   | { type: "banner"; banner: CompletionBanner | null }
-  | { type: "presence"; connection: RelayConnection }
+  | { type: "presence"; connection: RelayConnection; activeBridgeId: string | null; bridgeDevices: BridgeDeviceSummary[] }
   | { type: "toast"; tone: "info" | "success" | "error"; message: string };
 
 export const ACCESS_MODE_LABELS: Record<AccessMode, string> = {

@@ -2075,7 +2075,39 @@ button {
   box-shadow: none;
 }
 
+.home-empty-state__device-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.home-empty-state__device-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.home-empty-state__device-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.035);
+}
+
+.home-empty-state__device-card--active {
+  border-color: rgba(38, 162, 105, 0.16);
+  background: rgba(238, 248, 242, 0.72);
+}
+
 .home-empty-state__trusted-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.home-empty-state__device-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2114,6 +2146,37 @@ button {
   font-size: 11px;
   line-height: 1.5;
   max-width: 100%;
+}
+
+.home-empty-state__device-chip {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: rgba(18, 18, 18, 0.08);
+  color: var(--muted-strong);
+}
+
+.home-empty-state__device-chip--green {
+  background: rgba(38, 162, 105, 0.14);
+  color: #21714c;
+}
+
+.home-empty-state__device-chip--amber {
+  background: rgba(239, 142, 85, 0.14);
+  color: #9a572b;
+}
+
+.home-empty-state__device-chip--slate {
+  background: rgba(18, 18, 18, 0.08);
+  color: var(--muted-strong);
 }
 
 .home-empty-state__install-card {

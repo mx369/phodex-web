@@ -54,6 +54,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Existing Evidence
 
 - CDP screenshots: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/`
+- Latest multi-device pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/multi-device-e2e-20260423`
 - Prior acceptance docs:
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance.md`
   - `/Users/young/mx/tmp/phodex-web/docs/cdp-acceptance-runbook.md`

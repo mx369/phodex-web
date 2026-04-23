@@ -7,6 +7,7 @@ import type {
   AppSettings,
   AppSnapshot,
   AuthSession,
+  BridgeDeviceSummary,
   BridgeCommand,
   BridgeDispatchEvent,
   BridgeEvent,
@@ -763,6 +764,7 @@ function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string |
 
 function snapshotForUser(userId: string): AppSnapshot {
   const user = persisted.users[userId];
+  const activeBridgeId = getActiveBridgeId(userId) || null;
   const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
     const leftArchived = left.state === "archived" ? 1 : 0;
     const rightArchived = right.state === "archived" ? 1 : 0;
@@ -777,7 +779,9 @@ function snapshotForUser(userId: string): AppSnapshot {
     selectedThreadId: user.selectedThreadId,
     threads,
     settings: user.settings,
-    connection: getBridgeConnection(userId),
+    connection: getBridgeConnection(userId, activeBridgeId),
+    activeBridgeId,
+    bridgeDevices: listBridgeDevicesForUser(userId),
     banner: user.banner,
   };
 }
@@ -899,6 +903,34 @@ function getBridgeConnection(userId: string, bridgeId?: string | null) {
   return fallbackBridgeId ? getBridgeConnection(userId, fallbackBridgeId) : disconnectedBridgeConnection();
 }
 
+function listSortedBridgeIds(userId: string, candidateBridgeIds?: string[]) {
+  const user = persisted.users[userId];
+  if (!user) {
+    return [];
+  }
+
+  const connectionMap = bridgeConnectionsByUserId.get(userId);
+  const bridgeIds = new Set<string>(candidateBridgeIds ?? []);
+  for (const bridgeId of Object.keys(user.bridgeDevices)) {
+    bridgeIds.add(bridgeId);
+  }
+  for (const bridgeId of connectionMap?.keys() ?? []) {
+    bridgeIds.add(bridgeId);
+  }
+
+  return [...bridgeIds].sort((left, right) => {
+    const scoreDelta = bridgeConnectionScore(getBridgeConnection(userId, right)) - bridgeConnectionScore(getBridgeConnection(userId, left));
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+    const lastConnectedDelta = bridgeLastConnectedAt(userId, right) - bridgeLastConnectedAt(userId, left);
+    if (lastConnectedDelta !== 0) {
+      return lastConnectedDelta;
+    }
+    return left.localeCompare(right);
+  });
+}
+
 function getActiveBridgeId(userId: string) {
   const activeBridgeId = activeBridgeIdsByUserId.get(userId) ?? "";
   if (activeBridgeId && hasBridgeSocket(userId, activeBridgeId)) {
@@ -942,33 +974,7 @@ function maybePromoteBridge(userId: string, candidateBridgeId: string) {
 }
 
 function pickBestBridgeId(userId: string, candidateBridgeIds?: string[]) {
-  const user = persisted.users[userId];
-  if (!user) {
-    return "";
-  }
-
-  const connectionMap = bridgeConnectionsByUserId.get(userId);
-  const bridgeIds = new Set<string>(candidateBridgeIds ?? []);
-  for (const bridgeId of Object.keys(user.bridgeDevices)) {
-    bridgeIds.add(bridgeId);
-  }
-  for (const bridgeId of connectionMap?.keys() ?? []) {
-    bridgeIds.add(bridgeId);
-  }
-
-  return [...bridgeIds]
-    .sort((left, right) => {
-      const scoreDelta = bridgeConnectionScore(getBridgeConnection(userId, right)) - bridgeConnectionScore(getBridgeConnection(userId, left));
-      if (scoreDelta !== 0) {
-        return scoreDelta;
-      }
-      const lastConnectedDelta = bridgeLastConnectedAt(userId, right) - bridgeLastConnectedAt(userId, left);
-      if (lastConnectedDelta !== 0) {
-        return lastConnectedDelta;
-      }
-      return left.localeCompare(right);
-    })
-    .at(0) ?? "";
+  return listSortedBridgeIds(userId, candidateBridgeIds).at(0) ?? "";
 }
 
 function bridgeConnectionScore(connection: RelayConnection) {
@@ -987,6 +993,21 @@ function bridgeConnectionScore(connection: RelayConnection) {
 function bridgeLastConnectedAt(userId: string, bridgeId: string) {
   const lastConnectedAt = getBridgeDevice(userId, bridgeId)?.lastConnectedAt;
   return lastConnectedAt ? Date.parse(lastConnectedAt) || 0 : 0;
+}
+
+function listBridgeDevicesForUser(userId: string): BridgeDeviceSummary[] {
+  return listSortedBridgeIds(userId).map((bridgeId) => {
+    const bridgeDevice = getBridgeDevice(userId, bridgeId);
+    const connection = getBridgeConnection(userId, bridgeId);
+    return {
+      id: bridgeId,
+      macLabel: bridgeDevice?.macLabel?.trim() || connection.macLabel || DEFAULT_MAC_LABEL,
+      bridgeOnline: connection.bridgeOnline,
+      state: connection.state,
+      lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
+      issuedAt: bridgeDevice?.issuedAt ?? null,
+    };
+  });
 }
 
 function updatePersistedBridgeDeviceMeta(userId: string, bridgeId: string, connection: RelayConnection) {
@@ -1266,7 +1287,13 @@ function broadcastBanner(userId: string) {
 }
 
 function broadcastPresence(userId: string) {
-  broadcast(userId, { type: "presence", connection: getBridgeConnection(userId) });
+  const activeBridgeId = getActiveBridgeId(userId) || null;
+  broadcast(userId, {
+    type: "presence",
+    connection: getBridgeConnection(userId, activeBridgeId),
+    activeBridgeId,
+    bridgeDevices: listBridgeDevicesForUser(userId),
+  });
 }
 
 function sendToast(userId: string, tone: "info" | "success" | "error", message: string) {
