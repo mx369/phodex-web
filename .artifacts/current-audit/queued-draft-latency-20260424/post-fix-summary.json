@@ -1,0 +1,8 @@
+{
+  "mainSendToRunningMs": 2102,
+  "mainSendToActualUserMs": 4102,
+  "followSendToQueuedDockMs": null,
+  "followSendToQueuedBubbleMs": null,
+  "followSendToPendingBubbleMs": 60,
+  "followSendToActualUserMs": 4137
+}

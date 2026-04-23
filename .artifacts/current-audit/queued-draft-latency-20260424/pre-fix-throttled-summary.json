@@ -1,0 +1,12 @@
+{
+  "mainSendToRunningMs": 79,
+  "mainSendToActualUserMs": 151,
+  "followSendToComposerClearedMs": 2,
+  "followSendToQueuedDockMs": null,
+  "followSendToQueuedBubbleMs": null,
+  "followSendToPendingBubbleMs": 2,
+  "followSendToActualUserMs": 219,
+  "queuedVisibleDurationMs": null,
+  "queuedGoneToActualUserMs": null,
+  "blankAfterComposerClearedMs": null
+}

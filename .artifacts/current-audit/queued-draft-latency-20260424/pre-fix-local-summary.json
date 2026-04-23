@@ -1,0 +1,16 @@
+{
+  "resumeMarks": [
+    2071845,
+    2076898
+  ],
+  "followSendClick": 2024913,
+  "queuedDockVisibleAfterMs": 76,
+  "queuedBubbleVisibleAfterMs": 76,
+  "composerClearedAfterMs": 1,
+  "resumeClick": 2076898,
+  "queuedGoneAfterResumeMs": 107,
+  "runningAfterResumeMs": 107,
+  "pendingPromptAfterResumeMs": null,
+  "actualUserAfterResumeMs": 107,
+  "blankGapAfterQueuedGoneMs": 0
+}

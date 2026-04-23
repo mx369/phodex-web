@@ -1,0 +1,7 @@
+{
+  "mainToRunningMs": 4961,
+  "followAToQueuedVisibleMs": null,
+  "followAToActualUserMs": 3856,
+  "followBToQueuedVisibleMs": null,
+  "followBToActualUserMs": null
+}

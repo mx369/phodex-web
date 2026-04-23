@@ -1,0 +1,10 @@
+{
+  "mainToRunningMs": 2004,
+  "followAToQueuedVisibleMs": null,
+  "followAToActualUserMs": null,
+  "followBToQueuedVisibleMs": 18,
+  "followBToActualUserMs": 47863,
+  "resumeToQueuedGoneMs": 52,
+  "resumeToPendingMs": 52,
+  "resumeToActualUserMs": 4055
+}

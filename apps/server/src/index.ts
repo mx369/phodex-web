@@ -869,8 +869,6 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
 
     const [draft] = local.queuedDrafts.splice(draftIndex, 1);
     thread.queuedDrafts = local.queuedDrafts;
-    thread.state = deriveThreadState(readThreadStatusType(thread.state), threadId, thread.state === "archived");
-    broadcastThreadToAllUsers(threadId);
     schedulePersist();
 
     const nextEvent = buildQueuedDraftEvent(threadId, draft);

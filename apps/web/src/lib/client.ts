@@ -7,6 +7,7 @@ import type {
   ClientEvent,
   DeliveryMode,
   InputImageAttachment,
+  QueuedDraft,
   RequestCodeResponse,
   ServerEvent,
   ThreadCreateMode,
@@ -48,6 +49,7 @@ type PendingResumeFeedback = {
 
 const SESSION_STORAGE_KEY = "phodex.session";
 const PENDING_THREAD_PREFIX = "pending-thread:";
+const OPTIMISTIC_QUEUED_DRAFT_PREFIX = "optimistic-queued:";
 const PENDING_THREAD_SLOW_MS = 18_000;
 const PENDING_THREAD_FAILURE_MS = 45_000;
 const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
@@ -94,12 +96,104 @@ let reconnectTimer: number | null = null;
 let pendingSendAfterThreadCreate = false;
 let pendingThreadCreate: PendingThreadCreate | null = null;
 let pendingResumeFeedback: PendingResumeFeedback | null = null;
+const optimisticQueuedDrafts = new Map<string, QueuedDraft[]>();
+const pendingResumeTimers = new Map<string, number>();
 
 function createClientId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   return `phodex-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isOptimisticQueuedDraft(draftId: string) {
+  return draftId.startsWith(OPTIMISTIC_QUEUED_DRAFT_PREFIX);
+}
+
+function queuedDraftKey(draft: Pick<QueuedDraft, "text" | "images">) {
+  const imageKey = (draft.images ?? [])
+    .map((image) => [image.fileId ?? "", image.imageUrl ?? "", image.name ?? "", image.mimeType ?? "", image.detail ?? ""].join("|"))
+    .join("||");
+  return `${normalizePendingRunPrompt(draft.text)}::${imageKey}`;
+}
+
+function mergeIncomingQueuedDrafts(thread: ThreadRecord) {
+  const serverQueuedDrafts = thread.queuedDrafts.filter((draft) => !isOptimisticQueuedDraft(draft.id));
+  const optimisticDrafts = optimisticQueuedDrafts.get(thread.id) ?? [];
+  if (!optimisticDrafts.length) {
+    return {
+      ...thread,
+      queuedDrafts: serverQueuedDrafts,
+    };
+  }
+
+  const serverKeys = new Set(serverQueuedDrafts.map((draft) => queuedDraftKey(draft)));
+  const remainingOptimisticDrafts = optimisticDrafts.filter((draft) => !serverKeys.has(queuedDraftKey(draft)));
+
+  if (!remainingOptimisticDrafts.length || thread.state !== "running") {
+    optimisticQueuedDrafts.delete(thread.id);
+    return {
+      ...thread,
+      queuedDrafts: serverQueuedDrafts,
+    };
+  }
+
+  optimisticQueuedDrafts.set(thread.id, remainingOptimisticDrafts);
+  return {
+    ...thread,
+    queuedDrafts: [...remainingOptimisticDrafts, ...serverQueuedDrafts],
+  };
+}
+
+function addOptimisticQueuedDraft(threadId: string, text: string, images: InputImageAttachment[]) {
+  const draft: QueuedDraft = {
+    id: `${OPTIMISTIC_QUEUED_DRAFT_PREFIX}${createClientId()}`,
+    text,
+    createdAt: new Date().toISOString(),
+    images: images.length ? images.map((image) => ({ ...image })) : undefined,
+    model: state.ui.selectedModel,
+    planArmed: state.ui.planArmed,
+    fastMode: state.ui.fastMode,
+    accessMode: state.ui.accessMode,
+  };
+  optimisticQueuedDrafts.set(threadId, [draft, ...(optimisticQueuedDrafts.get(threadId) ?? [])]);
+  const thread = findThread(threadId);
+  if (thread) {
+    thread.queuedDrafts = mergeIncomingQueuedDrafts(thread).queuedDrafts;
+  }
+}
+
+function clearPendingResumeTimer(threadId: string, draftId: string) {
+  const timerKey = `${threadId}:${draftId}`;
+  const timerId = pendingResumeTimers.get(timerKey);
+  if (typeof timerId === "number") {
+    window.clearTimeout(timerId);
+    pendingResumeTimers.delete(timerKey);
+  }
+}
+
+function beginOptimisticResume(threadId: string, draft: QueuedDraft) {
+  const thread = findThread(threadId);
+  if (thread) {
+    thread.queuedDrafts = thread.queuedDrafts.filter((entry) => entry.id !== draft.id);
+  }
+  beginPendingRunFeedback(threadId, draft.text, draft.images ? draft.images.map((image) => ({ ...image })) : []);
+  clearPendingResumeTimer(threadId, draft.id);
+  const timerKey = `${threadId}:${draft.id}`;
+  pendingResumeTimers.set(
+    timerKey,
+    window.setTimeout(() => {
+      if (
+        pendingResumeFeedback?.threadId === threadId &&
+        pendingResumeFeedback.draftId === draft.id &&
+        state.ui.pendingRunFeedback?.threadId === threadId &&
+        !state.ui.pendingRunFeedback.promptAcknowledged
+      ) {
+        state.ui.pendingRunFeedback = null;
+      }
+      pendingResumeTimers.delete(timerKey);
+    }, 8_000)
+  );
 }
 
 export function createAppClient() {
@@ -211,6 +305,11 @@ export function createAppClient() {
     state.ui.authStatusTone = "neutral";
     state.ui.pendingRunFeedback = null;
     pendingResumeFeedback = null;
+    optimisticQueuedDrafts.clear();
+    for (const timerId of pendingResumeTimers.values()) {
+      window.clearTimeout(timerId);
+    }
+    pendingResumeTimers.clear();
     pushToast("info", "Signed out.");
   }
 
@@ -296,6 +395,7 @@ export function createAppClient() {
       draftId,
     });
     if (sent && draft) {
+      beginOptimisticResume(threadId, draft);
       pendingResumeFeedback = {
         threadId,
         draftId,
@@ -308,6 +408,18 @@ export function createAppClient() {
   function removeDraft(threadId: string, draftId: string) {
     if (pendingResumeFeedback?.threadId === threadId && pendingResumeFeedback.draftId === draftId) {
       pendingResumeFeedback = null;
+    }
+    clearPendingResumeTimer(threadId, draftId);
+    optimisticQueuedDrafts.set(
+      threadId,
+      (optimisticQueuedDrafts.get(threadId) ?? []).filter((draft) => draft.id !== draftId)
+    );
+    if ((optimisticQueuedDrafts.get(threadId) ?? []).length === 0) {
+      optimisticQueuedDrafts.delete(threadId);
+    }
+    const thread = findThread(threadId);
+    if (thread) {
+      thread.queuedDrafts = thread.queuedDrafts.filter((draft) => draft.id !== draftId);
     }
     send({
       type: "draft:remove",
@@ -545,7 +657,7 @@ function coercePendingThreadSelection(selectedThreadId: string | null) {
 function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
   const existing = state.snapshot?.threads.find((thread) => thread.id === nextThread.id) ?? null;
   if (!existing) {
-    return nextThread;
+    return mergeIncomingQueuedDrafts(nextThread);
   }
 
   const shouldPreserveSelectedMessages =
@@ -554,13 +666,13 @@ function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = st
     existing.messages.length > 0;
 
   if (!shouldPreserveSelectedMessages) {
-    return nextThread;
+    return mergeIncomingQueuedDrafts(nextThread);
   }
 
-  return {
+  return mergeIncomingQueuedDrafts({
     ...nextThread,
     messages: existing.messages,
-  };
+  });
 }
 
 function upsertThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
@@ -763,6 +875,10 @@ function syncPendingRunFeedbackFromMessage(threadId: string, role: string, text:
 
   if (role === "user" && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pending.prompt)) {
     pending.promptAcknowledged = true;
+    if (pendingResumeFeedback?.threadId === threadId && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pendingResumeFeedback.prompt)) {
+      clearPendingResumeTimer(threadId, pendingResumeFeedback.draftId);
+      pendingResumeFeedback = null;
+    }
     return;
   }
 
@@ -797,7 +913,7 @@ function beginPendingRunFeedbackFromResumedDraft(
   nextThread: ThreadRecord,
   selectedThreadId: string | null
 ) {
-  if (!pendingResumeFeedback || state.ui.pendingRunFeedback || !existingThread) {
+  if (!pendingResumeFeedback || !existingThread) {
     return;
   }
   if (pendingResumeFeedback.threadId !== nextThread.id || nextThread.id !== selectedThreadId) {
@@ -808,7 +924,10 @@ function beginPendingRunFeedbackFromResumedDraft(
   if (!draftWasPresent || draftStillPresent) {
     return;
   }
-  beginPendingRunFeedback(nextThread.id, pendingResumeFeedback.prompt, pendingResumeFeedback.images);
+  clearPendingResumeTimer(nextThread.id, pendingResumeFeedback.draftId);
+  if (!state.ui.pendingRunFeedback) {
+    beginPendingRunFeedback(nextThread.id, pendingResumeFeedback.prompt, pendingResumeFeedback.images);
+  }
   pendingResumeFeedback = null;
 }
 
@@ -848,7 +967,9 @@ function flushComposer(threadId: string) {
   if (!sent) {
     return false;
   }
-  if (!willQueueDraft) {
+  if (willQueueDraft) {
+    addOptimisticQueuedDraft(threadId, text, images);
+  } else {
     beginPendingRunFeedback(threadId, text, images);
   }
   state.ui.composerText = "";
