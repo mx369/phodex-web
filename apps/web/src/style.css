@@ -1498,6 +1498,11 @@ button {
   background: rgba(249, 247, 242, 0.92);
 }
 
+.turn-toolbar__action:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
 .phone-conversation {
   flex: 1;
   overflow-y: auto;
@@ -1871,13 +1876,70 @@ button {
   vertical-align: baseline;
 }
 
+.phone-inline-link {
+  color: #4459d4;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(68, 89, 212, 0.28);
+  text-underline-offset: 0.16em;
+}
+
+.phone-message__copy .phone-inline-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(100%, 22ch);
+  margin: 0 0.18em 0.16em 0;
+  padding: 0.2em 0.54em;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.06);
+  color: var(--text-strong);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.phone-message__copy .phone-inline-file-link .app-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.phone-message__copy .phone-inline-file-link__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-message__copy .phone-inline-file-link__line {
+  flex: none;
+  padding-left: 2px;
+  color: var(--muted);
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .phone-message--user .phone-message__copy p {
   color: rgba(255, 255, 255, 0.96);
+}
+
+.phone-message--user .phone-inline-link {
+  color: rgba(255, 255, 255, 0.96);
+  text-decoration-color: rgba(255, 255, 255, 0.34);
 }
 
 .phone-message--user .phone-inline-code {
   background: rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.98);
+}
+
+.phone-message--user .phone-inline-file-link {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.phone-message--user .phone-inline-file-link__line {
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .stream-cursor {

@@ -14,7 +14,7 @@ import type {
 } from "@phodex/shared";
 import onboardingHero from "./assets/onboarding-hero.png";
 import remodexAppLogo from "./assets/remodex-app-logo.png";
-import { API_ORIGIN, createAppClient, fetchSessionJson, state } from "./lib/client";
+import { API_ORIGIN, createAppClient, fetchSessionJson, persistComposerPreferences, state } from "./lib/client";
 
 type AppIconName =
   | "archive"
@@ -72,8 +72,12 @@ type InstallManifest = {
 type InstallCommandPlatform = "shell" | "powershell";
 
 type MessageInlineSegment = {
-  type: "text" | "code";
-  text: string;
+  type: "text" | "code" | "link" | "file-link";
+  text?: string;
+  label?: string;
+  displayLabel?: string;
+  href?: string;
+  line?: number | null;
 };
 
 type TurnStarterAction = {
@@ -983,7 +987,7 @@ const showConversationContent = computed(
           currentPendingRunFeedback.value ||
           currentThread.value.queuedDrafts.length ||
           currentThread.value.state === "running" ||
-          currentThread.value.state === "queued")
+          (currentThread.value.state === "queued" && !isCurrentThreadPendingCreate.value))
     )
 );
 const showTurnStarterRail = computed(
@@ -1383,9 +1387,37 @@ function splitParagraphs(text: string) {
     .filter(Boolean);
 }
 
+function normalizeMarkdownHref(href: string) {
+  const value = href.trim();
+  if (value.startsWith("<") && value.endsWith(">")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function parseMarkdownLinkSegment(label: string, href: string): MessageInlineSegment {
+  const normalizedHref = normalizeMarkdownHref(href);
+  const lineMatch = normalizedHref.match(/:(\d+)$/);
+  const path = lineMatch ? normalizedHref.slice(0, -lineMatch[0].length) : normalizedHref;
+  if (path.startsWith("/")) {
+    return {
+      type: "file-link",
+      label,
+      displayLabel: label.trim() || path.split("/").at(-1) || path,
+      href: normalizedHref,
+      line: lineMatch ? Number.parseInt(lineMatch[1] ?? "", 10) : null,
+    };
+  }
+  return {
+    type: "link",
+    label: label.trim() || normalizedHref,
+    href: normalizedHref,
+  };
+}
+
 function splitInlineSegments(text: string): MessageInlineSegment[] {
   const segments: MessageInlineSegment[] = [];
-  const pattern = /`([^`\n]+)`/g;
+  const pattern = /`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\n]+)\)/g;
   let cursor = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -1402,6 +1434,8 @@ function splitInlineSegments(text: string): MessageInlineSegment[] {
         type: "code",
         text: match[1],
       });
+    } else if (match[2] && match[3]) {
+      segments.push(parseMarkdownLinkSegment(match[2], match[3]));
     }
 
     cursor = index + match[0].length;
@@ -1855,12 +1889,27 @@ function toggleModelPicker() {
 
 function selectModel(model: string) {
   state.ui.selectedModel = model;
+  persistComposerPreferences();
   closeModelPicker();
 }
 
 function selectFastMode(fastMode: boolean) {
   state.ui.fastMode = fastMode;
+  persistComposerPreferences();
   closeModelPicker();
+}
+
+function cycleAccessMode() {
+  if (isCurrentThreadPendingCreate.value) {
+    return;
+  }
+  state.ui.accessMode =
+    state.ui.accessMode === "full-access"
+      ? "on-request"
+      : state.ui.accessMode === "on-request"
+        ? "read-only"
+        : "full-access";
+  persistComposerPreferences();
 }
 
 function handleDocumentPointerDown(event: PointerEvent) {
@@ -2032,6 +2081,14 @@ function handleArchiveGroup(projectLabel: string) {
 
 function startLocalChat() {
   openCreateThreadDialog("local", currentThread.value?.projectLabel, currentThread.value?.repoLabel ?? null);
+}
+
+function startToolbarLocalChat() {
+  if (!currentThread.value || isCurrentThreadPendingCreate.value) {
+    return;
+  }
+  closeModelPicker();
+  client.createThread(currentThread.value.projectLabel, "local", currentThread.value.repoLabel || undefined);
 }
 
 function startWorktreeChat() {
@@ -2987,7 +3044,9 @@ function handleScrollToLatest() {
                         </button>
                       </div>
                       <div class="turn-toolbar__actions">
-                        <button class="turn-toolbar__action" @click="startLocalChat">New Chat</button>
+                        <button class="turn-toolbar__action" :disabled="isCurrentThreadPendingCreate" @click="startToolbarLocalChat">
+                          New Chat
+                        </button>
                         <button class="turn-toolbar__action" @click="startWorktreeChat">Worktree</button>
                         <button class="turn-toolbar__action turn-toolbar__action--muted" @click="openSidebar">
                           {{ state.snapshot?.connection.macLabel }}
@@ -3085,7 +3144,15 @@ function handleScrollToLatest() {
                                   :key="`${message.id}-${paragraphIndex}-${segment.type}-${segmentIndex}`"
                                 >
                                   <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
-                                  <span v-else>{{ segment.text }}</span>
+                                  <span v-else-if="segment.type === 'text'">{{ segment.text }}</span>
+                                  <span v-else-if="segment.type === 'file-link'" class="phone-inline-file-link" :title="segment.href">
+                                    <AppIcon name="file" />
+                                    <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
+                                    <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
+                                  </span>
+                                  <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
+                                    {{ segment.label }}
+                                  </a>
                                 </template>
                               </p>
                               <span v-if="message.isStreaming" class="stream-cursor"></span>
@@ -3147,7 +3214,15 @@ function handleScrollToLatest() {
                                     :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
                                   >
                                     <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
-                                    <span v-else>{{ segment.text }}</span>
+                                    <span v-else-if="segment.type === 'text'">{{ segment.text }}</span>
+                                    <span v-else-if="segment.type === 'file-link'" class="phone-inline-file-link" :title="segment.href">
+                                      <AppIcon name="file" />
+                                      <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
+                                      <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
+                                    </span>
+                                    <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
+                                      {{ segment.label }}
+                                    </a>
                                   </template>
                                 </p>
                               </div>
@@ -3191,7 +3266,15 @@ function handleScrollToLatest() {
                                     :key="`${draft.id}-queued-${paragraphIndex}-${segment.type}-${segmentIndex}`"
                                   >
                                     <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
-                                    <span v-else>{{ segment.text }}</span>
+                                    <span v-else-if="segment.type === 'text'">{{ segment.text }}</span>
+                                    <span v-else-if="segment.type === 'file-link'" class="phone-inline-file-link" :title="segment.href">
+                                      <AppIcon name="file" />
+                                      <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
+                                      <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
+                                    </span>
+                                    <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
+                                      {{ segment.label }}
+                                    </a>
                                   </template>
                                 </p>
                               </div>
@@ -3619,14 +3702,7 @@ function handleScrollToLatest() {
                         <button
                           class="pill pill--button"
                           :disabled="isCurrentThreadPendingCreate"
-                          @click="
-                            state.ui.accessMode =
-                              state.ui.accessMode === 'full-access'
-                                ? 'on-request'
-                                : state.ui.accessMode === 'on-request'
-                                  ? 'read-only'
-                                  : 'full-access'
-                          "
+                          @click="cycleAccessMode"
                         >
                           {{ ACCESS_MODE_LABELS[state.ui.accessMode] }}
                         </button>

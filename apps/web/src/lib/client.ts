@@ -46,13 +46,23 @@ type PendingResumeFeedback = {
   prompt: string;
   images: InputImageAttachment[];
 };
+type StoredComposerPreferences = {
+  selectedModel?: string;
+  fastMode?: boolean;
+  planArmed?: boolean;
+  accessMode?: AccessMode;
+};
 
 const SESSION_STORAGE_KEY = "phodex.session";
+const COMPOSER_PREFERENCES_STORAGE_KEY = "phodex.composerPreferences";
 const PENDING_THREAD_PREFIX = "pending-thread:";
 const OPTIMISTIC_QUEUED_DRAFT_PREFIX = "optimistic-queued:";
 const PENDING_THREAD_SLOW_MS = 18_000;
 const PENDING_THREAD_FAILURE_MS = 45_000;
 const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
+const DEFAULT_SELECTED_MODEL = "GPT-5.4";
+const DEFAULT_ACCESS_MODE: AccessMode = "full-access";
+const storedComposerPreferences = readStoredComposerPreferences();
 const runtimeHost = window.location.hostname || "localhost";
 const inferredDevApiOrigin =
   import.meta.env.DEV && window.location.port !== "3443"
@@ -78,10 +88,10 @@ export const state = reactive({
     composerText: "",
     composerImages: [] as InputImageAttachment[],
     search: "",
-    selectedModel: "GPT-5.4",
-    fastMode: false,
-    planArmed: false,
-    accessMode: "full-access" as AccessMode,
+    selectedModel: storedComposerPreferences.selectedModel ?? DEFAULT_SELECTED_MODEL,
+    fastMode: storedComposerPreferences.fastMode ?? false,
+    planArmed: storedComposerPreferences.planArmed ?? false,
+    accessMode: storedComposerPreferences.accessMode ?? DEFAULT_ACCESS_MODE,
     sidebarOpen: false,
     settingsOpen: false,
     authStatus: "",
@@ -999,6 +1009,22 @@ export async function fetchSessionJson<T>(path: string, init: { method?: string;
   return data as T;
 }
 
+export function persistComposerPreferences() {
+  try {
+    localStorage.setItem(
+      COMPOSER_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        selectedModel: state.ui.selectedModel,
+        fastMode: state.ui.fastMode,
+        planArmed: state.ui.planArmed,
+        accessMode: state.ui.accessMode,
+      } satisfies StoredComposerPreferences)
+    );
+  } catch {
+    // Best-effort UI persistence only.
+  }
+}
+
 function pushToast(tone: ToastTone, message: string) {
   const toast: UiToast = {
     id: createClientId(),
@@ -1009,6 +1035,27 @@ function pushToast(tone: ToastTone, message: string) {
   window.setTimeout(() => {
     state.ui.toasts = state.ui.toasts.filter((item) => item.id !== toast.id);
   }, 3600);
+}
+
+function readStoredComposerPreferences(): StoredComposerPreferences {
+  try {
+    const raw = localStorage.getItem(COMPOSER_PREFERENCES_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as StoredComposerPreferences;
+    return {
+      selectedModel: typeof parsed.selectedModel === "string" ? parsed.selectedModel : undefined,
+      fastMode: typeof parsed.fastMode === "boolean" ? parsed.fastMode : undefined,
+      planArmed: typeof parsed.planArmed === "boolean" ? parsed.planArmed : undefined,
+      accessMode:
+        parsed.accessMode === "full-access" || parsed.accessMode === "on-request" || parsed.accessMode === "read-only"
+          ? parsed.accessMode
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function readStoredSession() {
