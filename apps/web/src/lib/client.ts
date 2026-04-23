@@ -39,11 +39,18 @@ type PendingRunFeedback = {
   startedAt: string;
   promptAcknowledged: boolean;
 };
+type PendingResumeFeedback = {
+  threadId: string;
+  draftId: string;
+  prompt: string;
+  images: InputImageAttachment[];
+};
 
 const SESSION_STORAGE_KEY = "phodex.session";
 const PENDING_THREAD_PREFIX = "pending-thread:";
 const PENDING_THREAD_SLOW_MS = 18_000;
 const PENDING_THREAD_FAILURE_MS = 45_000;
+const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
 const runtimeHost = window.location.hostname || "localhost";
 const inferredDevApiOrigin =
   import.meta.env.DEV && window.location.port !== "3443"
@@ -86,6 +93,7 @@ let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let pendingSendAfterThreadCreate = false;
 let pendingThreadCreate: PendingThreadCreate | null = null;
+let pendingResumeFeedback: PendingResumeFeedback | null = null;
 
 function createClientId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -202,6 +210,7 @@ export function createAppClient() {
     state.ui.authStatus = "";
     state.ui.authStatusTone = "neutral";
     state.ui.pendingRunFeedback = null;
+    pendingResumeFeedback = null;
     pushToast("info", "Signed out.");
   }
 
@@ -280,14 +289,26 @@ export function createAppClient() {
   }
 
   function resumeDraft(threadId: string, draftId: string) {
-    send({
+    const draft = findThread(threadId)?.queuedDrafts.find((entry) => entry.id === draftId) ?? null;
+    const sent = send({
       type: "draft:resume",
       threadId,
       draftId,
     });
+    if (sent && draft) {
+      pendingResumeFeedback = {
+        threadId,
+        draftId,
+        prompt: draft.text,
+        images: draft.images ? draft.images.map((image) => ({ ...image })) : [],
+      };
+    }
   }
 
   function removeDraft(threadId: string, draftId: string) {
+    if (pendingResumeFeedback?.threadId === threadId && pendingResumeFeedback.draftId === draftId) {
+      pendingResumeFeedback = null;
+    }
     send({
       type: "draft:remove",
       threadId,
@@ -390,6 +411,12 @@ function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
     case "snapshot": {
       const nextSnapshot = mergeSnapshotWithPendingThread(event.snapshot);
+      const previousSelectedThread = findThread(nextSnapshot.selectedThreadId ?? "");
+      const nextSelectedThread = nextSnapshot.threads.find((thread) => thread.id === nextSnapshot.selectedThreadId) ?? null;
+      if (nextSelectedThread) {
+        beginPendingRunFeedbackFromResumedDraft(previousSelectedThread, nextSelectedThread, nextSnapshot.selectedThreadId);
+        beginPendingRunFeedbackFromQueuedDraft(previousSelectedThread, nextSelectedThread, nextSnapshot.selectedThreadId);
+      }
       applySnapshot(nextSnapshot);
       reconcilePendingRunFeedback();
       resolvePendingThreadCreate(nextSnapshot.selectedThreadId);
@@ -407,6 +434,9 @@ function handleServerEvent(event: ServerEvent) {
         return;
       }
       const nextSelectedThreadId = coercePendingThreadSelection(event.selectedThreadId);
+      const existingThread = findThread(event.thread.id);
+      beginPendingRunFeedbackFromResumedDraft(existingThread, event.thread, nextSelectedThreadId);
+      beginPendingRunFeedbackFromQueuedDraft(existingThread, event.thread, nextSelectedThreadId);
       upsertThread(event.thread, nextSelectedThreadId);
       reconcilePendingRunFeedback(event.thread.id);
       state.snapshot.selectedThreadId = nextSelectedThreadId;
@@ -435,7 +465,7 @@ function handleServerEvent(event: ServerEvent) {
         message.text += event.delta;
         message.isStreaming = true;
       }
-      clearPendingRunFeedback(event.threadId);
+      clearAcknowledgedPendingRunFeedback(event.threadId);
       break;
     }
     case "message:finished": {
@@ -444,7 +474,7 @@ function handleServerEvent(event: ServerEvent) {
       if (message) {
         message.isStreaming = false;
       }
-      clearPendingRunFeedback(event.threadId);
+      clearAcknowledgedPendingRunFeedback(event.threadId);
       break;
     }
     case "banner":
@@ -685,11 +715,15 @@ function beginPendingRunFeedback(threadId: string, prompt: string, images: Input
   };
 }
 
-function clearPendingRunFeedback(threadId?: string) {
-  if (!state.ui.pendingRunFeedback) {
+function clearAcknowledgedPendingRunFeedback(threadId?: string) {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending) {
     return;
   }
-  if (!threadId || state.ui.pendingRunFeedback.threadId === threadId) {
+  if (threadId && pending.threadId !== threadId) {
+    return;
+  }
+  if (pending.promptAcknowledged) {
     state.ui.pendingRunFeedback = null;
   }
 }
@@ -703,7 +737,20 @@ function reconcilePendingRunFeedback(threadId?: string) {
     return;
   }
   const thread = state.snapshot.threads.find((entry) => entry.id === pending.threadId);
-  if (!thread || thread.state !== "running") {
+  if (!thread || thread.state === "archived") {
+    state.ui.pendingRunFeedback = null;
+    return;
+  }
+  if (pending.promptAcknowledged) {
+    if (thread.state !== "running") {
+      state.ui.pendingRunFeedback = null;
+    }
+    return;
+  }
+  if (thread.state === "running") {
+    return;
+  }
+  if (Date.now() - Date.parse(pending.startedAt) > PENDING_RUN_FEEDBACK_STALE_MS) {
     state.ui.pendingRunFeedback = null;
   }
 }
@@ -720,8 +767,49 @@ function syncPendingRunFeedbackFromMessage(threadId: string, role: string, text:
   }
 
   if (role !== "user") {
-    clearPendingRunFeedback(threadId);
+    clearAcknowledgedPendingRunFeedback(threadId);
   }
+}
+
+function beginPendingRunFeedbackFromQueuedDraft(
+  existingThread: ThreadRecord | null,
+  nextThread: ThreadRecord,
+  selectedThreadId: string | null
+) {
+  if (state.ui.pendingRunFeedback || !existingThread) {
+    return;
+  }
+  if (nextThread.id !== selectedThreadId || existingThread.state === "running" || nextThread.state !== "running") {
+    return;
+  }
+  const resumedDraft =
+    [...existingThread.queuedDrafts]
+      .reverse()
+      .find((draft) => !nextThread.queuedDrafts.some((nextDraft) => nextDraft.id === draft.id)) ?? null;
+  if (!resumedDraft) {
+    return;
+  }
+  beginPendingRunFeedback(nextThread.id, resumedDraft.text, resumedDraft.images ?? []);
+}
+
+function beginPendingRunFeedbackFromResumedDraft(
+  existingThread: ThreadRecord | null,
+  nextThread: ThreadRecord,
+  selectedThreadId: string | null
+) {
+  if (!pendingResumeFeedback || state.ui.pendingRunFeedback || !existingThread) {
+    return;
+  }
+  if (pendingResumeFeedback.threadId !== nextThread.id || nextThread.id !== selectedThreadId) {
+    return;
+  }
+  const draftWasPresent = existingThread.queuedDrafts.some((draft) => draft.id === pendingResumeFeedback?.draftId);
+  const draftStillPresent = nextThread.queuedDrafts.some((draft) => draft.id === pendingResumeFeedback?.draftId);
+  if (!draftWasPresent || draftStillPresent) {
+    return;
+  }
+  beginPendingRunFeedback(nextThread.id, pendingResumeFeedback.prompt, pendingResumeFeedback.images);
+  pendingResumeFeedback = null;
 }
 
 function normalizePendingRunPrompt(value: string) {

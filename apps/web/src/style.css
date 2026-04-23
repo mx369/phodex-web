@@ -1598,6 +1598,16 @@ button {
   background: rgba(255, 196, 164, 0.96);
 }
 
+.phone-message__status-dot--waiting {
+  background: rgba(18, 18, 18, 0.14);
+  box-shadow: none;
+  animation-duration: 1.8s;
+}
+
+.phone-message--queued-draft.phone-message--user .phone-message__card {
+  background: linear-gradient(180deg, rgba(34, 34, 34, 0.9) 0%, rgba(22, 22, 22, 0.88) 100%);
+}
+
 .phone-message--assistant.phone-message--pending {
   max-width: 100%;
 }

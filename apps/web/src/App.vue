@@ -908,6 +908,7 @@ const planAccessory = computed(() => {
   return null;
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
+const conversationQueuedDrafts = computed(() => [...(currentThread.value?.queuedDrafts ?? [])].reverse());
 const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
   const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
   return [
@@ -936,6 +937,7 @@ const showConversationContent = computed(
       currentThread.value &&
         (currentThread.value.messages.length ||
           currentPendingRunFeedback.value ||
+          currentThread.value.queuedDrafts.length ||
           currentThread.value.state === "running" ||
           currentThread.value.state === "queued")
     )
@@ -3063,6 +3065,50 @@ function handleScrollToLatest() {
                                   <template
                                     v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
                                     :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
+                                  >
+                                    <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
+                                    <span v-else>{{ segment.text }}</span>
+                                  </template>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+
+                        <article
+                          v-for="draft in conversationQueuedDrafts"
+                          :key="draft.id"
+                          class="phone-message phone-message--user phone-message--pending phone-message--queued-draft"
+                        >
+                          <div class="phone-message__meta phone-message__meta--pending-user">
+                            <span>You</span>
+                            <span>{{ formatRelativeTime(draft.createdAt) }}</span>
+                            <span>queued</span>
+                          </div>
+
+                          <div class="phone-message__pending-bubble">
+                            <span class="phone-message__status-dot phone-message__status-dot--waiting" aria-hidden="true"></span>
+
+                            <div class="phone-message__card">
+                              <div v-if="draft.images?.length" class="message-input-images">
+                                <figure
+                                  v-for="(image, index) in draft.images"
+                                  :key="`${draft.id}-image-${index}`"
+                                  class="message-input-image"
+                                >
+                                  <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
+                                </figure>
+                              </div>
+
+                              <div v-if="draft.text.trim()" class="phone-message__copy">
+                                <p
+                                  v-for="(paragraph, paragraphIndex) in splitParagraphs(draft.text)"
+                                  :key="`${draft.id}-queued-${paragraphIndex}`"
+                                >
+                                  <template
+                                    v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
+                                    :key="`${draft.id}-queued-${paragraphIndex}-${segment.type}-${segmentIndex}`"
                                   >
                                     <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
                                     <span v-else>{{ segment.text }}</span>
