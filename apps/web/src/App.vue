@@ -309,6 +309,7 @@ const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
 const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
 const installCommandPlatform = ref<InstallCommandPlatform>("shell");
+const expandedDrawerGroups = ref<string[]>([]);
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
 const projectTreeError = ref("");
@@ -639,6 +640,31 @@ const threadGroups = computed(() => {
     };
   });
 });
+watch(
+  [threadGroups, () => currentThread.value?.projectLabel ?? "", () => state.ui.search.trim()],
+  ([groups, currentProjectLabel, search]) => {
+    const available = new Set(groups.map((group) => group.label));
+    const preserved = expandedDrawerGroups.value.filter((label) => available.has(label));
+    const nextExpanded = new Set(preserved);
+
+    if (search) {
+      for (const group of groups) {
+        nextExpanded.add(group.label);
+      }
+    } else if (!preserved.length) {
+      const defaultLabel =
+        (currentProjectLabel && available.has(currentProjectLabel) ? currentProjectLabel : null) ?? groups[0]?.label ?? null;
+      if (defaultLabel) {
+        nextExpanded.add(defaultLabel);
+      }
+    } else if (currentProjectLabel && available.has(currentProjectLabel)) {
+      nextExpanded.add(currentProjectLabel);
+    }
+
+    expandedDrawerGroups.value = [...nextExpanded];
+  },
+  { immediate: true }
+);
 const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
   const targets: DrawerProjectTarget[] = threadGroups.value.map((group) => ({
     label: group.label,
@@ -1869,6 +1895,26 @@ function closeSidebar() {
   state.ui.sidebarOpen = false;
 }
 
+function isDrawerGroupExpanded(label: string) {
+  if (state.ui.search.trim()) {
+    return true;
+  }
+  return expandedDrawerGroups.value.includes(label);
+}
+
+function toggleDrawerGroup(label: string) {
+  if (state.ui.search.trim()) {
+    return;
+  }
+  const nextExpanded = new Set(expandedDrawerGroups.value);
+  if (nextExpanded.has(label)) {
+    nextExpanded.delete(label);
+  } else {
+    nextExpanded.add(label);
+  }
+  expandedDrawerGroups.value = [...nextExpanded];
+}
+
 function setOnboardingPage(nextPage: number) {
   const clamped = Math.max(0, Math.min(nextPage, onboardingScreens.length - 1));
   onboardingPage.value = clamped;
@@ -2713,138 +2759,140 @@ function handleScrollToLatest() {
                 <div key="main-shell" class="phone-app">
                   <transition name="drawer">
                     <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
-                      <div class="phone-drawer__head">
-                        <div class="drawer-brand" :aria-label="homeStatusLabel">
-                          <img :src="remodexAppLogo" alt="" class="drawer-brand__logo" />
-                        </div>
-                        <button class="icon-button" aria-label="Close menu" @click="closeSidebar">
-                          <AppIcon name="close" />
-                        </button>
-                      </div>
-
-                      <input
-                        v-model="state.ui.search"
-                        class="drawer-search"
-                        type="search"
-                        placeholder="Search conversations"
-                      />
-
-                      <button class="drawer-new-chat" @click="startLocalChat">
-                        <span class="drawer-new-chat__icon">
-                          <AppIcon name="plus" />
-                        </span>
-                        <div class="drawer-new-chat__copy">
-                          <span class="section-label">Create</span>
-                          <strong>New Chat</strong>
-                          <p>Pick a project, then start a local chat or a fresh worktree on your Mac.</p>
-                        </div>
+                      <button class="icon-button icon-button--tiny drawer-dismiss" aria-label="Close menu" @click="closeSidebar">
+                        <AppIcon name="close" />
                       </button>
 
-                      <div class="drawer-shortcuts">
-                        <button
-                          class="drawer-shortcut"
-                          :class="{ 'drawer-shortcut--active': !currentThread }"
-                          @click="client.clearThreadSelection()"
-                        >
-                          <span class="drawer-shortcut__icon">
-                            <AppIcon name="home" />
-                          </span>
-                          <span>Home</span>
-                        </button>
-                        <button class="drawer-shortcut" @click="startWorktreeChat">
-                          <span class="drawer-shortcut__icon">
+                      <div class="phone-drawer__toolbar">
+                        <div class="phone-drawer__toolbar-copy">
+                          <span class="section-label">Conversations</span>
+                          <span>{{ liveThreadCount }} chats</span>
+                        </div>
+
+                        <input
+                          v-model="state.ui.search"
+                          class="drawer-search"
+                          type="search"
+                          placeholder="Search conversations"
+                        />
+
+                        <div class="drawer-toolbar-actions">
+                          <button class="drawer-new-chat" @click="startLocalChat">
+                            <span class="drawer-new-chat__icon">
+                              <AppIcon name="plus" />
+                            </span>
+                            <span>New Chat</span>
+                          </button>
+                          <button class="drawer-toolbar-pill" @click="startWorktreeChat">
                             <AppIcon name="worktree" />
-                          </span>
-                          <span>New Worktree</span>
-                        </button>
-                        <button class="drawer-shortcut" @click="openPanel('about')">
-                          <span class="drawer-shortcut__icon">
-                            <AppIcon name="info" />
-                          </span>
-                          <span>About</span>
-                        </button>
+                            <span>Worktree</span>
+                          </button>
+                          <button
+                            v-if="currentThread"
+                            class="drawer-toolbar-pill"
+                            @click="client.clearThreadSelection()"
+                          >
+                            <AppIcon name="home" />
+                            <span>Home</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div class="drawer-groups">
                         <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
                           <div class="drawer-group__head">
-                            <div class="drawer-group__title">
-                              <span class="drawer-group__icon">
-                                <AppIcon name="folder" />
+                            <button
+                              class="drawer-group__toggle"
+                              type="button"
+                              :aria-expanded="isDrawerGroupExpanded(group.label)"
+                              @click="toggleDrawerGroup(group.label)"
+                            >
+                              <span
+                                class="drawer-group__chevron"
+                                :class="{ 'drawer-group__chevron--expanded': isDrawerGroupExpanded(group.label) }"
+                              >
+                                <AppIcon name="chevron-down" />
                               </span>
                               <p class="drawer-group__label">{{ group.label }}</p>
-                            </div>
+                              <span class="drawer-group__count">{{ group.liveCount }}</span>
+                            </button>
                             <div class="drawer-group__head-actions">
-                              <button class="drawer-group__action" @click="handleArchiveGroup(group.label)">
-                                Archive {{ group.liveCount }}
+                              <button
+                                class="drawer-group__icon-action"
+                                :aria-label="`Archive ${group.liveCount} chats in ${group.label}`"
+                                @click.stop="handleArchiveGroup(group.label)"
+                              >
+                                <AppIcon name="archive" />
                               </button>
                               <button
-                                class="drawer-group__plus"
+                                class="drawer-group__icon-action"
                                 :aria-label="`Start a new chat in ${group.label}`"
-                                @click="openCreateThreadDialog('local', group.label, group.cwd)"
+                                @click.stop="openCreateThreadDialog('local', group.label, group.cwd)"
                               >
                                 <AppIcon name="plus" />
                               </button>
                             </div>
                           </div>
 
-                          <button
-                            v-for="thread in group.threads"
-                            :key="thread.id"
-                            class="drawer-thread"
-                            :class="{
-                              'drawer-thread--selected': currentThread?.id === thread.id,
-                              'drawer-thread--archived': thread.state === 'archived',
-                            }"
-                            @click="
-                              client.selectThread(thread.id);
-                              closeSidebar();
-                            "
-                          >
-                            <div class="drawer-thread__indicator">
-                              <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
-                              <span v-if="thread.isWorktree" class="drawer-thread__badge">
-                                <AppIcon name="worktree" />
-                                <span>WT</span>
-                              </span>
-                              <span v-else-if="thread.isForked" class="drawer-thread__badge">
-                                <span>Fork</span>
-                              </span>
-                            </div>
-
-                            <div class="drawer-thread__body">
-                              <div class="drawer-thread__top">
-                                <strong>{{ thread.title }}</strong>
-                                <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
+                          <div v-if="isDrawerGroupExpanded(group.label)" class="drawer-group__threads">
+                            <button
+                              v-for="thread in group.threads"
+                              :key="thread.id"
+                              class="drawer-thread"
+                              :class="{
+                                'drawer-thread--selected': currentThread?.id === thread.id,
+                                'drawer-thread--archived': thread.state === 'archived',
+                              }"
+                              @click="
+                                client.selectThread(thread.id);
+                                closeSidebar();
+                              "
+                            >
+                              <div class="drawer-thread__indicator">
+                                <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
+                                <span v-if="thread.isWorktree" class="drawer-thread__badge">
+                                  <AppIcon name="worktree" />
+                                  <span>WT</span>
+                                </span>
+                                <span v-else-if="thread.isForked" class="drawer-thread__badge">
+                                  <span>Fork</span>
+                                </span>
                               </div>
-                              <p>{{ thread.preview }}</p>
-                              <div class="drawer-thread__meta">
-                                <span>{{ formatThreadLocation(thread) }}</span>
-                                <span>{{ thread.branch }}</span>
-                                <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
-                                <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
-                                <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
-                                <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
-                              </div>
-                            </div>
 
-                            <div class="drawer-thread__actions">
-                              <button
-                                class="icon-button icon-button--tiny"
-                                aria-label="Rename chat"
-                                @click.stop="handleRenameThread(thread.id, thread.title)"
-                              >
-                                <AppIcon name="edit" />
-                              </button>
-                              <button
-                                class="icon-button icon-button--tiny"
-                                :aria-label="thread.state === 'archived' ? 'Restore chat' : 'Archive chat'"
-                                @click.stop="client.toggleArchiveThread(thread)"
-                              >
-                                <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
-                              </button>
-                            </div>
-                          </button>
+                              <div class="drawer-thread__body">
+                                <div class="drawer-thread__top">
+                                  <strong>{{ thread.title }}</strong>
+                                  <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
+                                </div>
+                                <p v-if="currentThread?.id === thread.id" class="drawer-thread__preview">{{ thread.preview }}</p>
+                                <div class="drawer-thread__meta">
+                                  <span>{{ formatThreadLocation(thread) }}</span>
+                                  <span>{{ thread.branch }}</span>
+                                  <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
+                                  <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
+                                  <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
+                                  <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
+                                </div>
+                              </div>
+
+                              <div class="drawer-thread__actions">
+                                <button
+                                  class="icon-button icon-button--tiny"
+                                  aria-label="Rename chat"
+                                  @click.stop="handleRenameThread(thread.id, thread.title)"
+                                >
+                                  <AppIcon name="edit" />
+                                </button>
+                                <button
+                                  class="icon-button icon-button--tiny"
+                                  :aria-label="thread.state === 'archived' ? 'Restore chat' : 'Archive chat'"
+                                  @click.stop="client.toggleArchiveThread(thread)"
+                                >
+                                  <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
+                                </button>
+                              </div>
+                            </button>
+                          </div>
                         </section>
                       </div>
 
@@ -2859,22 +2907,24 @@ function handleScrollToLatest() {
                                   : "Trusted Mac"
                             }}
                           </span>
-                          <div class="drawer-status__row">
-                            <div class="drawer-status">
-                              <strong>{{ state.snapshot?.connection.macLabel }}</strong>
-                              <span class="drawer-status__relay">{{ state.snapshot?.connection.relayLabel }}</span>
-                            </div>
-                            <strong v-if="state.snapshot?.connection.state === 'connected'" class="drawer-status__latency">
-                              {{ state.snapshot?.connection.latencyMs }}ms
-                            </strong>
+                          <div class="drawer-status">
+                            <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                            <span class="drawer-status__meta">
+                              {{ state.snapshot?.connection.relayLabel }}
+                              <template v-if="state.snapshot?.connection.state === 'connected'">
+                                · {{ state.snapshot?.connection.latencyMs }}ms
+                              </template>
+                            </span>
                           </div>
                         </div>
 
-                        <button class="drawer-settings-bar" @click="openPanel('settings')">Settings</button>
-
                         <div class="drawer-footer-actions">
+                          <button class="drawer-footer-pill drawer-footer-pill--primary" @click="openPanel('settings')">
+                            Settings
+                          </button>
                           <button class="drawer-footer-pill" @click="openPanel('archived')">Archived</button>
-                          <button class="drawer-footer-pill" @click="client.logout()">Disconnect</button>
+                          <button class="drawer-footer-pill" @click="openPanel('about')">About</button>
+                          <button class="drawer-footer-pill drawer-footer-pill--danger" @click="client.logout()">Disconnect</button>
                         </div>
                       </div>
                     </aside>

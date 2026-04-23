@@ -57,6 +57,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## Existing Evidence
 
 - CDP screenshots: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/`
+- Sidebar density pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/sidebar-density-20260423`
 - Latest multi-device pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/multi-device-e2e-20260423`
 - Latest Home device-card click pass: `/Users/young/mx/tmp/phodex-web/.artifacts/current-audit/device-card-click-20260423`
 - Prior acceptance docs:
