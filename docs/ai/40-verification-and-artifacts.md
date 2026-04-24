@@ -30,6 +30,25 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Installer verification should also capture whether install-time auto-pinning happened: when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, the installed `bridge.env` should contain `PHODEX_CODEX_WS_URL` plus `PHODEX_MANAGE_CODEX=false`; otherwise those keys should be absent and managed fallback stays enabled.
 - Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
+## QCP Deploy Truth
+
+- Unless the user names another target, `deploy` means QCP.
+- Before changing QCP, inspect the live host instead of guessing paths:
+  - `ssh qcp 'systemctl cat phodex-codex.service'`
+  - `ssh qcp 'nginx -T'`
+- Current live QCP relay service:
+  - systemd unit: `phodex-codex.service`
+  - Bun binary: `/usr/local/bin/bun`
+  - working tree: `/srv/phodex-web`
+  - relay working directory from systemd: `/srv/phodex-web/apps/server`
+- Current live QCP frontend entry:
+  - HTTPS nginx config: `/etc/nginx/__conf.d/phodex-ip-https.conf`
+  - HTTP nginx config: `/etc/nginx/__conf.d/phodex-ip-http.conf`
+  - domain redirect config: `/etc/nginx/__conf.d/codex-ott-qzz.conf`
+  - static root for `https://8.148.226.243:8443`: `/usr/share/nginx/html/phodex-web/dist`
+- Do not treat `/root/project/phodex-web` as the active deploy directory unless the live nginx and systemd config explicitly point there.
+- Do not claim QCP is missing Bun before checking the live service and `/usr/local/bin/bun`.
+
 ## Verification Expectations
 
 - UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
