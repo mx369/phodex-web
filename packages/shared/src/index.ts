@@ -348,3 +348,44 @@ export const ACCESS_MODE_LABELS: Record<AccessMode, string> = {
 };
 
 export const MODELS = ["GPT-5.4", "GPT-5.4 mini", "o4-mini"] as const;
+
+function normalizeTraceText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function buildTraceImageSignature(images: InputImageAttachment[] = []) {
+  return images
+    .map((image) => [image.fileId ?? "", image.name ?? "", image.mimeType ?? "", image.detail ?? "", image.imageUrl ? "url" : ""].join("|"))
+    .join("||");
+}
+
+function hashTraceValue(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function buildPromptTraceKey(text: string, images: InputImageAttachment[] = []) {
+  return hashTraceValue(`${normalizeTraceText(text)}::${buildTraceImageSignature(images)}`);
+}
+
+export function summarizePromptForTrace(text: string, images: InputImageAttachment[] = []) {
+  const normalizedText = normalizeTraceText(text);
+  const textSummary = normalizedText
+    ? normalizedText.length > 72
+      ? `${normalizedText.slice(0, 69)}...`
+      : normalizedText
+    : images.length
+      ? "[image-only prompt]"
+      : "[empty prompt]";
+
+  if (!images.length) {
+    return textSummary;
+  }
+
+  const imageLabel = images.length === 1 ? "1 image" : `${images.length} images`;
+  return normalizedText ? `${textSummary} [+${imageLabel}]` : imageLabel;
+}

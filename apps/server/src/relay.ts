@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, resolve } from "node:path";
 import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
+import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
 import type {
   AppSettings,
   AppSnapshot,
@@ -142,6 +143,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 const OTP_MAIL_CONFIG = resolveOtpMailConfig();
+const FLOW_TRACE_ENABLED = /^(1|true)$/i.test(process.env.PHODEX_FLOW_TRACE ?? "");
 
 let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -152,6 +154,20 @@ const installSetupTokens = new Map<string, SetupTokenRecord>();
 const bridgeConnectionsByUserId = new Map<string, Map<string, RelayConnection>>();
 const activeBridgeIdsByUserId = new Map<string, string>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
+
+function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
+  if (!FLOW_TRACE_ENABLED) {
+    return;
+  }
+  console.log(
+    `[phodex-flow][relay] ${JSON.stringify({
+      scope: "relay",
+      ts: new Date().toISOString(),
+      phase,
+      ...details,
+    })}`
+  );
+}
 
 const server = Bun.serve<SocketData>({
   hostname: HOST,
@@ -499,6 +515,18 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
     case "thread:rename":
     case "thread:archive":
     case "message:send":
+      if (event.type === "message:send") {
+        logFlowTrace("client.message-send.received", {
+          userId: user.profile.id,
+          threadId: event.threadId,
+          promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
+          promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
+          threadState: getThreadMirror(user.profile.id).get(event.threadId)?.state ?? null,
+          activeBridgeId: getActiveBridgeId(user.profile.id),
+        });
+      }
+      dispatchToBridge(user, event);
+      break;
     case "draft:resume":
     case "draft:remove":
     case "run:stop":
@@ -533,6 +561,23 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
     selectedThreadId: user.selectedThreadId,
     event,
   };
+  if (event.type === "message:send") {
+    logFlowTrace("bridge.dispatch.sent", {
+      requestId: command.requestId,
+      userId: user.profile.id,
+      bridgeId: activeBridgeId,
+      threadId: event.threadId,
+      promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
+      promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
+    });
+  } else {
+    logFlowTrace("bridge.dispatch.sent", {
+      requestId: command.requestId,
+      userId: user.profile.id,
+      bridgeId: activeBridgeId,
+      eventType: event.type,
+    });
+  }
   bridgeSocket.send(JSON.stringify(command));
   return true;
 }
@@ -634,6 +679,13 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       break;
     }
     case "bridge:thread:updated":
+      logFlowTrace("bridge.thread-updated.received", {
+        userId: bridgeUserId,
+        bridgeId,
+        threadId: event.thread.id,
+        state: event.thread.state,
+        queuedDrafts: event.thread.queuedDrafts.length,
+      });
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }
@@ -642,6 +694,15 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       broadcastThreadToUser(bridgeUserId, event.thread.id);
       break;
     case "bridge:message:appended":
+      logFlowTrace("bridge.message-appended.received", {
+        userId: bridgeUserId,
+        bridgeId,
+        threadId: event.threadId,
+        messageId: event.message.id,
+        role: event.message.role,
+        kind: event.message.kind,
+        cardTypes: (event.message.cards ?? []).map((card) => card.type),
+      });
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }
@@ -653,6 +714,13 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     case "bridge:message:delta":
+      logFlowTrace("bridge.message-delta.received", {
+        userId: bridgeUserId,
+        bridgeId,
+        threadId: event.threadId,
+        messageId: event.messageId,
+        deltaLength: event.delta.length,
+      });
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }
@@ -662,6 +730,12 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       break;
     case "bridge:message:finished":
+      logFlowTrace("bridge.message-finished.received", {
+        userId: bridgeUserId,
+        bridgeId,
+        threadId: event.threadId,
+        messageId: event.messageId,
+      });
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }

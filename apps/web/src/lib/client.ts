@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
 import type {
   AccessMode,
   AppSettings,
@@ -55,6 +56,7 @@ type StoredComposerPreferences = {
 
 const SESSION_STORAGE_KEY = "phodex.session";
 const COMPOSER_PREFERENCES_STORAGE_KEY = "phodex.composerPreferences";
+const FLOW_TRACE_STORAGE_KEY = "phodex.flowTrace";
 const PENDING_THREAD_PREFIX = "pending-thread:";
 const OPTIMISTIC_QUEUED_DRAFT_PREFIX = "optimistic-queued:";
 const PENDING_THREAD_SLOW_MS = 18_000;
@@ -108,6 +110,37 @@ let pendingThreadCreate: PendingThreadCreate | null = null;
 let pendingResumeFeedback: PendingResumeFeedback | null = null;
 const optimisticQueuedDrafts = new Map<string, QueuedDraft[]>();
 const pendingResumeTimers = new Map<string, number>();
+
+function flowTraceEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("flowTrace") === "1" || localStorage.getItem(FLOW_TRACE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
+  if (!flowTraceEnabled()) {
+    return;
+  }
+
+  const entry = {
+    scope: "client",
+    ts: new Date().toISOString(),
+    phase,
+    ...details,
+  };
+  const traceWindow = window as Window & { __PHODEX_FLOW_TRACE__?: unknown[] };
+  if (!Array.isArray(traceWindow.__PHODEX_FLOW_TRACE__)) {
+    traceWindow.__PHODEX_FLOW_TRACE__ = [];
+  }
+  traceWindow.__PHODEX_FLOW_TRACE__.push(entry);
+  if (traceWindow.__PHODEX_FLOW_TRACE__.length > 600) {
+    traceWindow.__PHODEX_FLOW_TRACE__.splice(0, traceWindow.__PHODEX_FLOW_TRACE__.length - 600);
+  }
+  console.log("[phodex-flow][client]", JSON.stringify(entry));
+}
 
 function createClientId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -525,6 +558,21 @@ function send(event: ClientEvent) {
     pushToast("error", "Relay not connected yet.");
     return false;
   }
+  if (event.type === "message:send") {
+    logFlowTrace("ws.send.message", {
+      threadId: event.threadId,
+      promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
+      promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
+      model: event.model,
+      planArmed: event.planArmed,
+      fastMode: event.fastMode,
+      accessMode: event.accessMode,
+    });
+  } else {
+    logFlowTrace("ws.send.event", {
+      eventType: event.type,
+    });
+  }
   socket.send(JSON.stringify(event));
   return true;
 }
@@ -552,6 +600,12 @@ function handleServerEvent(event: ServerEvent) {
       break;
     }
     case "thread:updated":
+      logFlowTrace("ws.recv.thread-updated", {
+        threadId: event.thread.id,
+        state: event.thread.state,
+        queuedDrafts: event.thread.queuedDrafts.length,
+        selectedThreadId: event.selectedThreadId,
+      });
       if (!state.snapshot) {
         return;
       }
@@ -569,6 +623,13 @@ function handleServerEvent(event: ServerEvent) {
       }
       break;
     case "message:appended": {
+      logFlowTrace("ws.recv.message-appended", {
+        threadId: event.threadId,
+        messageId: event.message.id,
+        role: event.message.role,
+        kind: event.message.kind,
+        cardTypes: (event.message.cards ?? []).map((card) => card.type),
+      });
       const thread = findThread(event.threadId);
       if (!thread) {
         return;
@@ -581,6 +642,11 @@ function handleServerEvent(event: ServerEvent) {
       break;
     }
     case "message:delta": {
+      logFlowTrace("ws.recv.message-delta", {
+        threadId: event.threadId,
+        messageId: event.messageId,
+        deltaLength: event.delta.length,
+      });
       const thread = findThread(event.threadId);
       const message = thread?.messages.find((item) => item.id === event.messageId);
       if (message) {
@@ -591,6 +657,10 @@ function handleServerEvent(event: ServerEvent) {
       break;
     }
     case "message:finished": {
+      logFlowTrace("ws.recv.message-finished", {
+        threadId: event.threadId,
+        messageId: event.messageId,
+      });
       const thread = findThread(event.threadId);
       const message = thread?.messages.find((item) => item.id === event.messageId);
       if (message) {
@@ -884,6 +954,11 @@ function syncPendingRunFeedbackFromMessage(threadId: string, role: string, text:
   }
 
   if (role === "user" && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pending.prompt)) {
+    logFlowTrace("pending-run.acknowledged", {
+      threadId,
+      promptTrace: buildPromptTraceKey(pending.prompt, pending.images),
+      promptSummary: summarizePromptForTrace(pending.prompt, pending.images),
+    });
     pending.promptAcknowledged = true;
     if (pendingResumeFeedback?.threadId === threadId && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pendingResumeFeedback.prompt)) {
       clearPendingResumeTimer(threadId, pendingResumeFeedback.draftId);
@@ -964,6 +1039,8 @@ function flushComposer(threadId: string) {
 
   const thread = findThread(threadId);
   const willQueueDraft = thread?.state === "running";
+  const promptTrace = buildPromptTraceKey(text, images);
+  const promptSummary = summarizePromptForTrace(text, images);
   const sent = send({
     type: "message:send",
     threadId,
@@ -977,6 +1054,15 @@ function flushComposer(threadId: string) {
   if (!sent) {
     return false;
   }
+  logFlowTrace(willQueueDraft ? "composer.send.queued" : "composer.send.started", {
+    threadId,
+    promptTrace,
+    promptSummary,
+    model: state.ui.selectedModel,
+    planArmed: state.ui.planArmed,
+    fastMode: state.ui.fastMode,
+    accessMode: state.ui.accessMode,
+  });
   if (willQueueDraft) {
     addOptimisticQueuedDraft(threadId, text, images);
   } else {

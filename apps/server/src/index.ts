@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSyn
 import { basename, dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
+import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
 import type {
   AppSettings,
   AppSnapshot,
@@ -84,6 +85,15 @@ type ActiveTurnState = {
   assistantMessageId: string | null;
   startedAt: string;
   mode: "chat" | "plan";
+  promptTrace: string;
+  promptSummary: string;
+};
+
+type PendingTurnTrace = {
+  userId: string;
+  promptTrace: string;
+  promptSummary: string;
+  mode: "chat" | "plan";
 };
 
 type ThreadListResponse = {
@@ -154,6 +164,7 @@ const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const CODEX_BIN = resolveCodexBinary();
 const OTP_MAIL_CONFIG = resolveOtpMailConfig();
+const FLOW_TRACE_ENABLED = /^(1|true)$/i.test(process.env.PHODEX_FLOW_TRACE ?? "");
 const DEV_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -171,8 +182,23 @@ const bridgeUsers = new Map<string, PersistedUser>();
 const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
 const pendingTurnModes = new Map<string, "chat" | "plan">();
+const pendingTurnTraces = new Map<string, PendingTurnTrace>();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
 const projectContextCache = new Map<string, ProjectContext>();
+
+function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
+  if (!FLOW_TRACE_ENABLED) {
+    return;
+  }
+  console.log(
+    `[phodex-flow][bridge] ${JSON.stringify({
+      scope: "bridge",
+      ts: new Date().toISOString(),
+      phase,
+      ...details,
+    })}`
+  );
+}
 
 let codexProcess: ChildProcessWithoutNullStreams | null = null;
 let codexSocket: WebSocket | null = null;
@@ -749,6 +775,12 @@ function queueDraft(
   thread.state = "running";
   thread.preview = preview;
   thread.lastActivityAt = new Date().toISOString();
+  logFlowTrace("message-send.queued", {
+    threadId: thread.id,
+    promptTrace: buildPromptTraceKey(text, images),
+    promptSummary: summarizePromptForTrace(text, images),
+    queuedDrafts: local.queuedDrafts.length,
+  });
   schedulePersist();
   broadcastThreadToAllUsers(thread.id);
 }
@@ -772,6 +804,9 @@ async function startThreadRun(
   text: string,
   preview: string
 ) {
+  const images = normalizeInputImages(event.images);
+  const promptTrace = buildPromptTraceKey(text, images);
+  const promptSummary = summarizePromptForTrace(text, images);
   if (user.selectedThreadId === thread.id) {
     sendUserPatch(user.profile.id, {
       banner: null,
@@ -780,13 +815,32 @@ async function startThreadRun(
   markThreadRunning(thread.id, preview);
   const turnMode = deriveRequestedTurnMode(text, event.planArmed);
   pendingTurnModes.set(thread.id, turnMode);
+  pendingTurnTraces.set(thread.id, {
+    userId: user.profile.id,
+    promptTrace,
+    promptSummary,
+    mode: turnMode,
+  });
   schedulePersist();
   broadcastThreadToAllUsers(thread.id);
   broadcastSnapshotsToAllUsers();
+  logFlowTrace("turn.start.requested", {
+    threadId: thread.id,
+    userId: user.profile.id,
+    promptTrace,
+    promptSummary,
+    mode: turnMode,
+    model: event.model,
+    planArmed: event.planArmed,
+    fastMode: event.fastMode,
+    accessMode: event.accessMode,
+    queuedDrafts: ensureThreadLocal(thread.id).queuedDrafts.length,
+  });
 
   try {
     const turnResponse = await startTurn(thread, text, event, user.profile.id);
     const turnId = readString(turnResponse?.turn?.id);
+    const pendingTrace = pendingTurnTraces.get(thread.id);
     if (turnId) {
       activeTurns.set(thread.id, {
         userId: user.profile.id,
@@ -795,14 +849,18 @@ async function startThreadRun(
         assistantMessageId: null,
         startedAt: new Date().toISOString(),
         mode: turnMode,
+        promptTrace: pendingTrace?.promptTrace ?? promptTrace,
+        promptSummary: pendingTrace?.promptSummary ?? promptSummary,
       });
-      pendingTurnModes.delete(thread.id);
     }
+    pendingTurnModes.delete(thread.id);
+    pendingTurnTraces.delete(thread.id);
     codexLastSyncAt = new Date().toISOString();
     publishPresenceToAllUsers();
     return true;
   } catch (error) {
     pendingTurnModes.delete(thread.id);
+    pendingTurnTraces.delete(thread.id);
     thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
     broadcastThreadToAllUsers(thread.id);
     sendToast(user.profile.id, "error", readErrorMessage(error));
@@ -821,6 +879,13 @@ async function handleMessageSend(
     return "failed";
   }
   const preview = summarizeMessagePreview(text, images);
+  logFlowTrace("message-send.received", {
+    userId: user.profile.id,
+    threadId: event.threadId,
+    promptTrace: buildPromptTraceKey(text, images),
+    promptSummary: summarizePromptForTrace(text, images),
+    threadState: threadCache.get(event.threadId)?.state ?? null,
+  });
 
   try {
     ensureCodexReady();
@@ -870,6 +935,14 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
     const [draft] = local.queuedDrafts.splice(draftIndex, 1);
     thread.queuedDrafts = local.queuedDrafts;
     schedulePersist();
+    logFlowTrace("queued-draft.resume", {
+      userId: user.profile.id,
+      threadId,
+      draftId,
+      promptTrace: buildPromptTraceKey(draft.text, draft.images ?? []),
+      promptSummary: summarizePromptForTrace(draft.text, draft.images ?? []),
+      remainingDrafts: local.queuedDrafts.length,
+    });
 
     const nextEvent = buildQueuedDraftEvent(threadId, draft);
     const nextText = nextEvent.text.trim();
@@ -910,6 +983,15 @@ async function resumeNextQueuedDraft(userId: string | undefined, threadId: strin
     return;
   }
 
+  logFlowTrace("queued-draft.auto-resume", {
+    userId,
+    threadId,
+    draftId: nextDraft.id,
+    promptTrace: buildPromptTraceKey(nextDraft.text, nextDraft.images ?? []),
+    promptSummary: summarizePromptForTrace(nextDraft.text, nextDraft.images ?? []),
+    queuedDrafts: local.queuedDrafts.length,
+  });
+
   await handleDraftResume(user, threadId, nextDraft.id);
 }
 
@@ -919,7 +1001,10 @@ async function startTurn(
   event: Extract<ClientEvent, { type: "message:send" }>,
   userId: string
 ) {
-  const input = buildTurnInput(text, normalizeInputImages(event.images));
+  const promptImages = normalizeInputImages(event.images);
+  const input = buildTurnInput(text, promptImages);
+  const promptTrace = buildPromptTraceKey(text, promptImages);
+  const promptSummary = summarizePromptForTrace(text, promptImages);
   const baseParams = {
     threadId: thread.id,
     input,
@@ -929,10 +1014,25 @@ async function startTurn(
   };
 
   try {
-    return await codexRequest("turn/start", {
+    logFlowTrace("codex.turn-start.request", {
+      threadId: thread.id,
+      promptTrace,
+      promptSummary,
+      model: baseParams.model,
+      approvalPolicy: baseParams.approvalPolicy,
+      sandboxMode: baseParams.sandboxPolicy.mode,
+    });
+    const result = await codexRequest("turn/start", {
       ...baseParams,
       ...(event.fastMode && codexSupportsServiceTier ? { serviceTier: "fast" as const } : {}),
     });
+    logFlowTrace("codex.turn-start.response", {
+      threadId: thread.id,
+      promptTrace,
+      promptSummary,
+      turnId: readString(result?.turn?.id) || null,
+    });
+    return result;
   } catch (error) {
     if (event.fastMode && codexSupportsServiceTier && shouldRetryTurnStartWithoutServiceTier(error)) {
       codexSupportsServiceTier = false;
@@ -1161,13 +1261,23 @@ function handleTurnStarted(params: any) {
   const thread = ensureThreadRecord(threadId);
   thread.state = "running";
   thread.lastActivityAt = toIsoFromEpoch(params?.turn?.startedAt) ?? new Date().toISOString();
+  const currentTurn = activeTurns.get(threadId);
+  const pendingTrace = pendingTurnTraces.get(threadId);
   activeTurns.set(threadId, {
-    userId: activeTurns.get(threadId)?.userId ?? "",
+    userId: currentTurn?.userId ?? pendingTrace?.userId ?? "",
     threadId,
     turnId,
     assistantMessageId: null,
     startedAt: thread.lastActivityAt,
-    mode: activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
+    mode: currentTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
+    promptTrace: currentTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
+    promptSummary: currentTurn?.promptSummary ?? pendingTrace?.promptSummary ?? "",
+  });
+  logFlowTrace("codex.turn-started", {
+    threadId,
+    turnId,
+    promptTrace: currentTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
+    promptSummary: currentTurn?.promptSummary ?? pendingTrace?.promptSummary ?? "",
   });
   broadcastThreadToAllUsers(threadId);
 }
@@ -1179,12 +1289,14 @@ function handleItemStarted(params: any) {
     return;
   }
 
-  const startedAt = activeTurns.get(threadId)?.startedAt ?? new Date().toISOString();
+  const activeTurn = activeTurns.get(threadId);
+  const pendingTrace = pendingTurnTraces.get(threadId);
+  const startedAt = activeTurn?.startedAt ?? new Date().toISOString();
   const message = mapLiveItemToMessage(
     item,
     startedAt,
     "started",
-    activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
+    activeTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
   );
   if (!message) {
     return;
@@ -1192,14 +1304,27 @@ function handleItemStarted(params: any) {
 
   if (item.type === "agentMessage") {
     message.isStreaming = true;
-    const activeTurn = activeTurns.get(threadId);
     if (activeTurn) {
       activeTurn.assistantMessageId = message.id;
     }
   }
 
   appendMessage(threadId, message);
+  logFlowTrace("codex.item-started", {
+    threadId,
+    itemId: message.id,
+    itemType: item.type,
+    role: message.role,
+    promptTrace: activeTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
+    promptSummary: activeTurn?.promptSummary ?? pendingTrace?.promptSummary ?? "",
+    cardTypes: (message.cards ?? []).map((card) => card.type),
+  });
   sendBridgeEvent({ type: "bridge:message:appended", threadId, message });
+  logFlowTrace("relay.message-appended.sent", {
+    threadId,
+    messageId: message.id,
+    role: message.role,
+  });
   broadcastThreadToAllUsers(threadId);
 }
 
@@ -1230,7 +1355,21 @@ function handleAgentMessageDelta(params: any) {
   message.isStreaming = true;
   thread.preview = message.text || thread.preview;
   thread.lastActivityAt = new Date().toISOString();
+  const activeTurn = activeTurns.get(threadId);
+  const pendingTrace = pendingTurnTraces.get(threadId);
+  logFlowTrace("codex.agent-delta", {
+    threadId,
+    messageId,
+    deltaLength: delta.length,
+    promptTrace: activeTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
+    promptSummary: activeTurn?.promptSummary ?? pendingTrace?.promptSummary ?? "",
+  });
   sendBridgeEvent({ type: "bridge:message:delta", threadId, messageId, delta });
+  logFlowTrace("relay.message-delta.sent", {
+    threadId,
+    messageId,
+    deltaLength: delta.length,
+  });
 }
 
 function handleItemCompleted(params: any) {
@@ -1252,12 +1391,27 @@ function handleItemCompleted(params: any) {
   }
 
   appendMessage(threadId, message);
+  logFlowTrace("codex.item-completed", {
+    threadId,
+    itemId: message.id,
+    role: message.role,
+    itemType: item.type,
+    cardTypes: (message.cards ?? []).map((card) => card.type),
+    promptTrace: activeTurns.get(threadId)?.promptTrace ?? pendingTurnTraces.get(threadId)?.promptTrace ?? "",
+    promptSummary: activeTurns.get(threadId)?.promptSummary ?? pendingTurnTraces.get(threadId)?.promptSummary ?? "",
+  });
   if (message.role === "assistant") {
     const liveMessage = thread.messages.find((entry) => entry.id === message.id);
     if (liveMessage) {
       liveMessage.isStreaming = false;
     }
     sendBridgeEvent({ type: "bridge:message:finished", threadId, messageId: message.id });
+    logFlowTrace("relay.message-finished.sent", {
+      threadId,
+      messageId: message.id,
+      promptTrace: activeTurns.get(threadId)?.promptTrace ?? pendingTurnTraces.get(threadId)?.promptTrace ?? "",
+      promptSummary: activeTurns.get(threadId)?.promptSummary ?? pendingTurnTraces.get(threadId)?.promptSummary ?? "",
+    });
   }
   broadcastThreadToAllUsers(threadId);
 }
@@ -1288,6 +1442,7 @@ function handleTurnCompleted(params: any) {
   const completedTurn = activeTurns.get(threadId);
   activeTurns.delete(threadId);
   pendingTurnModes.delete(threadId);
+  pendingTurnTraces.delete(threadId);
   const thread = ensureThreadRecord(threadId);
   const local = ensureThreadLocal(threadId);
   const hasQueuedDrafts = local.queuedDrafts.length > 0;
@@ -1303,6 +1458,13 @@ function handleTurnCompleted(params: any) {
   if (completedTurn?.userId) {
     sendUserPatch(completedTurn.userId, { banner });
   }
+  logFlowTrace("codex.turn-completed", {
+    threadId,
+    turnId: completedTurn?.turnId ?? null,
+    promptTrace: completedTurn?.promptTrace ?? "",
+    promptSummary: completedTurn?.promptSummary ?? "",
+    queuedDrafts: local.queuedDrafts.length,
+  });
   schedulePersist();
   broadcastThreadToAllUsers(threadId);
   void resumeNextQueuedDraft(completedTurn?.userId, threadId);
@@ -1607,11 +1769,22 @@ function applyThreadStatusUpdate(threadId: string, statusType: string) {
   }
 
   const thread = ensureThreadRecord(threadId);
+  const previousState = thread.state;
   thread.state = deriveThreadState(statusType, threadId, thread.state === "archived");
   thread.lastActivityAt = new Date().toISOString();
-  if (thread.state !== "running") {
-    activeTurns.delete(threadId);
-  }
+  const activeTurn = activeTurns.get(threadId);
+  logFlowTrace("codex.thread-status.changed", {
+    threadId,
+    statusType,
+    previousState,
+    nextState: thread.state,
+    hasActiveTurn: Boolean(activeTurn),
+    promptTrace: activeTurn?.promptTrace ?? "",
+    promptSummary: activeTurn?.promptSummary ?? "",
+  });
+  // Some Codex backends emit a terminal status change before turn/completed.
+  // Keep the active turn context until the terminal turn event arrives so
+  // queued auto-resume still has the originating user and prompt trace.
   broadcastThreadToAllUsers(threadId);
 }
 
