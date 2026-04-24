@@ -41,7 +41,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## Runtime Behaviors
 
-- Bootstrap and client websocket open send a full snapshot from the public relay.
+- `GET /api/bootstrap`, OTP verify, and relay `snapshot` events now send metadata-first snapshots from the public relay.
+- The selected thread's message bodies hydrate separately over the websocket via bridge sync and `thread:updated`, so session restore does not redownload the full selected conversation in every snapshot hop.
 - `AppSnapshot` now carries `activeBridgeId` plus `bridgeDevices[]`, and relay `presence` events rebroadcast those same per-device records so Home can render every registered Mac instead of only the active one.
 - When Home sends `bridge:select`, the relay validates that the target bridge is both registered and currently online before moving `activeBridgeId`, clearing mirrored thread selection, rebroadcasting snapshot/presence, and requesting a fresh `bridge:sync-all` from that bridge.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
@@ -59,7 +60,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Non-active bridge devices may stay registered and online without replacing the active device unless they are in a strictly better readiness state than the current active bridge.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
 - The production web bundle should call relay HTTP routes via same-origin paths and derive the relay websocket from the current page origin. Do not bake loopback client targets such as `127.0.0.1:3443` into a public build.
-- Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by only hydrating the currently selected thread in per-user snapshots and realtime updates.
+- Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by hydrating the selected thread through `thread:updated` and message events instead of every snapshot.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.

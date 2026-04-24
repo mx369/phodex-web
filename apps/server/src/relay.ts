@@ -881,8 +881,12 @@ function ensureMirroredThread(userId: string, threadId: string) {
   return thread;
 }
 
-function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string | null) {
-  if (thread.id === selectedThreadId) {
+function serializeThreadForUser(
+  thread: ThreadRecord,
+  selectedThreadId: string | null,
+  includeSelectedMessages: boolean
+) {
+  if (includeSelectedMessages && thread.id === selectedThreadId) {
     return thread;
   }
 
@@ -892,9 +896,10 @@ function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string |
   } satisfies ThreadRecord;
 }
 
-function snapshotForUser(userId: string): AppSnapshot {
+function snapshotForUser(userId: string, options: { includeSelectedMessages?: boolean } = {}): AppSnapshot {
   const user = persisted.users[userId];
   const activeBridgeId = getActiveBridgeId(userId) || null;
+  const includeSelectedMessages = options.includeSelectedMessages ?? false;
   const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
     const leftArchived = left.state === "archived" ? 1 : 0;
     const rightArchived = right.state === "archived" ? 1 : 0;
@@ -902,7 +907,7 @@ function snapshotForUser(userId: string): AppSnapshot {
       return leftArchived - rightArchived;
     }
     return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
-  }).map((thread) => serializeThreadForUser(thread, user.selectedThreadId));
+  }).map((thread) => serializeThreadForUser(thread, user.selectedThreadId, includeSelectedMessages));
 
   return {
     user: user.profile,
@@ -1438,7 +1443,7 @@ function broadcastThreadToUser(userId: string, threadId: string) {
   }
   broadcast(userId, {
     type: "thread:updated",
-    thread: serializeThreadForUser(thread, user.selectedThreadId),
+    thread: serializeThreadForUser(thread, user.selectedThreadId, true),
     selectedThreadId: user.selectedThreadId,
   });
 }
