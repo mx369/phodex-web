@@ -2,6 +2,7 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
+  AccessMode,
   BridgeDeviceSummary,
   InputImageAttachment,
   ProjectDiffFile,
@@ -31,6 +32,7 @@ type AppIconName =
   | "home"
   | "info"
   | "menu"
+  | "more-horizontal"
   | "plus"
   | "relay"
   | "settings"
@@ -145,6 +147,13 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
       { x1: 5, y1: 7, x2: 19, y2: 7 },
       { x1: 5, y1: 12, x2: 19, y2: 12 },
       { x1: 5, y1: 17, x2: 19, y2: 17 },
+    ],
+  },
+  "more-horizontal": {
+    circles: [
+      { cx: 6.5, cy: 12, r: 1.2 },
+      { cx: 12, cy: 12, r: 1.2 },
+      { cx: 17.5, cy: 12, r: 1.2 },
     ],
   },
   plus: {
@@ -293,6 +302,8 @@ const dialogState = ref<AppDialogState | null>(null);
 const dialogInput = ref("");
 const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
+const threadMenuOpen = ref(false);
+const threadMenuEl = ref<HTMLElement | null>(null);
 const composerImageInputEl = ref<HTMLInputElement | null>(null);
 const composerInputEl = ref<HTMLTextAreaElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
@@ -303,6 +314,12 @@ const isScrolledToBottom = ref(true);
 const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
+const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
+const ACCESS_MODE_COMPACT_LABELS: Record<AccessMode, string> = {
+  "read-only": "Read",
+  "on-request": "Ask",
+  "full-access": "Full",
+};
 
 let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
@@ -762,6 +779,9 @@ const composerSendTitle = computed(() => {
   }
   return currentThread.value?.state === "running" ? "Queue" : "Send";
 });
+const composerRuntimeLabel = computed(
+  () => `${state.ui.selectedModel} · ${ACCESS_MODE_COMPACT_LABELS[state.ui.accessMode]}`
+);
 const homeStatusLabel = computed(() => {
   if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
     return "Mac linked";
@@ -925,6 +945,17 @@ function formatThreadLocation(thread: ThreadRecord) {
 
 const currentThreadRepoName = computed(() => {
   return repoNameFromPath(currentThread.value?.repoLabel ?? "");
+});
+const currentThreadWorkspaceLabel = computed(() => currentThreadRepoName.value || currentThread.value?.projectLabel || "Project");
+const currentThreadSummaryLine = computed(() => {
+  if (!currentThread.value) {
+    return "";
+  }
+  return [
+    formatThreadState(currentThread.value),
+    currentThread.value.branch,
+    `+${currentThread.value.diff.additions} -${currentThread.value.diff.deletions}`,
+  ].join(" · ");
 });
 watch(
   isAuthenticated,
@@ -1362,26 +1393,6 @@ function formatThreadState(thread: ThreadRecord | null) {
       return "Archived";
     default:
       return "Ready";
-  }
-}
-
-function threadStateTone(thread: ThreadRecord | null) {
-  if (!thread) {
-    return "green";
-  }
-  if (thread.id.startsWith("pending-thread:")) {
-    return "amber";
-  }
-  const stateValue = thread.state;
-  switch (stateValue) {
-    case "running":
-      return "amber";
-    case "queued":
-      return "blue";
-    case "archived":
-      return "slate";
-    default:
-      return "green";
   }
 }
 
@@ -1885,10 +1896,15 @@ function closeModelPicker() {
   modelPickerOpen.value = false;
 }
 
+function closeThreadMenu() {
+  threadMenuOpen.value = false;
+}
+
 function toggleModelPicker() {
   if (isCurrentThreadPendingCreate.value) {
     return;
   }
+  closeThreadMenu();
   modelPickerOpen.value = !modelPickerOpen.value;
 }
 
@@ -1904,36 +1920,42 @@ function selectFastMode(fastMode: boolean) {
   closeModelPicker();
 }
 
-function cycleAccessMode() {
+function selectAccessMode(accessMode: AccessMode) {
   if (isCurrentThreadPendingCreate.value) {
     return;
   }
-  state.ui.accessMode =
-    state.ui.accessMode === "full-access"
-      ? "on-request"
-      : state.ui.accessMode === "on-request"
-        ? "read-only"
-        : "full-access";
+  state.ui.accessMode = accessMode;
   persistComposerPreferences();
+  closeModelPicker();
+}
+
+function toggleThreadMenu() {
+  if (!currentThread.value) {
+    return;
+  }
+  closeModelPicker();
+  threadMenuOpen.value = !threadMenuOpen.value;
 }
 
 function handleDocumentPointerDown(event: PointerEvent) {
-  if (!modelPickerOpen.value || !modelPickerEl.value) {
-    return;
-  }
   const target = event.target;
   if (!(target instanceof Node)) {
     return;
   }
-  if (modelPickerEl.value.contains(target)) {
+  if (modelPickerOpen.value && modelPickerEl.value?.contains(target)) {
+    return;
+  }
+  if (threadMenuOpen.value && threadMenuEl.value?.contains(target)) {
     return;
   }
   closeModelPicker();
+  closeThreadMenu();
 }
 
 function handleDocumentKeyDown(event: KeyboardEvent) {
   if (event.key === "Escape") {
     closeModelPicker();
+    closeThreadMenu();
   }
 }
 
@@ -1953,11 +1975,13 @@ function handleComposerKeyDown(event: KeyboardEvent) {
 
 function openSidebar() {
   closeModelPicker();
+  closeThreadMenu();
   state.ui.sidebarOpen = true;
 }
 
 function closeSidebar() {
   closeModelPicker();
+  closeThreadMenu();
   state.ui.sidebarOpen = false;
 }
 
@@ -2102,6 +2126,7 @@ function startWorktreeChat() {
 
 function openPanel(panel: ShellPageState, replace = false) {
   closeModelPicker();
+  closeThreadMenu();
   if (panel === "settings") {
     shellPageStack.value = ["settings"];
     state.ui.sidebarOpen = false;
@@ -2118,6 +2143,7 @@ function openPanel(panel: ShellPageState, replace = false) {
 
 function closePanel() {
   closeModelPicker();
+  closeThreadMenu();
   if (shellPageStack.value.length > 1) {
     shellPageStack.value = shellPageStack.value.slice(0, -1);
     return;
@@ -2128,6 +2154,7 @@ function closePanel() {
 
 function closeDialog() {
   closeModelPicker();
+  closeThreadMenu();
   resetProjectBrowserState();
   resetProjectDiffState();
   dialogState.value = null;
@@ -2964,9 +2991,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 <p v-if="currentThread?.id === thread.id" class="drawer-thread__preview">{{ thread.preview }}</p>
                                 <div class="drawer-thread__meta">
                                   <span>{{ formatThreadLocation(thread) }}</span>
-                                  <span>{{ thread.branch }}</span>
-                                  <span>+{{ thread.diff.additions }} -{{ thread.diff.deletions }}</span>
-                                  <span v-if="thread.subagentCount">{{ thread.subagentCount }} agents</span>
                                   <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
                                   <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
                                 </div>
@@ -3038,12 +3062,70 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                     <div class="phone-topbar__title">
                       <strong>{{ currentThread?.title ?? "Home" }}</strong>
+                      <span v-if="currentThread" class="phone-topbar__subtitle">{{ currentThreadWorkspaceLabel }}</span>
                     </div>
 
-                    <button v-if="!currentThread" class="icon-button phone-topbar__action" aria-label="Settings" @click="openPanel('settings')">
+                    <button
+                      v-if="!currentThread"
+                      class="icon-button phone-topbar__action"
+                      aria-label="Settings"
+                      @click="openPanel('settings')"
+                    >
                       <AppIcon name="settings" />
                     </button>
-                    <span v-else class="phone-topbar__spacer" aria-hidden="true"></span>
+                    <div v-else ref="threadMenuEl" class="thread-menu">
+                      <button
+                        class="icon-button phone-topbar__action"
+                        type="button"
+                        aria-label="Thread actions"
+                        :aria-expanded="threadMenuOpen"
+                        aria-haspopup="menu"
+                        @click="toggleThreadMenu"
+                      >
+                        <AppIcon name="more-horizontal" />
+                      </button>
+
+                      <transition name="composer-picker">
+                        <div v-if="threadMenuOpen" class="thread-menu__panel" role="menu" aria-label="Thread actions">
+                          <div class="thread-menu__summary">
+                            <span class="section-label">Current chat</span>
+                            <strong>{{ currentThreadWorkspaceLabel }}</strong>
+                            <span>{{ currentThreadSummaryLine }}</span>
+                          </div>
+
+                          <button class="thread-menu__action" type="button" role="menuitem" @click="openProjectBrowser(currentThread); closeThreadMenu()">
+                            <span class="thread-menu__action-copy">
+                              <strong>Project files</strong>
+                              <span>Browse the current workspace</span>
+                            </span>
+                          </button>
+                          <button class="thread-menu__action" type="button" role="menuitem" @click="openProjectDiff(currentThread); closeThreadMenu()">
+                            <span class="thread-menu__action-copy">
+                              <strong>Working tree diff</strong>
+                              <span>Inspect pending file changes</span>
+                            </span>
+                          </button>
+                          <button
+                            class="thread-menu__action"
+                            type="button"
+                            role="menuitem"
+                            :disabled="isCurrentThreadPendingCreate"
+                            @click="startToolbarLocalChat(); closeThreadMenu()"
+                          >
+                            <span class="thread-menu__action-copy">
+                              <strong>New chat here</strong>
+                              <span>Start another thread in this workspace</span>
+                            </span>
+                          </button>
+                          <button class="thread-menu__action" type="button" role="menuitem" @click="startWorktreeChat(); closeThreadMenu()">
+                            <span class="thread-menu__action-copy">
+                              <strong>Start worktree</strong>
+                              <span>Create a fresh worktree thread</span>
+                            </span>
+                          </button>
+                        </div>
+                      </transition>
+                    </div>
                   </header>
 
                   <div v-if="floatingToasts.length" class="toast-stack">
@@ -3056,32 +3138,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       {{ toast.message }}
                     </div>
                   </div>
-
-                  <section v-if="currentThread" class="turn-toolbar">
-                    <div class="turn-toolbar__inner">
-                      <div class="turn-toolbar__strip">
-                        <span class="turn-chip" :class="`turn-chip--${threadStateTone(currentThread)}`">
-                          {{ formatThreadState(currentThread) }}
-                        </span>
-                        <button class="turn-chip turn-chip--button" type="button" @click="openProjectDiff(currentThread)">
-                          +{{ currentThread.diff.additions }} -{{ currentThread.diff.deletions }}
-                        </button>
-                        <span class="turn-chip">{{ currentThread.branch }}</span>
-                        <button class="turn-chip turn-chip--button turn-chip--muted" type="button" @click="openProjectBrowser(currentThread)">
-                          {{ currentThreadRepoName || currentThread.projectLabel }}
-                        </button>
-                      </div>
-                      <div class="turn-toolbar__actions">
-                        <button class="turn-toolbar__action" :disabled="isCurrentThreadPendingCreate" @click="startToolbarLocalChat">
-                          New Chat
-                        </button>
-                        <button class="turn-toolbar__action" @click="startWorktreeChat">Worktree</button>
-                        <button class="turn-toolbar__action turn-toolbar__action--muted" @click="openSidebar">
-                          {{ state.snapshot?.connection.macLabel }}
-                        </button>
-                      </div>
-                    </div>
-                  </section>
 
                   <section
                     ref="conversationScrollEl"
@@ -3612,21 +3668,32 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             >
                               <AppIcon name="file" />
                             </button>
+                          </div>
 
-                            <div ref="modelPickerEl" class="model-picker">
+                          <div class="phone-composer__toolbar-right">
+                            <button
+                              v-if="currentThread?.state === 'running'"
+                              class="composer-action composer-action--dark"
+                              type="button"
+                              aria-label="Stop run"
+                              @click="client.stopRun(currentThread.id)"
+                            >
+                              <AppIcon name="stop" />
+                            </button>
+                            <div ref="modelPickerEl" class="model-picker model-picker--runtime">
                               <button
-                                class="model-picker__trigger"
+                                class="model-picker__trigger model-picker__trigger--runtime"
                                 type="button"
                                 aria-haspopup="menu"
                                 :aria-expanded="modelPickerOpen"
-                                aria-label="Select model and speed"
+                                aria-label="Select model, speed, and access mode"
                                 :disabled="isCurrentThreadPendingCreate"
                                 @click="toggleModelPicker"
                               >
                                 <span v-if="state.ui.fastMode" class="model-picker__tier" aria-hidden="true">
                                   <AppIcon name="bolt" />
                                 </span>
-                                <strong class="model-picker__trigger-label">{{ state.ui.selectedModel }}</strong>
+                                <strong class="model-picker__trigger-label">{{ composerRuntimeLabel }}</strong>
                                 <AppIcon name="chevron-down" />
                               </button>
 
@@ -3700,21 +3767,43 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                       <AppIcon name="check" />
                                     </span>
                                   </button>
+
+                                  <div class="model-picker__divider" aria-hidden="true"></div>
+                                  <span class="model-picker__section-label">Access</span>
+
+                                  <button
+                                    v-for="accessMode in ACCESS_MODE_OPTIONS"
+                                    :key="accessMode"
+                                    class="model-picker__option"
+                                    :class="{ 'model-picker__option--active': state.ui.accessMode === accessMode }"
+                                    type="button"
+                                    role="menuitemradio"
+                                    :aria-checked="state.ui.accessMode === accessMode"
+                                    @click="selectAccessMode(accessMode)"
+                                  >
+                                    <span class="model-picker__copy">
+                                      <strong>{{ ACCESS_MODE_LABELS[accessMode] }}</strong>
+                                      <span>
+                                        {{
+                                          accessMode === 'full-access'
+                                            ? 'Runs directly in the local shell.'
+                                            : accessMode === 'on-request'
+                                              ? 'Ask before privileged actions.'
+                                              : 'Inspect and plan without writes.'
+                                        }}
+                                      </span>
+                                    </span>
+                                    <span
+                                      class="model-picker__status"
+                                      :class="{ 'model-picker__status--visible': state.ui.accessMode === accessMode }"
+                                      aria-hidden="true"
+                                    >
+                                      <AppIcon name="check" />
+                                    </span>
+                                  </button>
                                 </div>
                               </transition>
                             </div>
-                          </div>
-
-                          <div class="phone-composer__toolbar-right">
-                            <button
-                              v-if="currentThread?.state === 'running'"
-                              class="composer-action composer-action--dark"
-                              type="button"
-                              aria-label="Stop run"
-                              @click="client.stopRun(currentThread.id)"
-                            >
-                              <AppIcon name="stop" />
-                            </button>
                             <button
                               class="send-cta composer-action composer-action--send"
                               :class="`send-cta--${composerSendTone}`"
@@ -3736,19 +3825,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             </button>
                           </div>
                         </div>
-                      </div>
-
-                      <div class="phone-secondary-bar">
-                        <span class="pill">Local</span>
-                        <button
-                          class="pill pill--button"
-                          :disabled="isCurrentThreadPendingCreate"
-                          @click="cycleAccessMode"
-                        >
-                          {{ ACCESS_MODE_LABELS[state.ui.accessMode] }}
-                        </button>
-                        <span class="pill">{{ currentThread?.branch ?? "main" }}</span>
-                        <span class="pill pill--muted">{{ state.snapshot?.connection.macLabel }}</span>
                       </div>
                     </div>
                   </footer>
