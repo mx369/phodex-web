@@ -29,6 +29,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - If the user says to deploy without naming a target, deploy to QCP by default.
 - For QCP deployments, place the project in a normal app/frontend directory, not under `/root` or another root-user home path, unless the user explicitly asks for that layout.
 - Before a QCP deploy, inspect the live Nginx and systemd config on the host to confirm the active service, static root, relay source tree, and Bun path. Do not assume `/root/project/phodex-web` is live just because it exists.
+- When the local skill `/Users/young/.codex/skills/phodex-qcp-deploy` exists, use it for QCP deploy and live-topology inspection before improvising your own steps.
 - If a task changes architecture, commands, ownership, page truth, or acceptance flow, update the relevant AI docs in the same commit.
 - Do not bypass existing security or deployment boundaries unless the user explicitly asks.
 - Commit each intentional change separately.

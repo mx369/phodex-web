@@ -33,6 +33,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 ## QCP Deploy Truth
 
 - Unless the user names another target, `deploy` means QCP.
+- Prefer the local skill `/Users/young/.codex/skills/phodex-qcp-deploy` for QCP inspection and deployment when it exists.
 - Before changing QCP, inspect the live host instead of guessing paths:
   - `ssh qcp 'systemctl cat phodex-codex.service'`
   - `ssh qcp 'nginx -T'`
