@@ -624,6 +624,10 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       for (const thread of event.threads) {
         getThreadMirror(bridgeUserId).set(thread.id, thread);
       }
+      const selectedThreadId = persisted.users[bridgeUserId]?.selectedThreadId;
+      if (selectedThreadId) {
+        ensureMirroredThread(bridgeUserId, selectedThreadId);
+      }
       normalizeSelectionForUser(bridgeUserId);
       broadcastSnapshot(bridgeUserId);
       broadcastPresence(bridgeUserId);

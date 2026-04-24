@@ -772,11 +772,11 @@ async function startThreadRun(
   text: string,
   preview: string
 ) {
-  user.selectedThreadId = thread.id;
-  sendUserPatch(user.profile.id, {
-    selectedThreadId: thread.id,
-    banner: null,
-  });
+  if (user.selectedThreadId === thread.id) {
+    sendUserPatch(user.profile.id, {
+      banner: null,
+    });
+  }
   markThreadRunning(thread.id, preview);
   const turnMode = deriveRequestedTurnMode(text, event.planArmed);
   pendingTurnModes.set(thread.id, turnMode);
