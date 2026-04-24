@@ -493,7 +493,12 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       if (hasAnyBridgeSocket(user.profile.id)) {
         sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" });
         if (user.selectedThreadId) {
-          sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
+          const selectedThread = getThreadMirror(user.profile.id).get(user.selectedThreadId);
+          if ((selectedThread?.messages.length ?? 0) > 0) {
+            sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
+          } else {
+            dispatchToBridge(user, { type: "thread:select", threadId: user.selectedThreadId });
+          }
         }
       }
       break;

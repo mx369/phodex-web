@@ -211,6 +211,8 @@ let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
 let serviceTierUnsupportedToastSent = false;
+const selectedThreadHydrationRetryCounts = new Map<string, number>();
+const selectedThreadHydrationRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 connectRelaySocket();
 // Bun can fail the remote WSS handshake if the localhost ready probe and relay
 // socket race during startup, so establish the relay first.
@@ -1519,6 +1521,20 @@ async function syncAllThreadsFromCodex() {
     schedulePersist();
     broadcastSnapshotsToAllUsers();
     publishPresenceToAllUsers();
+
+    // Thread list sync does not include turns. Re-hydrate the threads that are
+    // currently selected in connected phone sessions so cold-started pages do
+    // not stay stuck on metadata-only placeholders until the user reselects.
+    if (selectedThreadIds.size > 0) {
+      await Promise.all(
+        [...selectedThreadIds].map((threadId) =>
+          syncThreadFromCodex(threadId, true).catch((error) => {
+            console.error(`[phodex] selected-thread sync failed for ${threadId}: ${readErrorMessage(error)}`);
+            return null;
+          })
+        )
+      );
+    }
   })().finally(() => {
     threadSyncInFlight = null;
   });
@@ -1543,9 +1559,40 @@ async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
   const thread = mergeCodexThread(result.thread, archived, includeTurns);
   threadCache.set(thread.id, thread);
   codexLastSyncAt = new Date().toISOString();
+  if (includeTurns && thread.messages.length > 0) {
+    const retryTimer = selectedThreadHydrationRetryTimers.get(thread.id);
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      selectedThreadHydrationRetryTimers.delete(thread.id);
+    }
+    selectedThreadHydrationRetryCounts.delete(thread.id);
+  } else if (includeTurns && shouldRetrySelectedThreadHydration(thread.id)) {
+    scheduleSelectedThreadHydrationRetry(thread.id);
+  }
   broadcastThreadToAllUsers(thread.id);
   publishPresenceToAllUsers();
   return thread;
+}
+
+function shouldRetrySelectedThreadHydration(threadId: string) {
+  if (![...bridgeUsers.values()].some((user) => user.selectedThreadId === threadId)) {
+    return false;
+  }
+  if (selectedThreadHydrationRetryTimers.has(threadId)) {
+    return false;
+  }
+  return (selectedThreadHydrationRetryCounts.get(threadId) ?? 0) < 1;
+}
+
+function scheduleSelectedThreadHydrationRetry(threadId: string) {
+  selectedThreadHydrationRetryCounts.set(threadId, (selectedThreadHydrationRetryCounts.get(threadId) ?? 0) + 1);
+  const timer = setTimeout(() => {
+    selectedThreadHydrationRetryTimers.delete(threadId);
+    void syncThreadFromCodex(threadId, true).catch((error) => {
+      console.error(`[phodex] selected-thread retry sync failed for ${threadId}: ${readErrorMessage(error)}`);
+    });
+  }, 800);
+  selectedThreadHydrationRetryTimers.set(threadId, timer);
 }
 
 async function listThreads(archived: boolean) {
