@@ -401,6 +401,28 @@ export function createAppClient() {
     state.ui.sidebarOpen = false;
   }
 
+  function loadOlderMessages(threadId: string) {
+    const thread = findThread(threadId);
+    const history = thread?.history;
+    if (!thread || !history || !history.hasMoreBefore || history.isHydrating) {
+      return false;
+    }
+    thread.history = {
+      ...history,
+      isHydrating: true,
+    };
+    const sent = send({
+      type: "thread:history:load",
+      threadId,
+      loadedMessages: history.loadedMessages,
+    });
+    if (!sent) {
+      thread.history.isHydrating = false;
+      return false;
+    }
+    return true;
+  }
+
   function clearThreadSelection() {
     send({
       type: "thread:clearSelection",
@@ -491,18 +513,19 @@ export function createAppClient() {
     });
   }
 
-    return {
-      restoreSession,
-      requestCode,
-      verifyCode,
-      logout,
-      selectBridge,
-      createThread,
-      createThreadAndSend,
-      selectThread,
-      clearThreadSelection,
-      renameThread,
-      toggleArchiveThread,
+  return {
+    restoreSession,
+    requestCode,
+    verifyCode,
+    logout,
+    selectBridge,
+    createThread,
+    createThreadAndSend,
+    selectThread,
+    loadOlderMessages,
+    clearThreadSelection,
+    renameThread,
+    toggleArchiveThread,
     sendComposer,
     resumeDraft,
     removeDraft,
@@ -637,6 +660,18 @@ function handleServerEvent(event: ServerEvent) {
       if (!thread.messages.some((message) => message.id === event.message.id)) {
         thread.messages.push(event.message);
         thread.lastActivityAt = event.message.createdAt;
+        if (thread.history) {
+          const totalMessages = thread.history.totalMessages + 1;
+          const loadedMessages = thread.history.loadedMessages + 1;
+          thread.history = {
+            ...thread.history,
+            totalMessages,
+            loadedMessages,
+            remainingMessages: Math.max(0, totalMessages - loadedMessages),
+            hasMoreBefore: Math.max(0, totalMessages - loadedMessages) > 0,
+            isHydrating: false,
+          };
+        }
       }
       syncPendingRunFeedbackFromMessage(event.threadId, event.message.role, event.message.text);
       break;
@@ -752,6 +787,7 @@ function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = st
   return mergeIncomingQueuedDrafts({
     ...nextThread,
     messages: existing.messages,
+    history: existing.history ?? nextThread.history,
   });
 }
 

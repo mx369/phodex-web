@@ -19,6 +19,7 @@ import type {
   RelayConnection,
   RequestCodeResponse,
   ServerEvent,
+  ThreadHistoryState,
   ThreadMessage,
   ThreadRecord,
   UserSummary,
@@ -119,6 +120,7 @@ const bridgeInstallerPackageJsonPath = resolve(bridgeInstallerPackageDir, "packa
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
+const THREAD_HISTORY_PAGE_SIZE = Math.max(1, Number(process.env.PHODEX_THREAD_HISTORY_PAGE_SIZE ?? "200"));
 const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -153,6 +155,7 @@ const bridgeSocketsByUserId = new Map<string, Map<string, ServerWebSocket<Socket
 const installSetupTokens = new Map<string, SetupTokenRecord>();
 const bridgeConnectionsByUserId = new Map<string, Map<string, RelayConnection>>();
 const activeBridgeIdsByUserId = new Map<string, string>();
+const selectedThreadHistoryWindowByUserId = new Map<string, number>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
 
 function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
@@ -501,14 +504,31 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       dispatchToBridge(user, event);
       break;
     case "thread:select":
-      user.selectedThreadId = event.threadId;
+      setSelectedThreadForUser(user.profile.id, event.threadId);
       user.banner = null;
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
       dispatchToBridge(user, event);
       break;
+    case "thread:history:load": {
+      if (user.selectedThreadId !== event.threadId) {
+        setSelectedThreadForUser(user.profile.id, event.threadId);
+        schedulePersist();
+      }
+      const thread = getThreadMirror(user.profile.id).get(event.threadId);
+      if (!thread) {
+        if (hasAnyBridgeSocket(user.profile.id)) {
+          sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: event.threadId });
+        }
+        break;
+      }
+      const nextLoadedMessages = Math.min(thread.messages.length, Math.max(0, event.loadedMessages) + THREAD_HISTORY_PAGE_SIZE);
+      selectedThreadHistoryWindowByUserId.set(user.profile.id, nextLoadedMessages);
+      broadcastThreadToUser(user.profile.id, event.threadId);
+      break;
+    }
     case "thread:clearSelection":
-      user.selectedThreadId = null;
+      setSelectedThreadForUser(user.profile.id, null);
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
       break;
@@ -610,7 +630,7 @@ function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
 
   activeBridgeIdsByUserId.set(user.profile.id, bridgeId);
   getThreadMirror(user.profile.id).clear();
-  user.selectedThreadId = null;
+  setSelectedThreadForUser(user.profile.id, null);
   user.banner = null;
   schedulePersist();
   broadcastSnapshot(user.profile.id);
@@ -777,7 +797,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
         break;
       }
       if (Object.prototype.hasOwnProperty.call(event, "selectedThreadId")) {
-        user.selectedThreadId = event.selectedThreadId ?? null;
+        setSelectedThreadForUser(user.profile.id, event.selectedThreadId ?? null);
         if (user.selectedThreadId) {
           ensureMirroredThread(user.profile.id, user.selectedThreadId);
         }
@@ -881,18 +901,68 @@ function ensureMirroredThread(userId: string, threadId: string) {
   return thread;
 }
 
+function setSelectedThreadForUser(userId: string, selectedThreadId: string | null) {
+  const user = persisted.users[userId];
+  if (!user) {
+    return;
+  }
+  const changed = user.selectedThreadId !== selectedThreadId;
+  user.selectedThreadId = selectedThreadId;
+  if (!changed) {
+    return;
+  }
+  if (!selectedThreadId) {
+    selectedThreadHistoryWindowByUserId.delete(userId);
+    return;
+  }
+  selectedThreadHistoryWindowByUserId.set(userId, THREAD_HISTORY_PAGE_SIZE);
+}
+
+function buildThreadHistoryState(totalMessages: number, loadedMessages: number): ThreadHistoryState {
+  const remainingMessages = Math.max(0, totalMessages - loadedMessages);
+  return {
+    totalMessages,
+    loadedMessages,
+    remainingMessages,
+    hasMoreBefore: remainingMessages > 0,
+    isHydrating: false,
+  };
+}
+
+function serializeSelectedThreadForUser(userId: string, thread: ThreadRecord) {
+  const totalMessages = thread.messages.length;
+  const loadedMessages = Math.min(
+    totalMessages,
+    Math.max(THREAD_HISTORY_PAGE_SIZE, selectedThreadHistoryWindowByUserId.get(userId) ?? THREAD_HISTORY_PAGE_SIZE)
+  );
+  return {
+    ...thread,
+    messages: thread.messages.slice(-loadedMessages),
+    history: buildThreadHistoryState(totalMessages, loadedMessages),
+  } satisfies ThreadRecord;
+}
+
 function serializeThreadForUser(
+  userId: string,
   thread: ThreadRecord,
   selectedThreadId: string | null,
   includeSelectedMessages: boolean
 ) {
-  if (includeSelectedMessages && thread.id === selectedThreadId) {
-    return thread;
+  if (thread.id === selectedThreadId) {
+    if (includeSelectedMessages) {
+      return serializeSelectedThreadForUser(userId, thread);
+    }
+    return {
+      ...thread,
+      messages: [],
+      history: thread.messages.length ? buildThreadHistoryState(thread.messages.length, 0) : null,
+    } satisfies ThreadRecord;
   }
 
   return {
     ...thread,
     messages: [],
+    history: null,
   } satisfies ThreadRecord;
 }
 
@@ -907,7 +977,7 @@ function snapshotForUser(userId: string, options: { includeSelectedMessages?: bo
       return leftArchived - rightArchived;
     }
     return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
-  }).map((thread) => serializeThreadForUser(thread, user.selectedThreadId, includeSelectedMessages));
+  }).map((thread) => serializeThreadForUser(userId, thread, user.selectedThreadId, includeSelectedMessages));
 
   return {
     user: user.profile,
@@ -963,7 +1033,7 @@ function normalizeSelectionForUser(userId: string) {
   const firstAnyThreadId = [...mirror.values()]
     .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
     .at(0)?.id ?? null;
-  user.selectedThreadId = firstLiveThreadId ?? firstAnyThreadId;
+  setSelectedThreadForUser(userId, firstLiveThreadId ?? firstAnyThreadId);
 }
 
 function findFirstLiveThreadId(userId: string, excludingThreadId?: string) {
@@ -1443,7 +1513,7 @@ function broadcastThreadToUser(userId: string, threadId: string) {
   }
   broadcast(userId, {
     type: "thread:updated",
-    thread: serializeThreadForUser(thread, user.selectedThreadId, true),
+    thread: serializeThreadForUser(userId, thread, user.selectedThreadId, true),
     selectedThreadId: user.selectedThreadId,
   });
 }

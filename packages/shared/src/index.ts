@@ -161,6 +161,14 @@ export interface QueuedDraft {
   accessMode?: AccessMode;
 }
 
+export interface ThreadHistoryState {
+  totalMessages: number;
+  loadedMessages: number;
+  remainingMessages: number;
+  hasMoreBefore: boolean;
+  isHydrating: boolean;
+}
+
 export interface ThreadRecord {
   id: string;
   title: string;
@@ -177,6 +185,7 @@ export interface ThreadRecord {
   diff: DiffStats;
   queuedDrafts: QueuedDraft[];
   messages: ThreadMessage[];
+  history?: ThreadHistoryState | null;
 }
 
 export interface AppSettings {
@@ -252,6 +261,7 @@ export type ClientEvent =
   | { type: "bridge:select"; bridgeId: string }
   | { type: "thread:create"; projectLabel?: string; cwd?: string; mode?: ThreadCreateMode }
   | { type: "thread:select"; threadId: string }
+  | { type: "thread:history:load"; threadId: string; loadedMessages: number }
   | { type: "thread:clearSelection" }
   | { type: "thread:rename"; threadId: string; title: string }
   | { type: "thread:delete"; threadId: string }

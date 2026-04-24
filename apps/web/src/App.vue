@@ -957,6 +957,7 @@ const planAccessory = computed(() => {
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
 const conversationQueuedDrafts = computed(() => [...(currentThread.value?.queuedDrafts ?? [])].reverse());
+const currentThreadHistory = computed(() => currentThread.value?.history ?? null);
 const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
   const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
   return [
@@ -984,6 +985,7 @@ const showConversationContent = computed(
     Boolean(
       currentThread.value &&
         (currentThread.value.messages.length ||
+          currentThread.value.history?.totalMessages ||
           currentPendingRunFeedback.value ||
           currentThread.value.queuedDrafts.length ||
           currentThread.value.state === "running" ||
@@ -1003,6 +1005,9 @@ const showTurnStarterRail = computed(
 const showPendingThreadRail = computed(() => Boolean(currentThread.value && isCurrentThreadPendingCreate.value && !showConversationContent.value));
 const showScrollToLatestButton = computed(
   () => Boolean(currentThread.value?.messages.length && autoScrollMode.value === "manual" && !isScrolledToBottom.value)
+);
+const showLoadOlderMessagesButton = computed(
+  () => Boolean(currentThread.value?.messages.length && currentThreadHistory.value?.hasMoreBefore)
 );
 const selectedProjectDiff = computed<ProjectDiffFile | null>(() => {
   const dialog = dialogState.value;
@@ -2355,6 +2360,29 @@ function handleScrollToLatest() {
   clearFollowBottomFrame();
   scrollConversationToBottom();
 }
+
+function loadOlderMessages() {
+  if (!currentThread.value) {
+    return;
+  }
+  autoScrollMode.value = "manual";
+  client.loadOlderMessages(currentThread.value.id);
+}
+
+function historyLoadButtonLabel(thread: ThreadRecord) {
+  const history = thread.history;
+  if (!history) {
+    return "Load earlier messages";
+  }
+  if (history.isHydrating) {
+    return "Loading earlier messages…";
+  }
+  const nextChunk = Math.min(history.remainingMessages, 200);
+  if (history.remainingMessages <= nextChunk) {
+    return `Load ${history.remainingMessages} earlier messages`;
+  }
+  return `Load ${nextChunk} earlier messages (${history.remainingMessages} remaining)`;
+}
 </script>
 
 <template>
@@ -3062,6 +3090,19 @@ function handleScrollToLatest() {
                   >
                     <div ref="conversationInnerEl" class="phone-conversation__inner">
                       <template v-if="currentThread && showConversationContent">
+                        <div v-if="currentThread.history?.totalMessages && !currentThread.messages.length" class="conversation-history-status">
+                          Loading recent messages…
+                        </div>
+                        <div v-else-if="showLoadOlderMessagesButton" class="conversation-history-actions">
+                          <button
+                            class="conversation-history-load"
+                            type="button"
+                            :disabled="currentThread.history?.isHydrating"
+                            @click="loadOlderMessages"
+                          >
+                            {{ historyLoadButtonLabel(currentThread) }}
+                          </button>
+                        </div>
                         <article
                           v-for="message in currentThread.messages"
                           :key="message.id"
