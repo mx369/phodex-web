@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -112,7 +113,11 @@ const appRoot = resolve(serverRoot, "../..");
 const dataDir = resolve(serverRoot, "data");
 const dataFile = process.env.PHODEX_STATE_FILE ?? resolve(dataDir, "relay-state.json");
 const distDir = resolve(appRoot, "apps/web/dist");
+const installAssetsDir = resolve(dataDir, "install-assets");
 const bridgeRuntimeSourcePath = resolve(serverRoot, "src/index.ts");
+const sharedPackageDir = resolve(appRoot, "packages/shared");
+const sharedPackageJsonPath = resolve(sharedPackageDir, "package.json");
+const sharedSourcePath = resolve(sharedPackageDir, "src/index.ts");
 const bridgeInstallerPackageDir = resolve(appRoot, "packages/bridge-installer");
 const bridgeInstallScriptSourcePath = resolve(bridgeInstallerPackageDir, "install.sh");
 const bridgeInstallerSourcePath = resolve(bridgeInstallerPackageDir, "bin/phodex-bridge.js");
@@ -290,7 +295,7 @@ const server = Bun.serve<SocketData>({
         /^\/install\/bridge-runtime-[A-Za-z0-9.-]+\.(js|ts)$/.test(url.pathname)) &&
       req.method === "GET"
     ) {
-      return withCors(req, serveInstallSource(bridgeRuntimeSourcePath, "text/plain; charset=utf-8"));
+      return withCors(req, await serveBridgeRuntimeInstallSource(url.pathname));
     }
 
     if (
@@ -1673,6 +1678,7 @@ async function handleInstallManifest(req: Request) {
 
   try {
     const version = computeInstallAssetsVersion();
+    await ensureBundledBridgeRuntimeInstallAsset(version);
     const origin = buildOrigin(req);
     const installScriptUrl = `${origin}/install`;
     const bridgeInstallerUrl = `${origin}/install/bridge-installer-${version}.js`;
@@ -1719,6 +1725,7 @@ async function handleInstallClaim(req: Request) {
 
   try {
     const version = computeInstallAssetsVersion();
+    await ensureBundledBridgeRuntimeInstallAsset(version);
     const origin = buildOrigin(req);
     if (!user) {
       installSetupTokens.delete(token);
@@ -1760,12 +1767,67 @@ function serveInstallSource(filePath: string, contentType: string) {
   });
 }
 
+async function serveBridgeRuntimeInstallSource(pathname: string) {
+  const currentVersion = computeInstallAssetsVersion();
+  const requestedVersion = extractBridgeRuntimeVersion(pathname);
+  const targetVersion = requestedVersion || currentVersion;
+
+  if (requestedVersion && requestedVersion !== currentVersion) {
+    const historicalAssetPath = resolve(installAssetsDir, `bridge-runtime-${requestedVersion}.ts`);
+    return serveInstallSource(historicalAssetPath, "text/plain; charset=utf-8");
+  }
+
+  const assetPath = await ensureBundledBridgeRuntimeInstallAsset(targetVersion);
+  return serveInstallSource(assetPath, "text/plain; charset=utf-8");
+}
+
+function extractBridgeRuntimeVersion(pathname: string) {
+  const match = pathname.match(/^\/install\/bridge-runtime-([A-Za-z0-9.-]+)\.(?:js|ts)$/);
+  return match?.[1] ?? "";
+}
+
+async function ensureBundledBridgeRuntimeInstallAsset(version: string) {
+  const assetPath = resolve(installAssetsDir, `bridge-runtime-${version}.ts`);
+  if (existsSync(assetPath)) {
+    return assetPath;
+  }
+
+  mkdirSync(installAssetsDir, { recursive: true });
+  const bunBin = Bun.which("bun") ?? process.execPath;
+  const build = spawnSync(
+    bunBin,
+    [
+      "build",
+      bridgeRuntimeSourcePath,
+      "--target=bun",
+      "--format=esm",
+      "--packages=bundle",
+      "--outfile",
+      assetPath,
+    ],
+    {
+      cwd: appRoot,
+      encoding: "utf8",
+    }
+  );
+
+  if (build.status !== 0 || !existsSync(assetPath)) {
+    const stderr = build.stderr?.trim();
+    const stdout = build.stdout?.trim();
+    throw new Error(stderr || stdout || "Failed to bundle bridge runtime install asset.");
+  }
+
+  return assetPath;
+}
+
 function computeInstallAssetsVersion() {
   const packageJson = JSON.parse(readFileSync(bridgeInstallerPackageJsonPath, "utf8")) as { version?: string };
   const packageVersion = packageJson.version || "0.1.0";
   const lastSourceEdit = Math.max(
     statSync(currentFile).mtimeMs,
     statSync(bridgeRuntimeSourcePath).mtimeMs,
+    statSync(sharedPackageJsonPath).mtimeMs,
+    statSync(sharedSourcePath).mtimeMs,
     statSync(bridgeInstallerPackageJsonPath).mtimeMs,
     statSync(bridgeInstallerSourcePath).mtimeMs,
     statSync(bridgeInstallScriptSourcePath).mtimeMs
