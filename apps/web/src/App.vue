@@ -339,6 +339,7 @@ const rootFlowState = ref<RootFlowState>("auto");
 const pendingShellPage = ref<ShellPageState | null>(null);
 const pendingThreadRoute = ref<PendingThreadRouteState | null>(null);
 const applyingRouteState = ref(false);
+const routeStateHydrated = ref(false);
 const ONBOARDING_STORAGE_KEY = "phodex.onboarding-seen";
 const onboardingPage = ref(0);
 const onboardingSeen = ref(readOnboardingSeen());
@@ -1325,8 +1326,6 @@ watch(
       return;
     }
     if (!state.snapshot.threads.some((thread) => thread.id === pendingThreadRoute.value.threadId)) {
-      pendingThreadRoute.value = null;
-      syncRouteFromState();
       return;
     }
     if (state.snapshot.selectedThreadId !== pendingThreadRoute.value.threadId) {
@@ -2512,7 +2511,7 @@ function routeLocationForState(): RouteLocationRaw {
 }
 
 function syncRouteFromState() {
-  if (applyingRouteState.value) {
+  if (applyingRouteState.value || !routeStateHydrated.value) {
     return;
   }
 
@@ -2524,7 +2523,11 @@ function syncRouteFromState() {
 }
 
 function syncStateFromRoute() {
-  const routeName = (route.name ?? "home") as AppRouteName;
+  if (route.name == null) {
+    return;
+  }
+
+  const routeName = route.name as AppRouteName;
   const panel = ROUTE_NAME_TO_PANEL[routeName];
   const routeMachineId = normalizedRouteParam(route.params.machineId);
   const routeThreadId = normalizedRouteParam(route.params.threadId);
@@ -2605,6 +2608,7 @@ function syncStateFromRoute() {
     }
   } finally {
     applyingRouteState.value = false;
+    routeStateHydrated.value = true;
   }
 }
 
