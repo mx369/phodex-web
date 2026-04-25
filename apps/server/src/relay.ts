@@ -1754,17 +1754,16 @@ function computeInstallAssetsVersion() {
 }
 
 function buildWindowsInstallCommand(bridgeInstallerUrl: string, relayOrigin: string, setupToken: string) {
-  const bunInstallCommand = `powershell -c 'irm bun.sh/install.ps1 | iex'`;
-  return (
-    `powershell -NoProfile -ExecutionPolicy Bypass -Command ` +
-    `"if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { ` +
+  const bunInstallCommand = `powershell -c "irm bun.sh/install.ps1 | iex"`;
+  const script =
+    `if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { ` +
     `Write-Error 'bun is required to run phodex-bridge. Install it first with the official command: ${escapePowerShellSingleQuoted(bunInstallCommand)}'; ` +
     `exit 1 ` +
     `}; ` +
     `$installer = Join-Path $env:TEMP 'phodex-bridge-installer.js'; ` +
     `Invoke-WebRequest -UseBasicParsing '${escapePowerShellSingleQuoted(bridgeInstallerUrl)}' -OutFile $installer; ` +
-    `bun $installer install --relay '${escapePowerShellSingleQuoted(relayOrigin)}' --token '${escapePowerShellSingleQuoted(setupToken)}'"`
-  );
+    `bun $installer install --relay '${escapePowerShellSingleQuoted(relayOrigin)}' --token '${escapePowerShellSingleQuoted(setupToken)}'`;
+  return `powershell -NoProfile -ExecutionPolicy Bypass -Command '${escapePowerShellSingleQuoted(script)}'`;
 }
 
 function escapePowerShellSingleQuoted(value: string) {
