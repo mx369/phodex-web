@@ -3802,7 +3802,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                         <div class="phone-composer__meta" aria-live="polite">
                           <div class="composer-runtime-state" :class="`composer-runtime-state--${composerRuntimeState.tone}`">
-                            <span class="composer-runtime-state__dot" aria-hidden="true"></span>
                             <strong class="composer-runtime-state__label">{{ composerRuntimeState.label }}</strong>
                             <span v-if="composerRuntimeState.detail" class="composer-runtime-state__detail">{{ composerRuntimeState.detail }}</span>
                           </div>
