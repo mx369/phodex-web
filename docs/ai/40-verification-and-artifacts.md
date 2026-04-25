@@ -23,7 +23,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Local/public relay URL: `http://localhost:3443`
 - Client relay endpoint: `ws://localhost:3443/relay`
 - Local bridge endpoint target: `ws://localhost:3443/bridge?token=...`
-- User-facing local install/start commands now come from `/install/manifest.json` and resolve to both `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...` for `Mac / Linux` and `powershell -NoProfile -ExecutionPolicy Bypass -Command "... bun ... --relay 'http://localhost:3443' --token '...'"` for `Windows`.
+- User-facing local install/start commands now come from `/install/manifest.json` and resolve to both `curl -fsSL http://localhost:3443/install | bash -s -- --relay http://localhost:3443 --token ...` for `Mac / Linux` and `powershell -NoProfile -ExecutionPolicy Bypass -Command '... bun $installer install --relay ''http://localhost:3443'' --token ''...'''` for `Windows`.
 - The public install script should prefer an existing host `bun` binary even if the current non-interactive shell PATH is incomplete. Real install verification should cover at least one environment where `bun` is absent from PATH but still available at `~/.bun/bin/bun`.
 - If `bun` cannot be found in PATH or the common host fallback locations, the installer should fail fast and print the official Bun install command `curl -fsSL https://bun.com/install | bash` instead of auto-installing it.
 - For the Windows command, the missing-`bun` hint should instead print `powershell -c "irm bun.sh/install.ps1 | iex"`.
