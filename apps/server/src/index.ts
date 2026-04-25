@@ -18,6 +18,7 @@ import type {
   DeliveryMode,
   DiffStats,
   FileChangeSummary,
+  ImageMessageCard,
   InputImageAttachment,
   ProjectDiffFile,
   ProjectDiffPayload,
@@ -159,6 +160,7 @@ const AUTH_ENV_FALLBACK_FILE =
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
 const PROJECTS_ROOT = process.env.PHODEX_PROJECTS_ROOT ?? resolve(homedir(), ".phodex-web/projects");
 const WORKTREE_ROOT = process.env.PHODEX_WORKTREE_ROOT ?? resolve(homedir(), ".codex/worktrees");
+const MAX_IMAGE_ARTIFACT_PREVIEW_BYTES = 5 * 1024 * 1024;
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
@@ -310,6 +312,9 @@ function handleRelayMessage(raw: string) {
       break;
     case "bridge:sync-thread":
       void syncThreadFromCodex(command.threadId, true).catch((error) => {
+        if (handleMissingThread(undefined, command.threadId, error)) {
+          return;
+        }
         console.error(`[phodex-bridge] sync-thread failed: ${readErrorMessage(error)}`);
       });
       break;
@@ -358,7 +363,15 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
           selectedThreadId: command.event.threadId,
           banner: null,
         });
-        await syncThreadFromCodex(command.event.threadId, true);
+        try {
+          await syncThreadFromCodex(command.event.threadId, true);
+        } catch (error) {
+          if (handleMissingThread(user.profile.id, command.event.threadId, error)) {
+            sendToast(user.profile.id, "error", "This thread is no longer available.");
+            return;
+          }
+          throw error;
+        }
         return;
       case "thread:rename":
         await handleThreadRename(user, command.event.threadId, command.event.title);
@@ -591,7 +604,12 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       void syncAllThreadsFromCodex().then(() => {
         const selectedThreadId = persisted.users[user.profile.id]?.selectedThreadId;
         if (selectedThreadId) {
-          return syncThreadFromCodex(selectedThreadId, true);
+          return syncThreadFromCodex(selectedThreadId, true).catch((error) => {
+            if (handleMissingThread(user.profile.id, selectedThreadId, error)) {
+              return null;
+            }
+            throw error;
+          });
         }
       }).catch((error) => {
         sendToast(user.profile.id, "error", readErrorMessage(error));
@@ -605,6 +623,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
       void syncThreadFromCodex(event.threadId, true).catch((error) => {
+        if (handleMissingThread(user.profile.id, event.threadId, error)) {
+          return;
+        }
         sendToast(user.profile.id, "error", readErrorMessage(error));
       });
       break;
@@ -730,6 +751,10 @@ async function handleThreadArchive(user: PersistedUser, threadId: string) {
     schedulePersist();
     await syncAllThreadsFromCodex();
   } catch (error) {
+    if (handleMissingThread(user.profile.id, threadId, error)) {
+      sendToast(user.profile.id, "error", "This thread is no longer available.");
+      return;
+    }
     sendToast(user.profile.id, "error", readErrorMessage(error));
   }
 }
@@ -891,8 +916,20 @@ async function handleMessageSend(
 
   try {
     ensureCodexReady();
-    const thread = threadCache.get(event.threadId) ?? await syncThreadFromCodex(event.threadId, false);
+    let thread = threadCache.get(event.threadId);
     if (!thread) {
+      try {
+        thread = await syncThreadFromCodex(event.threadId, false);
+      } catch (error) {
+        if (handleMissingThread(user.profile.id, event.threadId, error)) {
+          sendToast(user.profile.id, "error", "This thread is no longer available.");
+          return "failed";
+        }
+        throw error;
+      }
+    }
+    if (!thread) {
+      forgetThread(event.threadId, user.profile.id);
       sendToast(user.profile.id, "error", "Thread not found.");
       return "failed";
     }
@@ -918,8 +955,20 @@ async function handleMessageSend(
 async function handleDraftResume(user: PersistedUser, threadId: string, draftId: string) {
   try {
     ensureCodexReady();
-    const thread = threadCache.get(threadId) ?? await syncThreadFromCodex(threadId, false);
+    let thread = threadCache.get(threadId);
     if (!thread) {
+      try {
+        thread = await syncThreadFromCodex(threadId, false);
+      } catch (error) {
+        if (handleMissingThread(user.profile.id, threadId, error)) {
+          sendToast(user.profile.id, "error", "This thread is no longer available.");
+          return false;
+        }
+        throw error;
+      }
+    }
+    if (!thread) {
+      forgetThread(threadId, user.profile.id);
       sendToast(user.profile.id, "error", "Thread not found.");
       return false;
     }
@@ -964,6 +1013,12 @@ async function resumeNextQueuedDraft(userId: string | undefined, threadId: strin
   try {
     await syncThreadFromCodex(threadId, true);
   } catch (error) {
+    if (handleMissingThread(userId, threadId, error)) {
+      if (userId) {
+        sendToast(userId, "error", "This thread is no longer available.");
+      }
+      return;
+    }
     console.error(`[phodex] Failed to sync thread ${threadId} before resuming queued draft: ${readErrorMessage(error)}`);
     return;
   }
@@ -1291,6 +1346,7 @@ function handleItemStarted(params: any) {
     return;
   }
 
+  const thread = ensureThreadRecord(threadId);
   const activeTurn = activeTurns.get(threadId);
   const pendingTrace = pendingTurnTraces.get(threadId);
   const startedAt = activeTurn?.startedAt ?? new Date().toISOString();
@@ -1298,7 +1354,8 @@ function handleItemStarted(params: any) {
     item,
     startedAt,
     "started",
-    activeTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
+    activeTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
+    thread.repoLabel
   );
   if (!message) {
     return;
@@ -1382,17 +1439,27 @@ function handleItemCompleted(params: any) {
   }
 
   const thread = ensureThreadRecord(threadId);
+  const messageExists = thread.messages.some((entry) => entry.id === readString(item?.id));
   const message = mapLiveItemToMessage(
     item,
     activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
     "completed",
-    activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat"
+    activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
+    thread.repoLabel
   );
   if (!message) {
     return;
   }
 
   appendMessage(threadId, message);
+  if (!messageExists) {
+    sendBridgeEvent({ type: "bridge:message:appended", threadId, message });
+    logFlowTrace("relay.message-appended.sent", {
+      threadId,
+      messageId: message.id,
+      role: message.role,
+    });
+  }
   logFlowTrace("codex.item-completed", {
     threadId,
     itemId: message.id,
@@ -1630,11 +1697,17 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
   if (includeTurns) {
     local.diff = fallbackDiff;
   }
+  const preservedLiveMessages = includeTurns
+    ? (existing?.messages.filter(
+        (message) => hasImageCard(message) && !message.isStreaming && !hasMessageId(rawThread?.turns, message.id)
+      ) ?? [])
+    : [];
   const mappedMessages = includeTurns && Array.isArray(rawThread?.turns)
     ? dedupeMessages([
-        ...mapTurnsToMessages(rawThread.turns, sessionFallback?.turns),
+        ...mapTurnsToMessages(rawThread.turns, sessionFallback?.turns, repoLabel),
+        ...preservedLiveMessages,
         ...(activeTurns.has(threadId) ? (existing?.messages.filter((message) => message.isStreaming) ?? []) : []),
-      ])
+      ]).map((message) => preserveImagePreviewFromMessage(existing?.messages.find((entry) => entry.id === message.id), message))
     : existing?.messages ?? [];
 
   return {
@@ -1656,14 +1729,18 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
   } satisfies ThreadRecord;
 }
 
-function mapTurnsToMessages(turns: any[], fallbackTurns = new Map<string, SessionTurnHistoryFallback>()) {
+function mapTurnsToMessages(
+  turns: any[],
+  fallbackTurns = new Map<string, SessionTurnHistoryFallback>(),
+  cwd = DEFAULT_THREAD_CWD
+) {
   const messages: ThreadMessage[] = [];
   for (const turn of turns) {
     const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
     const turnMode = deriveTurnModeFromItems(Array.isArray(turn?.items) ? turn.items : []);
     const turnMessages: ThreadMessage[] = [];
     for (const item of Array.isArray(turn?.items) ? turn.items : []) {
-      const message = mapLiveItemToMessage(item, createdAt, "history", turnMode);
+      const message = mapLiveItemToMessage(item, createdAt, "history", turnMode, cwd);
       if (message) {
         turnMessages.push(message);
       }
@@ -1698,7 +1775,8 @@ function mapLiveItemToMessage(
   item: any,
   createdAt: string,
   stage: "history" | "started" | "completed" = "history",
-  assistantKind: "chat" | "plan" = "chat"
+  assistantKind: "chat" | "plan" = "chat",
+  cwd = DEFAULT_THREAD_CWD
 ) {
   const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
@@ -1765,6 +1843,7 @@ function mapLiveItemToMessage(
 
   if (item?.type === "imageView") {
     const path = readString(item?.path);
+    const previewPath = resolveArtifactPath(path, cwd);
     return {
       id: itemId,
       role: "system",
@@ -1776,6 +1855,7 @@ function mapLiveItemToMessage(
           type: "image",
           title: "Image artifact",
           path,
+          imageUrl: readImageArtifactPreview(previewPath),
           detail: path ? basename(path) : "Local image",
           meta: path || undefined,
           tone: "blue",
@@ -1950,6 +2030,41 @@ function normalizeSelections() {
       continue;
     }
     user.selectedThreadId = firstLiveThreadId ?? firstAnyThreadId;
+  }
+}
+
+function forgetThread(threadId: string, userId?: string) {
+  const retryTimer = selectedThreadHydrationRetryTimers.get(threadId);
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    selectedThreadHydrationRetryTimers.delete(threadId);
+  }
+  selectedThreadHydrationRetryCounts.delete(threadId);
+  activeTurns.delete(threadId);
+  pendingTurnModes.delete(threadId);
+  pendingTurnTraces.delete(threadId);
+  threadCache.delete(threadId);
+  delete persisted.threadLocal[threadId];
+  const nextSelectedThreadId = findFirstLiveThreadId(threadId);
+
+  for (const user of bridgeUsers.values()) {
+    if (user.selectedThreadId !== threadId) {
+      continue;
+    }
+    user.selectedThreadId = nextSelectedThreadId;
+    sendUserPatch(user.profile.id, { selectedThreadId: nextSelectedThreadId });
+  }
+
+  for (const user of Object.values(persisted.users)) {
+    if (user.selectedThreadId === threadId) {
+      user.selectedThreadId = nextSelectedThreadId;
+    }
+  }
+
+  schedulePersist();
+  broadcastSnapshotsToAllUsers();
+  if (userId) {
+    publishPresenceToAllUsers();
   }
 }
 
@@ -2787,6 +2902,60 @@ function dedupeMessages(messages: ThreadMessage[]) {
   return [...next.values()];
 }
 
+function hasMessageId(turns: any, messageId: string) {
+  if (!Array.isArray(turns) || !messageId) {
+    return false;
+  }
+  return turns.some((turn) =>
+    Array.isArray(turn?.items) && turn.items.some((item: any) => readString(item?.id) === messageId)
+  );
+}
+
+function hasImageCard(message: ThreadMessage) {
+  return Boolean(message.cards?.some((card) => card.type === "image"));
+}
+
+function preserveImagePreviewFromMessage(previousMessage: ThreadMessage | undefined, nextMessage: ThreadMessage) {
+  if (!previousMessage?.cards?.length || !nextMessage.cards?.length) {
+    return nextMessage;
+  }
+
+  const previousImageCards = previousMessage.cards.filter(
+    (card): card is ImageMessageCard => card.type === "image" && Boolean(card.imageUrl)
+  );
+  if (!previousImageCards.length) {
+    return nextMessage;
+  }
+
+  let changed = false;
+  const nextCards = nextMessage.cards.map((card) => {
+    if (card.type !== "image" || card.imageUrl) {
+      return card;
+    }
+
+    const matchingCard =
+      previousImageCards.find((entry) => entry.path === card.path && entry.imageUrl)
+      ?? previousImageCards.find((entry) => entry.meta === card.meta && entry.imageUrl)
+      ?? previousImageCards[0];
+    if (!matchingCard?.imageUrl) {
+      return card;
+    }
+
+    changed = true;
+    return {
+      ...card,
+      imageUrl: matchingCard.imageUrl,
+    };
+  });
+
+  return changed
+    ? {
+        ...nextMessage,
+        cards: nextCards,
+      }
+    : nextMessage;
+}
+
 function readUserItemText(item: any) {
   return readUserContentEntries(item)
     .filter(
@@ -2809,6 +2978,64 @@ function readUserItemImages(item: any): InputImageAttachment[] {
       detail: readImageDetail(entry?.detail),
     }))
     .filter((entry) => Boolean(entry.imageUrl || entry.fileId));
+}
+
+function readImageArtifactPreview(imagePath: string) {
+  if (!imagePath || !existsSync(imagePath)) {
+    return undefined;
+  }
+
+  let imageStat;
+  try {
+    imageStat = statSync(imagePath);
+  } catch {
+    return undefined;
+  }
+
+  if (!imageStat.isFile() || imageStat.size > MAX_IMAGE_ARTIFACT_PREVIEW_BYTES) {
+    return undefined;
+  }
+
+  const mimeType = readSupportedImageMimeType(imagePath);
+  if (!mimeType) {
+    return undefined;
+  }
+
+  try {
+    const imageBuffer = readFileSync(imagePath);
+    return `data:${mimeType};base64,${imageBuffer.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveArtifactPath(filePath: string, cwd: string) {
+  const trimmed = filePath.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("~/")) {
+    return resolve(homedir(), trimmed.slice(2));
+  }
+  return isAbsolute(trimmed) ? trimmed : resolve(cwd || DEFAULT_THREAD_CWD, trimmed);
+}
+
+function readSupportedImageMimeType(imagePath: string) {
+  switch (extname(imagePath).toLowerCase()) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    case ".bmp":
+      return "image/bmp";
+    default:
+      return undefined;
+  }
 }
 
 function readUserContentEntries(item: any) {
@@ -3261,6 +3488,22 @@ function shouldRetryTurnStartWithoutServiceTier(error: unknown) {
     || message.includes("unrecognized field")
     || message.includes("invalid param")
     || message.includes("invalid params");
+}
+
+function isThreadNotFoundError(error: unknown) {
+  const message = readErrorMessage(error).toLowerCase();
+  return message.startsWith("thread not found")
+    || message.startsWith("thread not loaded")
+    || message.startsWith("invalid thread id");
+}
+
+function handleMissingThread(userId: string | undefined, threadId: string, error: unknown) {
+  if (!isThreadNotFoundError(error)) {
+    return false;
+  }
+  console.warn(`[phodex] forgetting missing thread ${threadId}`);
+  forgetThread(threadId, userId);
+  return true;
 }
 
 function mapApprovalPolicy(accessMode: "read-only" | "on-request" | "full-access") {
