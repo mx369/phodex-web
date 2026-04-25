@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
   AccessMode,
@@ -294,9 +295,46 @@ type AppDialogState =
 
 type TurnAutoScrollMode = "followBottom" | "manual";
 
+type AppRouteName =
+  | "home"
+  | "thread"
+  | "settings"
+  | "archived"
+  | "about"
+  | "paywall"
+  | "onboarding"
+  | "email-otp"
+  | "subscription-gate"
+  | "bootstrap-failure";
+
+const PANEL_ROUTE_NAMES: Record<ShellPageState, AppRouteName> = {
+  settings: "settings",
+  archived: "archived",
+  about: "about",
+  paywall: "paywall",
+};
+
+const ROUTE_NAME_TO_PANEL: Partial<Record<AppRouteName, ShellPageState>> = {
+  settings: "settings",
+  archived: "archived",
+  about: "about",
+  paywall: "paywall",
+};
+
+const FLOW_ROUTE_NAMES: Partial<Record<Exclude<RootFlowState, "auto">, AppRouteName>> = {
+  onboarding: "onboarding",
+  "bootstrap-failure": "bootstrap-failure",
+  "subscription-gate": "subscription-gate",
+  "email-otp": "email-otp",
+};
+
 const verificationCode = ref("");
-const rootFlowState = ref<RootFlowState>(readRootFlowState());
-const pendingShellPage = ref<ShellPageState | null>(readShellPageState());
+const router = useRouter();
+const route = useRoute();
+const rootFlowState = ref<RootFlowState>("auto");
+const pendingShellPage = ref<ShellPageState | null>(null);
+const pendingThreadRouteId = ref<string | null>(null);
+const applyingRouteState = ref(false);
 const ONBOARDING_STORAGE_KEY = "phodex.onboarding-seen";
 const onboardingPage = ref(0);
 const onboardingSeen = ref(readOnboardingSeen());
@@ -521,12 +559,7 @@ const slashCommandCatalog = [
 onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("keydown", handleDocumentKeyDown);
-  void client.restoreSession().then(() => {
-    if (pendingShellPage.value && isAuthenticated.value) {
-      openPanel(pendingShellPage.value, true);
-      pendingShellPage.value = null;
-    }
-  });
+  void client.restoreSession();
 });
 
 onBeforeUnmount(() => {
@@ -1040,6 +1073,14 @@ watch(
       installManifest.value = null;
       return;
     }
+    if (pendingShellPage.value) {
+      openPanel(pendingShellPage.value, true);
+      pendingShellPage.value = null;
+    }
+    if (pendingThreadRouteId.value && state.snapshot?.threads.some((thread) => thread.id === pendingThreadRouteId.value)) {
+      client.selectThread(pendingThreadRouteId.value);
+      pendingThreadRouteId.value = null;
+    }
     void loadInstallManifest();
   },
   { immediate: true }
@@ -1242,6 +1283,42 @@ const activePanelTitle = computed(() => {
       return "";
   }
 });
+
+watch(
+  [() => route.name, () => route.params.threadId, isAuthenticated, () => state.snapshot],
+  () => {
+    syncStateFromRoute();
+  },
+  { immediate: true }
+);
+
+watch(
+  [isAuthenticated, rootFlow, activePanel, () => currentThread.value?.id ?? null],
+  () => {
+    syncRouteFromState();
+  },
+  { immediate: true }
+);
+
+watch(
+  [() => state.snapshot, pendingThreadRouteId],
+  () => {
+    if (!isAuthenticated.value || !pendingThreadRouteId.value || !state.snapshot) {
+      return;
+    }
+    if (!state.snapshot.threads.some((thread) => thread.id === pendingThreadRouteId.value)) {
+      pendingThreadRouteId.value = null;
+      syncRouteFromState();
+      return;
+    }
+    if (state.snapshot.selectedThreadId !== pendingThreadRouteId.value) {
+      client.selectThread(pendingThreadRouteId.value);
+      return;
+    }
+    pendingThreadRouteId.value = null;
+  },
+  { immediate: true }
+);
 const createThreadSelection = computed(() => {
   if (!dialogState.value || dialogState.value.kind !== "create-thread") {
     return null;
@@ -2361,46 +2438,129 @@ function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function preservedRouteQuery() {
+  const flowTrace = route.query.flowTrace;
+  return flowTrace === undefined ? {} : { flowTrace };
+}
+
+function routeLocationForState(): RouteLocationRaw {
+  if (!isAuthenticated.value) {
+    return {
+      name: FLOW_ROUTE_NAMES[rootFlow.value === "auto" ? "email-otp" : rootFlow.value] ?? "email-otp",
+      query: preservedRouteQuery(),
+    };
+  }
+
+  if (activePanel.value) {
+    return {
+      name: PANEL_ROUTE_NAMES[activePanel.value],
+      query: preservedRouteQuery(),
+    };
+  }
+
+  if (currentThread.value?.id) {
+    return {
+      name: "thread",
+      params: { threadId: currentThread.value.id },
+      query: preservedRouteQuery(),
+    };
+  }
+
+  return {
+    name: "home",
+    query: preservedRouteQuery(),
+  };
+}
+
+function syncRouteFromState() {
+  if (applyingRouteState.value) {
+    return;
+  }
+
+  const target = routeLocationForState();
+  const resolved = router.resolve(target);
+  if (resolved.fullPath !== route.fullPath) {
+    void router.replace(target);
+  }
+}
+
+function syncStateFromRoute() {
+  const routeName = (route.name ?? "home") as AppRouteName;
+  const panel = ROUTE_NAME_TO_PANEL[routeName];
+  const routeThreadId =
+    typeof route.params.threadId === "string"
+      ? route.params.threadId
+      : Array.isArray(route.params.threadId)
+        ? route.params.threadId[0] ?? null
+        : null;
+
+  applyingRouteState.value = true;
+  try {
+    if (!isAuthenticated.value) {
+      if (panel) {
+        pendingShellPage.value = panel;
+        switchRootFlow("email-otp");
+        return;
+      }
+
+      if (routeName === "thread" && routeThreadId) {
+        pendingThreadRouteId.value = routeThreadId;
+        switchRootFlow("email-otp");
+        return;
+      }
+
+      if (
+        routeName === "onboarding" ||
+        routeName === "bootstrap-failure" ||
+        routeName === "subscription-gate" ||
+        routeName === "email-otp"
+      ) {
+        switchRootFlow(routeName);
+      } else {
+        rootFlowState.value = "auto";
+      }
+      return;
+    }
+
+    rootFlowState.value = "auto";
+
+    if (panel) {
+      openPanel(panel, true);
+      return;
+    }
+
+    if (routeName === "thread" && routeThreadId) {
+      closeModelPicker();
+      closeThreadMenu();
+      shellPageStack.value = [];
+      if (state.snapshot?.threads.some((thread) => thread.id === routeThreadId)) {
+        if (state.snapshot.selectedThreadId !== routeThreadId) {
+          client.selectThread(routeThreadId);
+        }
+      } else {
+        pendingThreadRouteId.value = routeThreadId;
+      }
+      return;
+    }
+
+    closeModelPicker();
+    closeThreadMenu();
+    shellPageStack.value = [];
+    pendingThreadRouteId.value = null;
+    if (routeName === "home" && state.snapshot?.selectedThreadId) {
+      client.clearThreadSelection();
+    }
+  } finally {
+    applyingRouteState.value = false;
+  }
+}
+
 function readOnboardingSeen() {
   try {
     return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1";
   } catch {
     return false;
   }
-}
-
-function readRootFlowState(): RootFlowState {
-  try {
-    const value = new URLSearchParams(window.location.search).get("flow");
-    if (
-      value === "bootstrap-failure" ||
-      value === "subscription-gate" ||
-      value === "email-otp"
-    ) {
-      return value;
-    }
-
-    if (value === "camera-permission" || value === "scanner" || value === "scanner-error" || value === "bridge-update") {
-      return "email-otp";
-    }
-  } catch {
-    return "auto";
-  }
-
-  return "auto";
-}
-
-function readShellPageState(): ShellPageState | null {
-  try {
-    const value = new URLSearchParams(window.location.search).get("page");
-    if (value === "settings" || value === "archived" || value === "about" || value === "paywall") {
-      return value;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function maxConversationScrollTop(scrollEl: HTMLElement) {
