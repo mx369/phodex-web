@@ -12,7 +12,7 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", name: "home", component: RouteStub },
-    { path: "/m/:threadId", name: "thread", component: RouteStub, props: true },
+    { path: "/:machineId/:threadId", name: "thread", component: RouteStub, props: true },
     { path: "/settings", name: "settings", component: RouteStub },
     { path: "/archived", name: "archived", component: RouteStub },
     { path: "/about", name: "about", component: RouteStub },

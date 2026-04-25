@@ -24,7 +24,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 - Auth/onboarding routes:
   `/onboarding`, `/login`, `/subscribe`, `/bootstrap-failure`
 - Authenticated shell routes:
-  `/` for Home, `/m/:threadId` for the active chat, `/settings`, `/archived`, `/about`, `/pro`
+  `/` for Home, `/:machineId/:threadId` for the active chat, `/settings`, `/archived`, `/about`, `/pro`
 - The web client now treats these paths as the source of truth and syncs page/thread selection back into the URL instead of relying only on query-string boot params.
 
 ## Flow Inventory

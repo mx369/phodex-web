@@ -294,6 +294,10 @@ type AppDialogState =
     };
 
 type TurnAutoScrollMode = "followBottom" | "manual";
+type PendingThreadRouteState = {
+  machineId: string | null;
+  threadId: string;
+};
 
 type AppRouteName =
   | "home"
@@ -333,7 +337,7 @@ const router = useRouter();
 const route = useRoute();
 const rootFlowState = ref<RootFlowState>("auto");
 const pendingShellPage = ref<ShellPageState | null>(null);
-const pendingThreadRouteId = ref<string | null>(null);
+const pendingThreadRoute = ref<PendingThreadRouteState | null>(null);
 const applyingRouteState = ref(false);
 const ONBOARDING_STORAGE_KEY = "phodex.onboarding-seen";
 const onboardingPage = ref(0);
@@ -1077,9 +1081,15 @@ watch(
       openPanel(pendingShellPage.value, true);
       pendingShellPage.value = null;
     }
-    if (pendingThreadRouteId.value && state.snapshot?.threads.some((thread) => thread.id === pendingThreadRouteId.value)) {
-      client.selectThread(pendingThreadRouteId.value);
-      pendingThreadRouteId.value = null;
+    if (
+      pendingThreadRoute.value?.threadId &&
+      state.snapshot?.threads.some((thread) => thread.id === pendingThreadRoute.value?.threadId)
+    ) {
+      if (pendingThreadRoute.value.machineId && state.snapshot.activeBridgeId !== pendingThreadRoute.value.machineId) {
+        client.selectBridge(pendingThreadRoute.value.machineId);
+      }
+      client.selectThread(pendingThreadRoute.value.threadId);
+      pendingThreadRoute.value = null;
     }
     void loadInstallManifest();
   },
@@ -1285,7 +1295,7 @@ const activePanelTitle = computed(() => {
 });
 
 watch(
-  [() => route.name, () => route.params.threadId, isAuthenticated, () => state.snapshot],
+  [() => route.name, () => route.params.machineId, () => route.params.threadId, isAuthenticated, () => state.snapshot],
   () => {
     syncStateFromRoute();
   },
@@ -1301,21 +1311,29 @@ watch(
 );
 
 watch(
-  [() => state.snapshot, pendingThreadRouteId],
+  [() => state.snapshot, pendingThreadRoute],
   () => {
-    if (!isAuthenticated.value || !pendingThreadRouteId.value || !state.snapshot) {
+    if (!isAuthenticated.value || !pendingThreadRoute.value || !state.snapshot) {
       return;
     }
-    if (!state.snapshot.threads.some((thread) => thread.id === pendingThreadRouteId.value)) {
-      pendingThreadRouteId.value = null;
+    if (
+      pendingThreadRoute.value.machineId &&
+      state.snapshot.activeBridgeId !== pendingThreadRoute.value.machineId &&
+      state.snapshot.bridgeDevices.some((device) => device.id === pendingThreadRoute.value?.machineId)
+    ) {
+      client.selectBridge(pendingThreadRoute.value.machineId);
+      return;
+    }
+    if (!state.snapshot.threads.some((thread) => thread.id === pendingThreadRoute.value.threadId)) {
+      pendingThreadRoute.value = null;
       syncRouteFromState();
       return;
     }
-    if (state.snapshot.selectedThreadId !== pendingThreadRouteId.value) {
-      client.selectThread(pendingThreadRouteId.value);
+    if (state.snapshot.selectedThreadId !== pendingThreadRoute.value.threadId) {
+      client.selectThread(pendingThreadRoute.value.threadId);
       return;
     }
-    pendingThreadRouteId.value = null;
+    pendingThreadRoute.value = null;
   },
   { immediate: true }
 );
@@ -2443,6 +2461,20 @@ function preservedRouteQuery() {
   return flowTrace === undefined ? {} : { flowTrace };
 }
 
+function normalizedRouteParam(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0] : null;
+  }
+  return null;
+}
+
+function currentRouteMachineId() {
+  return state.snapshot?.activeBridgeId ?? null;
+}
+
 function routeLocationForState(): RouteLocationRaw {
   if (!isAuthenticated.value) {
     return {
@@ -2459,9 +2491,16 @@ function routeLocationForState(): RouteLocationRaw {
   }
 
   if (currentThread.value?.id) {
+    const machineId = currentRouteMachineId();
+    if (!machineId) {
+      return {
+        name: "home",
+        query: preservedRouteQuery(),
+      };
+    }
     return {
       name: "thread",
-      params: { threadId: currentThread.value.id },
+      params: { machineId, threadId: currentThread.value.id },
       query: preservedRouteQuery(),
     };
   }
@@ -2487,12 +2526,8 @@ function syncRouteFromState() {
 function syncStateFromRoute() {
   const routeName = (route.name ?? "home") as AppRouteName;
   const panel = ROUTE_NAME_TO_PANEL[routeName];
-  const routeThreadId =
-    typeof route.params.threadId === "string"
-      ? route.params.threadId
-      : Array.isArray(route.params.threadId)
-        ? route.params.threadId[0] ?? null
-        : null;
+  const routeMachineId = normalizedRouteParam(route.params.machineId);
+  const routeThreadId = normalizedRouteParam(route.params.threadId);
 
   applyingRouteState.value = true;
   try {
@@ -2504,7 +2539,10 @@ function syncStateFromRoute() {
       }
 
       if (routeName === "thread" && routeThreadId) {
-        pendingThreadRouteId.value = routeThreadId;
+        pendingThreadRoute.value = {
+          machineId: routeMachineId,
+          threadId: routeThreadId,
+        };
         switchRootFlow("email-otp");
         return;
       }
@@ -2533,12 +2571,27 @@ function syncStateFromRoute() {
       closeModelPicker();
       closeThreadMenu();
       shellPageStack.value = [];
+      if (
+        routeMachineId &&
+        state.snapshot?.activeBridgeId !== routeMachineId &&
+        state.snapshot?.bridgeDevices.some((device) => device.id === routeMachineId)
+      ) {
+        pendingThreadRoute.value = {
+          machineId: routeMachineId,
+          threadId: routeThreadId,
+        };
+        client.selectBridge(routeMachineId);
+        return;
+      }
       if (state.snapshot?.threads.some((thread) => thread.id === routeThreadId)) {
         if (state.snapshot.selectedThreadId !== routeThreadId) {
           client.selectThread(routeThreadId);
         }
       } else {
-        pendingThreadRouteId.value = routeThreadId;
+        pendingThreadRoute.value = {
+          machineId: routeMachineId,
+          threadId: routeThreadId,
+        };
       }
       return;
     }
@@ -2546,7 +2599,7 @@ function syncStateFromRoute() {
     closeModelPicker();
     closeThreadMenu();
     shellPageStack.value = [];
-    pendingThreadRouteId.value = null;
+    pendingThreadRoute.value = null;
     if (routeName === "home" && state.snapshot?.selectedThreadId) {
       client.clearThreadSelection();
     }
