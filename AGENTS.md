@@ -26,6 +26,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Prefer the smallest, simplest change with the smallest diff that actually solves the task.
   Smallest diff means narrow scope and normal readable code, not code golf, one-letter names, or collapsing code into one line.
 - Prefer environment variables or sourced secret files over inline secret strings. Do not paste tokens, passwords, or API keys into commands, docs, logs, or temp scripts when an env-based path exists.
+- For CNB Git operations from the Codex shell, self-correct before asking the user: switch to the `cnb-dev-deploy` skill flow, use its authenticated `cnb-git.sh` wrapper, and verify remote/auth state before treating a push failure as a missing repository.
 - If the user says to deploy without naming a target, deploy to QCP by default.
 - For QCP deployments, place the project in a normal app/frontend directory, not under `/root` or another root-user home path, unless the user explicitly asks for that layout.
 - Before a QCP deploy, inspect the live Nginx and systemd config on the host to confirm the active service, static root, relay source tree, and Bun path. Do not assume `/root/project/phodex-web` is live just because it exists.
