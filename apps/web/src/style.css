@@ -2990,7 +2990,8 @@ button {
 }
 
 .model-picker--runtime {
-  flex: 1;
+  flex: 0 0 auto;
+  width: clamp(172px, 46vw, 210px);
   min-width: 0;
 }
 
@@ -3058,32 +3059,35 @@ button {
 
 .model-picker__menu {
   position: absolute;
-  right: 0;
+  left: 0;
+  right: auto;
   bottom: calc(100% + 10px);
   z-index: 12;
   display: grid;
-  gap: 4px;
-  width: min(280px, calc(100vw - 68px));
-  padding: 6px;
+  gap: 2px;
+  width: min(236px, calc(100vw - 72px));
+  max-height: min(320px, calc(100vh - 220px));
+  padding: 8px;
+  overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: var(--radius-3);
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 24px 44px rgba(18, 18, 18, 0.12);
   backdrop-filter: blur(26px);
 }
 
 .model-picker__section-label {
-  padding: 6px 10px 2px;
+  padding: 6px 10px 3px;
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .model-picker__divider {
   height: 1px;
-  margin: 4px 2px;
+  margin: 3px 2px;
   background: rgba(18, 18, 18, 0.08);
 }
 
@@ -3091,10 +3095,10 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 11px 13px;
-  border-radius: var(--radius-2);
+  padding: 9px 11px;
+  border-radius: 14px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -3112,27 +3116,31 @@ button {
 
 .model-picker__copy {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .model-picker__copy strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.33;
+  line-height: 1.28;
 }
 
 .model-picker__copy span {
+  display: block;
   color: var(--muted-strong);
-  font-size: var(--font-size-meta);
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .model-picker__status {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);

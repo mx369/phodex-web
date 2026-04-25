@@ -1777,18 +1777,18 @@ function updateCreateThreadCustomCwd(value: string) {
 function modelOptionCopy(model: string) {
   switch (model) {
     case "GPT-5.4":
-      return "Best for heavier coding passes and deeper edits.";
+      return "Heavier edits and coding work.";
     case "GPT-5.4 mini":
-      return "Faster daily driver for most routine chats.";
+      return "Faster default for routine chats.";
     case "o4-mini":
-      return "Lightest option for quick checks and short turns.";
+      return "Quick checks and short turns.";
     default:
-      return "Available in this local shell.";
+      return "Available in this shell.";
   }
 }
 
 function speedOptionCopy(fastMode: boolean) {
-  return fastMode ? "Lower latency using Codex Fast Mode." : "Balanced latency for standard turns.";
+  return fastMode ? "Lower latency." : "Balanced latency.";
 }
 
 function formatImageCountLabel(count: number) {
@@ -3775,10 +3775,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                       <span>
                                         {{
                                           accessMode === 'full-access'
-                                            ? 'Runs directly in the local shell.'
+                                            ? 'Runs in the local shell.'
                                             : accessMode === 'on-request'
                                               ? 'Ask before privileged actions.'
-                                              : 'Inspect and plan without writes.'
+                                              : 'Inspect without writes.'
                                         }}
                                       </span>
                                     </span>
