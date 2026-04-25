@@ -61,6 +61,34 @@ PERSISTED_RUNTIME_ENV_KEYS=(
   VOLTA_HOME
 )
 
+resolve_login_shell() {
+  local candidate=""
+
+  if [[ -n ${SHELL:-} && -x ${SHELL:-} ]]; then
+    LOGIN_SHELL="$SHELL"
+    return
+  fi
+
+  if [[ $(uname -s) == Darwin ]]; then
+    candidate="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '/UserShell:/ { print $2 }')"
+    if [[ -n $candidate && -x $candidate ]]; then
+      LOGIN_SHELL="$candidate"
+      return
+    fi
+    LOGIN_SHELL="/bin/zsh"
+    return
+  fi
+
+  for candidate in /bin/bash /bin/sh; do
+    if [[ -x $candidate ]]; then
+      LOGIN_SHELL="$candidate"
+      return
+    fi
+  done
+
+  LOGIN_SHELL="/bin/sh"
+}
+
 resolve_bun() {
   local candidate
   local candidates=()
@@ -274,6 +302,7 @@ write_env_file() {
   write_env_value PHODEX_RELAY_LABEL "$RELAY_LABEL"
   write_env_value PHODEX_MAC_LABEL "$MAC_LABEL"
   write_env_value PHODEX_STATE_FILE "$STATE_FILE"
+  write_env_value PHODEX_LOGIN_SHELL "$LOGIN_SHELL"
 
   if [[ -n $CODEX_BIN ]]; then
     write_env_value PHODEX_CODEX_BIN "$CODEX_BIN"
@@ -308,8 +337,10 @@ persist_runtime_env() {
 }
 
 write_start_script() {
-  printf '#!/bin/bash\nset -euo pipefail\nset -a\n. %q\nset +a\nexec %q %q\n' \
-    "$ENV_FILE" "$BUN_BIN" "$RUNTIME_FILE" > "$START_SCRIPT"
+  printf '#!/bin/bash\nset -euo pipefail\nset -a\n. %q\nset +a\nLOGIN_SHELL="${PHODEX_LOGIN_SHELL:-%q}"\nif [[ ! -x "$LOGIN_SHELL" ]]; then\n  LOGIN_SHELL=%q\nfi\ncase "$(basename "$LOGIN_SHELL")" in\n  fish)\n    exec "$LOGIN_SHELL" -l -c %q _ %q %q\n    ;;\n  *)\n    exec "$LOGIN_SHELL" -lc %q _ %q %q\n    ;;\nesac\n' \
+    "$ENV_FILE" "$LOGIN_SHELL" "$LOGIN_SHELL" \
+    'exec $argv[1] $argv[2]' "$BUN_BIN" "$RUNTIME_FILE" \
+    'exec "$1" "$2"' "$BUN_BIN" "$RUNTIME_FILE" > "$START_SCRIPT"
   chmod +x "$START_SCRIPT"
 }
 
@@ -488,6 +519,7 @@ START_SCRIPT="${INSTALL_DIR}/current/start-bridge.sh"
 STATE_FILE="${INSTALL_DIR}/data/bridge-state.json"
 
 resolve_bun
+resolve_login_shell
 
 if [[ -z $CODEX_WS_URL ]] && probe_existing_codex_ready "$DEFAULT_CODEX_WS_URL"; then
   CODEX_WS_URL="$DEFAULT_CODEX_WS_URL"
@@ -496,6 +528,7 @@ fi
 mkdir -p "$INSTALL_DIR/current" "$INSTALL_DIR/logs" "$INSTALL_DIR/data"
 
 info "Using bun at $(tildify "$BUN_BIN")"
+info "Using login shell $(tildify "$LOGIN_SHELL")"
 info "Downloading bridge runtime..."
 curl --fail --location --progress-bar --output "$RUNTIME_FILE" "$BRIDGE_RUNTIME_URL" || error "Failed to download bridge runtime"
 

@@ -21,6 +21,7 @@ const DEFAULT_PID_FILE = "bridge.pid";
 const DEFAULT_ENV_FILE = "bridge.env";
 const DEFAULT_LOG_FILE = "logs/bridge.log";
 const DEFAULT_RUNTIME_FILE = "current/bridge-runtime.ts";
+const DEFAULT_START_SCRIPT = "current/start-bridge.sh";
 const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
 const DEFAULT_CODEX_WS_URL = "ws://127.0.0.1:8765";
@@ -51,44 +52,6 @@ const PERSISTED_RUNTIME_ENV_KEYS = [
   "SSH_AUTH_SOCK",
   "VOLTA_HOME",
 ];
-const LAUNCH_AGENT_ENV_KEYS = new Set([
-  "ALL_PROXY",
-  "ASDF_DATA_DIR",
-  "ASDF_DIR",
-  "CARGO_HOME",
-  "DISPLAY",
-  "GEM_HOME",
-  "GEM_PATH",
-  "GOPATH",
-  "GOROOT",
-  "HOME",
-  "HOMEBREW_CELLAR",
-  "HOMEBREW_PREFIX",
-  "HOMEBREW_REPOSITORY",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "JAVA_HOME",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "NO_COLOR",
-  "NODE_EXTRA_CA_CERTS",
-  "NVM_BIN",
-  "NVM_DIR",
-  "PATH",
-  "PNPM_HOME",
-  "PYENV_ROOT",
-  "RBENV_ROOT",
-  "RUSTUP_HOME",
-  "SHELL",
-  "SDKMAN_DIR",
-  "SSH_AUTH_SOCK",
-  "SSL_CERT_FILE",
-  "TERM",
-  "TMPDIR",
-  "VOLTA_HOME",
-]);
-
 main().catch((error) => {
   console.error(`[phodex-bridge] ${readErrorMessage(error)}`);
   process.exit(1);
@@ -137,32 +100,34 @@ async function main() {
   const runtimeSource = await runtimeResponse.text();
   writeFileSync(resolve(installDir, DEFAULT_RUNTIME_FILE), runtimeSource, "utf8");
 
-  const envLines = [
-    `PHODEX_RELAY_URL=${setup.relayOrigin}`,
-    `PHODEX_BRIDGE_TOKEN=${setup.bridgeToken}`,
-    `PHODEX_RELAY_LABEL=${setup.relayLabel}`,
-    `PHODEX_MAC_LABEL=${macLabel}`,
-    `PHODEX_STATE_FILE=${resolve(installDir, "data", "bridge-state.json")}`,
-  ];
+  const persistedEnv = {
+    PHODEX_RELAY_URL: setup.relayOrigin,
+    PHODEX_BRIDGE_TOKEN: setup.bridgeToken,
+    PHODEX_RELAY_LABEL: setup.relayLabel,
+    PHODEX_MAC_LABEL: macLabel,
+    PHODEX_STATE_FILE: resolve(installDir, "data", "bridge-state.json"),
+  };
 
   if (args.options["codex-bin"]) {
-    envLines.push(`PHODEX_CODEX_BIN=${args.options["codex-bin"]}`);
+    persistedEnv.PHODEX_CODEX_BIN = args.options["codex-bin"];
   }
 
   if (detectedCodexWsUrl) {
-    envLines.push(`PHODEX_CODEX_WS_URL=${detectedCodexWsUrl}`);
-    envLines.push("PHODEX_MANAGE_CODEX=false");
+    persistedEnv.PHODEX_CODEX_WS_URL = detectedCodexWsUrl;
+    persistedEnv.PHODEX_MANAGE_CODEX = "false";
   }
 
-  appendPersistedRuntimeEnv(envLines, process.env);
+  appendPersistedRuntimeEnv(persistedEnv, process.env);
+  persistedEnv.PHODEX_LOGIN_SHELL = resolveLoginShell(persistedEnv.SHELL);
 
   const autoCaBundle = chooseSystemCaBundle(setup.relayOrigin);
   if (autoCaBundle) {
-    envLines.push(`SSL_CERT_FILE=${autoCaBundle}`);
-    envLines.push(`NODE_EXTRA_CA_CERTS=${autoCaBundle}`);
+    persistedEnv.SSL_CERT_FILE = autoCaBundle;
+    persistedEnv.NODE_EXTRA_CA_CERTS = autoCaBundle;
   }
 
-  writeFileSync(resolve(installDir, DEFAULT_ENV_FILE), `${envLines.join("\n")}\n`, "utf8");
+  writeEnvFile(resolve(installDir, DEFAULT_ENV_FILE), persistedEnv);
+  writeStartScript(installDir, bunBin, persistedEnv);
   writeFileSync(
     resolve(installDir, DEFAULT_METADATA_FILE),
     JSON.stringify(
@@ -172,6 +137,7 @@ async function main() {
         relayLabel: setup.relayLabel,
         installedAt: new Date().toISOString(),
         bunBin,
+        loginShell: persistedEnv.PHODEX_LOGIN_SHELL,
       },
       null,
       2
@@ -200,14 +166,53 @@ async function main() {
   }
 }
 
-function appendPersistedRuntimeEnv(envLines, sourceEnv) {
+function appendPersistedRuntimeEnv(targetEnv, sourceEnv) {
   for (const key of PERSISTED_RUNTIME_ENV_KEYS) {
     const value = sourceEnv[key];
     if (typeof value !== "string" || !value.trim()) {
       continue;
     }
-    envLines.push(`${key}=${value}`);
+    targetEnv[key] = value;
   }
+}
+
+function writeEnvFile(filePath, env) {
+  const lines = [];
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string" || !value.trim()) {
+      continue;
+    }
+    lines.push(`${key}=${value}`);
+  }
+  writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
+}
+
+function writeStartScript(installDir, bunBin, env) {
+  const runtimeFile = resolve(installDir, DEFAULT_RUNTIME_FILE);
+  const startScript = resolve(installDir, DEFAULT_START_SCRIPT);
+  const shell = env.PHODEX_LOGIN_SHELL || resolveLoginShell();
+  const fallbackShell = process.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
+  const exportLines = Object.entries(env)
+    .filter(([, value]) => typeof value === "string" && value.trim())
+    .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+    .join("\n");
+  const script = `#!/bin/bash
+set -euo pipefail
+${exportLines}
+LOGIN_SHELL=${shellQuote(shell)}
+if [[ ! -x "$LOGIN_SHELL" ]]; then
+  LOGIN_SHELL=${shellQuote(fallbackShell)}
+fi
+case "$(basename "$LOGIN_SHELL")" in
+  fish)
+    exec "$LOGIN_SHELL" -l -c 'exec $argv[1] $argv[2]' _ ${shellQuote(bunBin)} ${shellQuote(runtimeFile)}
+    ;;
+  *)
+    exec "$LOGIN_SHELL" -lc 'exec "$1" "$2"' _ ${shellQuote(bunBin)} ${shellQuote(runtimeFile)}
+    ;;
+esac
+`;
+  writeFileSync(startScript, script, { encoding: "utf8", mode: 0o755 });
 }
 
 function printUsage() {
@@ -288,6 +293,40 @@ function normalizeRelayOrigin(value) {
 
 function normalizeCodexWsUrl(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function resolveLoginShell(explicitShell = "") {
+  const candidates = [];
+
+  if (explicitShell.trim()) {
+    candidates.push(explicitShell.trim());
+  }
+
+  if (process.platform === "darwin") {
+    const lookup = spawnSync("dscl", [".", "-read", `/Users/${process.env.USER || process.env.LOGNAME || ""}`, "UserShell"], {
+      encoding: "utf8",
+    });
+    if (lookup.status === 0) {
+      const match = lookup.stdout.match(/UserShell:\s+(\S+)/);
+      if (match?.[1]) {
+        candidates.push(match[1]);
+      }
+    }
+  }
+
+  if (process.env.SHELL?.trim()) {
+    candidates.push(process.env.SHELL.trim());
+  }
+
+  candidates.push(process.platform === "darwin" ? "/bin/zsh" : "/bin/bash", "/bin/sh");
+
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return process.platform === "darwin" ? "/bin/zsh" : "/bin/sh";
 }
 
 async function detectExistingCodexWsUrl() {
@@ -414,9 +453,47 @@ async function readResponseError(response, fallback) {
 
 function startInstalledBridge(installDir, bunBin) {
   const runtimeFile = resolve(installDir, DEFAULT_RUNTIME_FILE);
-  const envFile = resolve(installDir, DEFAULT_ENV_FILE);
   const pidFile = resolve(installDir, DEFAULT_PID_FILE);
+  const startScript = resolve(installDir, DEFAULT_START_SCRIPT);
   const logFile = resolve(installDir, DEFAULT_LOG_FILE);
+
+  if (!existsSync(runtimeFile)) {
+    throw new Error(`Missing runtime file at ${runtimeFile}`);
+  }
+
+  if (!existsSync(startScript) && process.platform !== "win32") {
+    throw new Error(`Missing start script at ${startScript}`);
+  }
+
+  if (process.platform === "darwin") {
+    const pid = startBridgeViaLaunchAgent(installDir, startScript, logFile);
+    writeFileSync(pidFile, `${pid}\n`, "utf8");
+    return pid;
+  }
+
+  if (process.platform !== "win32") {
+    const stdoutFd = openSync(logFile, "a");
+    const stderrFd = openSync(logFile, "a");
+    const launched = spawn(startScript, [], {
+      cwd: installDir,
+      detached: true,
+      stdio: ["ignore", stdoutFd, stderrFd],
+      windowsHide: true,
+    });
+    launched.unref();
+    closeSync(stdoutFd);
+    closeSync(stderrFd);
+
+    const pid = launched.pid;
+    if (!Number.isFinite(pid)) {
+      throw new Error("Failed to capture local bridge PID.");
+    }
+
+    writeFileSync(pidFile, `${pid}\n`, "utf8");
+    return pid;
+  }
+
+  const envFile = resolve(installDir, DEFAULT_ENV_FILE);
   const env = sanitizeBridgeEnv(
     {
       ...process.env,
@@ -424,17 +501,6 @@ function startInstalledBridge(installDir, bunBin) {
     },
     runtimeFile
   );
-
-  if (!existsSync(runtimeFile)) {
-    throw new Error(`Missing runtime file at ${runtimeFile}`);
-  }
-
-  if (process.platform === "darwin") {
-    const pid = startBridgeViaLaunchAgent(installDir, runtimeFile, logFile, env);
-    writeFileSync(pidFile, `${pid}\n`, "utf8");
-    return pid;
-  }
-
   const stdoutFd = openSync(logFile, "a");
   const stderrFd = openSync(logFile, "a");
   const launched = spawn(bunBin, [runtimeFile], {
@@ -617,13 +683,13 @@ function readEnvFile(filePath) {
   return values;
 }
 
-function startBridgeViaLaunchAgent(installDir, runtimeFile, logFile, env) {
+function startBridgeViaLaunchAgent(installDir, startScript, logFile) {
   const label = buildLaunchAgentLabel(installDir);
   const plistPath = resolveLaunchAgentPlistPath(label);
   const domain = buildLaunchAgentDomain(label);
 
   mkdirSync(resolve(homedir(), "Library/LaunchAgents"), { recursive: true });
-  writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, runtimeFile, logFile, env), "utf8");
+  writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, startScript, logFile), "utf8");
 
   spawnSync("launchctl", ["bootout", domain], { stdio: "ignore" });
 
@@ -691,14 +757,8 @@ function readLaunchAgentPid(label) {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-function buildLaunchAgentPlist(label, installDir, runtimeFile, logFile, env) {
-  const launchEnv = selectLaunchAgentEnv(env);
-  const programArguments = [
-    "/usr/bin/env",
-    "-i",
-    ...Object.entries(launchEnv).map(([key, value]) => `${key}=${String(value)}`),
-    runtimeFile,
-  ];
+function buildLaunchAgentPlist(label, installDir, startScript, logFile) {
+  const programArguments = ["/bin/bash", startScript];
   const programArgumentsXml = programArguments.map((value) => `    <string>${xmlEscape(value)}</string>`).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -718,21 +778,6 @@ ${programArgumentsXml}
 </dict>
 </plist>
 `;
-}
-
-function selectLaunchAgentEnv(env) {
-  const next = {};
-
-  for (const [key, value] of Object.entries(env)) {
-    if (!value) {
-      continue;
-    }
-    if (key.startsWith("PHODEX_") || LAUNCH_AGENT_ENV_KEYS.has(key)) {
-      next[key] = value;
-    }
-  }
-
-  return next;
 }
 
 function xmlEscape(value) {
@@ -764,4 +809,8 @@ function readMissingBunMessage() {
   return process.platform === "win32"
     ? 'bun is required to run phodex-bridge. Install it first with the official command: powershell -c "irm bun.sh/install.ps1 | iex"'
     : "bun is required to run phodex-bridge. Install it first with the official command: curl -fsSL https://bun.com/install | bash";
+}
+
+function shellQuote(value) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
