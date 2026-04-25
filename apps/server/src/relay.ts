@@ -572,9 +572,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
 }
 
 function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
-  const activeBridgeId = getActiveBridgeId(user.profile.id);
-  const bridgeSocket = activeBridgeId ? bridgeSocketsByUserId.get(user.profile.id)?.get(activeBridgeId) : null;
-  if (!bridgeSocket) {
+  const activeBridgeTarget = getActiveBridgeTarget(user.profile.id);
+  if (!activeBridgeTarget) {
+    broadcastPresence(user.profile.id);
     sendToast(user.profile.id, "error", "The local bridge is offline.");
     return false;
   }
@@ -590,7 +590,7 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
     logFlowTrace("bridge.dispatch.sent", {
       requestId: command.requestId,
       userId: user.profile.id,
-      bridgeId: activeBridgeId,
+      bridgeId: activeBridgeTarget.bridgeId,
       threadId: event.threadId,
       promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
       promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
@@ -599,11 +599,11 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
     logFlowTrace("bridge.dispatch.sent", {
       requestId: command.requestId,
       userId: user.profile.id,
-      bridgeId: activeBridgeId,
+      bridgeId: activeBridgeTarget.bridgeId,
       eventType: event.type,
     });
   }
-  bridgeSocket.send(JSON.stringify(command));
+  activeBridgeTarget.socket.send(JSON.stringify(command));
   return true;
 }
 
@@ -973,7 +973,8 @@ function serializeThreadForUser(
 
 function snapshotForUser(userId: string, options: { includeSelectedMessages?: boolean } = {}): AppSnapshot {
   const user = persisted.users[userId];
-  const activeBridgeId = getActiveBridgeId(userId) || null;
+  const activeBridgeTarget = getActiveBridgeTarget(userId);
+  const activeBridgeId = activeBridgeTarget?.bridgeId ?? null;
   const includeSelectedMessages = options.includeSelectedMessages ?? false;
   const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
     const leftArchived = left.state === "archived" ? 1 : 0;
@@ -1077,6 +1078,21 @@ function getBridgeSockets(userId: string) {
   return sockets;
 }
 
+function getActiveBridgeTarget(userId: string) {
+  const bridgeId = getActiveBridgeId(userId);
+  if (!bridgeId) {
+    return null;
+  }
+
+  const socket = bridgeSocketsByUserId.get(userId)?.get(bridgeId) ?? null;
+  if (!socket) {
+    activeBridgeIdsByUserId.delete(userId);
+    return null;
+  }
+
+  return { bridgeId, socket };
+}
+
 function getBridgeConnectionMap(userId: string) {
   let connections = bridgeConnectionsByUserId.get(userId);
   if (!connections) {
@@ -1101,12 +1117,15 @@ function hasAnyBridgeSocket(userId: string) {
 function getBridgeConnection(userId: string, bridgeId?: string | null) {
   if (bridgeId) {
     const macLabel = getBridgeDevice(userId, bridgeId)?.macLabel ?? DEFAULT_MAC_LABEL;
+    if (!hasBridgeSocket(userId, bridgeId)) {
+      return disconnectedBridgeConnection(macLabel);
+    }
     return getBridgeConnectionMap(userId).get(bridgeId) ?? disconnectedBridgeConnection(macLabel);
   }
 
-  const activeBridgeId = getActiveBridgeId(userId);
-  if (activeBridgeId) {
-    return getBridgeConnection(userId, activeBridgeId);
+  const activeBridgeTarget = getActiveBridgeTarget(userId);
+  if (activeBridgeTarget) {
+    return getBridgeConnection(userId, activeBridgeTarget.bridgeId);
   }
 
   const fallbackBridgeId = pickBestBridgeId(userId);
@@ -1536,7 +1555,8 @@ function broadcastBanner(userId: string) {
 }
 
 function broadcastPresence(userId: string) {
-  const activeBridgeId = getActiveBridgeId(userId) || null;
+  const activeBridgeTarget = getActiveBridgeTarget(userId);
+  const activeBridgeId = activeBridgeTarget?.bridgeId ?? null;
   broadcast(userId, {
     type: "presence",
     connection: getBridgeConnection(userId, activeBridgeId),

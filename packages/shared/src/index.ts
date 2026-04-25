@@ -124,6 +124,7 @@ export interface ImageMessageCard {
   type: "image";
   title: string;
   path: string;
+  imageUrl?: string;
   detail?: string;
   meta?: string;
   tone: CardTone;

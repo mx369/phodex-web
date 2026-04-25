@@ -4,6 +4,7 @@ import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
   AccessMode,
   BridgeDeviceSummary,
+  ImageMessageCard,
   InputImageAttachment,
   ProjectDiffFile,
   ProjectDiffPayload,
@@ -85,6 +86,12 @@ type MessageInlineSegment = {
 type TurnStarterAction = {
   label: string;
   prompt: string;
+};
+
+type ImagePreviewState = {
+  src: string;
+  title: string;
+  meta?: string;
 };
 
 const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
@@ -304,6 +311,7 @@ const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
 const threadMenuOpen = ref(false);
 const threadMenuEl = ref<HTMLElement | null>(null);
+const imagePreviewState = ref<ImagePreviewState | null>(null);
 const composerImageInputEl = ref<HTMLInputElement | null>(null);
 const composerInputEl = ref<HTMLTextAreaElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
@@ -781,6 +789,77 @@ const composerSendTitle = computed(() => {
 });
 const composerRuntimeLabel = computed(
   () => `${state.ui.selectedModel} · ${ACCESS_MODE_COMPACT_LABELS[state.ui.accessMode]}`
+);
+const composerRuntimeState = computed(() => {
+  const connection = state.snapshot?.connection;
+  const macLabel = connection?.macLabel?.trim() || "your Mac";
+
+  if (isCurrentThreadPendingCreate.value) {
+    return {
+      label: "Starting",
+      detail: "Creating a fresh chat on your Mac",
+      tone: "amber",
+    } as const;
+  }
+
+  if (connection?.state === "disconnected") {
+    return {
+      label: "Offline",
+      detail: `Reconnect ${macLabel}`,
+      tone: "slate",
+    } as const;
+  }
+
+  if (connection?.bridgeOnline && connection.state !== "connected") {
+    return {
+      label: "Syncing",
+      detail: `Rehydrating ${macLabel}`,
+      tone: "amber",
+    } as const;
+  }
+
+  if (currentThread.value?.state === "running") {
+    return {
+      label: "Running",
+      detail: currentThread.value.queuedDrafts.length
+        ? `${currentThread.value.queuedDrafts.length} queued next`
+        : `Working on ${macLabel}`,
+      tone: "blue",
+    } as const;
+  }
+
+  if (currentThread.value?.state === "queued") {
+    return {
+      label: "Queued",
+      detail: "Runs after the current turn",
+      tone: "amber",
+    } as const;
+  }
+
+  if (currentThread.value?.queuedDrafts.length) {
+    return {
+      label: "Ready",
+      detail: `${currentThread.value.queuedDrafts.length} queued next`,
+      tone: "amber",
+    } as const;
+  }
+
+  return {
+    label: "Ready",
+    detail: connection?.state === "connected" ? `On ${macLabel}` : null,
+    tone: "amber",
+  } as const;
+});
+const composerAmbientReady = computed(
+  () =>
+    Boolean(
+      currentThread.value &&
+        !isCurrentThreadPendingCreate.value &&
+        currentThread.value.state !== "running" &&
+        currentThread.value.state !== "queued" &&
+        state.snapshot?.connection.state === "connected" &&
+        !composerHasContent.value
+    ) && !state.snapshot?.settings.reducedMotion
 );
 const homeStatusLabel = computed(() => {
   if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
@@ -1805,6 +1884,25 @@ function formatInputImageLabel(image: InputImageAttachment, index: number) {
 
 function inputImageSource(image: InputImageAttachment) {
   return image.imageUrl ?? "";
+}
+
+function openImagePreview(src: string, title: string, meta?: string) {
+  if (!src) {
+    return;
+  }
+  imagePreviewState.value = { src, title, meta };
+}
+
+function closeImagePreview() {
+  imagePreviewState.value = null;
+}
+
+function openInputImagePreview(image: InputImageAttachment, index: number) {
+  openImagePreview(inputImageSource(image), formatInputImageLabel(image, index), image.mimeType);
+}
+
+function openMessageCardImagePreview(card: ImageMessageCard) {
+  openImagePreview(card.imageUrl ?? "", card.detail ?? card.title, card.meta ?? card.path);
 }
 
 function draftSummary(draft: { text: string; images?: InputImageAttachment[] }) {
@@ -3199,6 +3297,16 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   {{ card.detail }}
                                 </p>
 
+                                <button
+                                  v-if="card.type === 'image' && card.imageUrl"
+                                  class="message-card__image-preview"
+                                  type="button"
+                                  @click="openMessageCardImagePreview(card)"
+                                >
+                                  <img :src="card.imageUrl" :alt="card.detail ?? card.title" />
+                                  <span>Tap to preview</span>
+                                </button>
+
                                 <div v-if="card.type === 'image'" class="message-card__image-path">
                                   <span>{{ card.meta ?? card.path }}</span>
                                 </div>
@@ -3226,7 +3334,13 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 :key="`${message.id}-image-${index}`"
                                 class="message-input-image"
                               >
-                                <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                <button
+                                  class="message-input-image__preview"
+                                  type="button"
+                                  @click="openInputImagePreview(image, index)"
+                                >
+                                  <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                </button>
                                 <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
                               </figure>
                             </div>
@@ -3296,7 +3410,13 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   :key="`pending-image-${index}`"
                                   class="message-input-image"
                                 >
-                                  <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  <button
+                                    class="message-input-image__preview"
+                                    type="button"
+                                    @click="openInputImagePreview(image, index)"
+                                  >
+                                    <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  </button>
                                   <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
                                 </figure>
                               </div>
@@ -3348,7 +3468,13 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   :key="`${draft.id}-image-${index}`"
                                   class="message-input-image"
                                 >
-                                  <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  <button
+                                    class="message-input-image__preview"
+                                    type="button"
+                                    @click="openInputImagePreview(image, index)"
+                                  >
+                                    <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                                  </button>
                                   <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
                                 </figure>
                               </div>
@@ -3631,11 +3757,17 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             :key="`${image.name ?? 'image'}-${index}`"
                             class="composer-image-card"
                           >
-                            <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
-                            <div class="composer-image-card__copy">
-                              <strong>{{ formatInputImageLabel(image, index) }}</strong>
-                              <span>{{ image.mimeType || "Image attachment" }}</span>
-                            </div>
+                            <button
+                              class="composer-image-card__preview"
+                              type="button"
+                              @click="openInputImagePreview(image, index)"
+                            >
+                              <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
+                              <div class="composer-image-card__copy">
+                                <strong>{{ formatInputImageLabel(image, index) }}</strong>
+                                <span>{{ image.mimeType || "Image attachment" }}</span>
+                              </div>
+                            </button>
                             <button
                               class="icon-button icon-button--tiny composer-image-card__remove"
                               type="button"
@@ -3656,6 +3788,14 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           rows="2"
                           @keydown="handleComposerKeyDown"
                         ></textarea>
+
+                        <div class="phone-composer__meta" aria-live="polite">
+                          <div class="composer-runtime-state" :class="`composer-runtime-state--${composerRuntimeState.tone}`">
+                            <span class="composer-runtime-state__dot" aria-hidden="true"></span>
+                            <strong class="composer-runtime-state__label">{{ composerRuntimeState.label }}</strong>
+                            <span v-if="composerRuntimeState.detail" class="composer-runtime-state__detail">{{ composerRuntimeState.detail }}</span>
+                          </div>
+                        </div>
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
@@ -3807,7 +3947,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             </button>
                             <button
                               class="send-cta composer-action composer-action--send"
-                              :class="`send-cta--${composerSendTone}`"
+                              :class="[`send-cta--${composerSendTone}`, { 'composer-action--ambient-ready': composerAmbientReady }]"
                               type="button"
                               :disabled="composerSendDisabled"
                               :aria-label="
@@ -3829,6 +3969,25 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </div>
                     </div>
                   </footer>
+                </div>
+              </transition>
+
+              <transition name="scrim">
+                <div v-if="imagePreviewState" class="image-preview-scrim" @click.self="closeImagePreview">
+                  <div class="image-preview-sheet">
+                    <div class="image-preview-sheet__head">
+                      <div class="image-preview-sheet__copy">
+                        <span class="section-label">Image Preview</span>
+                        <strong>{{ imagePreviewState.title }}</strong>
+                        <span v-if="imagePreviewState.meta">{{ imagePreviewState.meta }}</span>
+                      </div>
+                      <button class="icon-button icon-button--tiny" type="button" aria-label="Close image preview" @click="closeImagePreview">
+                        <AppIcon name="close" />
+                      </button>
+                    </div>
+
+                    <img class="image-preview-sheet__image" :src="imagePreviewState.src" :alt="imagePreviewState.title" />
+                  </div>
                 </div>
               </transition>
 
