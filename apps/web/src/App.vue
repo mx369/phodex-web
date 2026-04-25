@@ -889,6 +889,14 @@ const homeStatusTone = computed(() => {
       return "slate";
   }
 });
+const homeStatusDeviceLabel = computed(() => {
+  const activeDevice =
+    homeBridgeDevices.value.find((device) => isActiveBridgeDevice(device)) ??
+    homeBridgeDevices.value.find((device) => device.state === "connected") ??
+    null;
+
+  return activeDevice ? bridgeDeviceLabel(activeDevice) : null;
+});
 const homePrimaryLabel = computed(() => {
   switch (state.snapshot?.connection.state) {
     case "connected":
@@ -3512,15 +3520,18 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       <div v-else class="home-empty-state">
                         <div class="home-empty-state__tabs">
                           <span class="home-empty-state__tab home-empty-state__tab--active">Home</span>
-                          <span class="home-empty-state__tab">
-                            <span :class="`home-empty-state__tab-dot home-empty-state__tab-dot--${homeStatusTone}`"></span>
+                          <span :class="`home-empty-state__tab home-empty-state__tab--${homeStatusTone}`">
                             {{ homeStatusLabel }}
                           </span>
                         </div>
                         <img :src="remodexAppLogo" alt="" class="home-empty-state__logo" />
                         <div class="home-status-badge">
-                          <span :class="`home-status-badge__dot home-status-badge__dot--${homeStatusTone}`"></span>
-                          <strong>{{ homeStatusLabel }}</strong>
+                          <strong :class="`home-status-badge__label home-status-badge__label--${homeStatusTone}`">
+                            {{ homeStatusLabel }}
+                          </strong>
+                          <span v-if="homeStatusDeviceLabel" class="home-status-badge__detail">
+                            On {{ homeStatusDeviceLabel }}
+                          </span>
                         </div>
                         <div v-if="homeBridgeDevices.length" class="home-empty-state__device-list">
                           <span class="section-label">{{ homeBridgeDevices.length > 1 ? "Registered Macs" : "Connected To Mac" }}</span>
