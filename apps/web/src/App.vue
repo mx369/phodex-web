@@ -3668,18 +3668,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             >
                               <AppIcon name="file" />
                             </button>
-                          </div>
 
-                          <div class="phone-composer__toolbar-right">
-                            <button
-                              v-if="currentThread?.state === 'running'"
-                              class="composer-action composer-action--dark"
-                              type="button"
-                              aria-label="Stop run"
-                              @click="client.stopRun(currentThread.id)"
-                            >
-                              <AppIcon name="stop" />
-                            </button>
                             <div ref="modelPickerEl" class="model-picker model-picker--runtime">
                               <button
                                 class="model-picker__trigger model-picker__trigger--runtime"
@@ -3804,6 +3793,18 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 </div>
                               </transition>
                             </div>
+                          </div>
+
+                          <div class="phone-composer__toolbar-right">
+                            <button
+                              v-if="currentThread?.state === 'running'"
+                              class="composer-action composer-action--dark"
+                              type="button"
+                              aria-label="Stop run"
+                              @click="client.stopRun(currentThread.id)"
+                            >
+                              <AppIcon name="stop" />
+                            </button>
                             <button
                               class="send-cta composer-action composer-action--send"
                               :class="`send-cta--${composerSendTone}`"
