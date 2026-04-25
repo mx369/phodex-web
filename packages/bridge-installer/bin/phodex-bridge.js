@@ -25,20 +25,68 @@ const DEFAULT_METADATA_FILE = "current/install.json";
 const SYSTEM_CA_BUNDLE_CANDIDATES = ["/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem"];
 const DEFAULT_CODEX_WS_URL = "ws://127.0.0.1:8765";
 const DEFAULT_CODEX_READY_URL = DEFAULT_CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
+const PERSISTED_RUNTIME_ENV_KEYS = [
+  "ALL_PROXY",
+  "ASDF_DATA_DIR",
+  "ASDF_DIR",
+  "CARGO_HOME",
+  "GEM_HOME",
+  "GEM_PATH",
+  "GOPATH",
+  "GOROOT",
+  "HOMEBREW_CELLAR",
+  "HOMEBREW_PREFIX",
+  "HOMEBREW_REPOSITORY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "JAVA_HOME",
+  "NVM_BIN",
+  "NVM_DIR",
+  "PATH",
+  "PNPM_HOME",
+  "PYENV_ROOT",
+  "RBENV_ROOT",
+  "RUSTUP_HOME",
+  "SDKMAN_DIR",
+  "SSH_AUTH_SOCK",
+  "VOLTA_HOME",
+];
 const LAUNCH_AGENT_ENV_KEYS = new Set([
+  "ALL_PROXY",
+  "ASDF_DATA_DIR",
+  "ASDF_DIR",
+  "CARGO_HOME",
   "DISPLAY",
+  "GEM_HOME",
+  "GEM_PATH",
+  "GOPATH",
+  "GOROOT",
   "HOME",
+  "HOMEBREW_CELLAR",
+  "HOMEBREW_PREFIX",
+  "HOMEBREW_REPOSITORY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "JAVA_HOME",
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
   "NO_COLOR",
   "NODE_EXTRA_CA_CERTS",
+  "NVM_BIN",
+  "NVM_DIR",
   "PATH",
+  "PNPM_HOME",
+  "PYENV_ROOT",
+  "RBENV_ROOT",
+  "RUSTUP_HOME",
   "SHELL",
+  "SDKMAN_DIR",
   "SSH_AUTH_SOCK",
   "SSL_CERT_FILE",
   "TERM",
   "TMPDIR",
+  "VOLTA_HOME",
 ]);
 
 main().catch((error) => {
@@ -106,6 +154,8 @@ async function main() {
     envLines.push("PHODEX_MANAGE_CODEX=false");
   }
 
+  appendPersistedRuntimeEnv(envLines, process.env);
+
   const autoCaBundle = chooseSystemCaBundle(setup.relayOrigin);
   if (autoCaBundle) {
     envLines.push(`SSL_CERT_FILE=${autoCaBundle}`);
@@ -147,6 +197,16 @@ async function main() {
     );
   } else {
     console.log("[phodex-bridge] Started, but the relay has not confirmed the bridge within 6 seconds. Check bridge.log.");
+  }
+}
+
+function appendPersistedRuntimeEnv(envLines, sourceEnv) {
+  for (const key of PERSISTED_RUNTIME_ENV_KEYS) {
+    const value = sourceEnv[key];
+    if (typeof value !== "string" || !value.trim()) {
+      continue;
+    }
+    envLines.push(`${key}=${value}`);
   }
 }
 

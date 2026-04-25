@@ -34,6 +34,33 @@ success() {
   echo -e "${Green}$@${Color_Off}"
 }
 
+PERSISTED_RUNTIME_ENV_KEYS=(
+  ALL_PROXY
+  ASDF_DATA_DIR
+  ASDF_DIR
+  CARGO_HOME
+  GEM_HOME
+  GEM_PATH
+  GOPATH
+  GOROOT
+  HOMEBREW_CELLAR
+  HOMEBREW_PREFIX
+  HOMEBREW_REPOSITORY
+  HTTP_PROXY
+  HTTPS_PROXY
+  JAVA_HOME
+  NVM_BIN
+  NVM_DIR
+  PATH
+  PNPM_HOME
+  PYENV_ROOT
+  RBENV_ROOT
+  RUSTUP_HOME
+  SDKMAN_DIR
+  SSH_AUTH_SOCK
+  VOLTA_HOME
+)
+
 resolve_bun() {
   local candidate
   local candidates=()
@@ -257,6 +284,8 @@ write_env_file() {
     write_env_value PHODEX_MANAGE_CODEX false
   fi
 
+  persist_runtime_env
+
   if [[ -n $CA_BUNDLE ]]; then
     write_env_value SSL_CERT_FILE "$CA_BUNDLE"
     write_env_value NODE_EXTRA_CA_CERTS "$CA_BUNDLE"
@@ -265,6 +294,17 @@ write_env_file() {
 
 write_env_value() {
   printf '%s=%q\n' "$1" "$2" >> "$ENV_FILE"
+}
+
+persist_runtime_env() {
+  local key
+  local value
+
+  for key in "${PERSISTED_RUNTIME_ENV_KEYS[@]}"; do
+    value="${!key-}"
+    [[ -n $value ]] || continue
+    write_env_value "$key" "$value"
+  done
 }
 
 write_start_script() {
