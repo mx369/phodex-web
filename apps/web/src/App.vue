@@ -850,17 +850,6 @@ const composerRuntimeState = computed(() => {
     tone: "amber",
   } as const;
 });
-const composerAmbientReady = computed(
-  () =>
-    Boolean(
-      currentThread.value &&
-        !isCurrentThreadPendingCreate.value &&
-        currentThread.value.state !== "running" &&
-        currentThread.value.state !== "queued" &&
-        state.snapshot?.connection.state === "connected" &&
-        !composerHasContent.value
-    ) && !state.snapshot?.settings.reducedMotion
-);
 const homeStatusLabel = computed(() => {
   if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
     return "Mac linked";
@@ -3957,7 +3946,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             </button>
                             <button
                               class="send-cta composer-action composer-action--send"
-                              :class="[`send-cta--${composerSendTone}`, { 'composer-action--ambient-ready': composerAmbientReady }]"
+                              :class="`send-cta--${composerSendTone}`"
                               type="button"
                               :disabled="composerSendDisabled"
                               :aria-label="
