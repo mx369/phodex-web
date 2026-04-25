@@ -1191,7 +1191,7 @@ const composerSuggestion = computed(() => {
 const dialogTitle = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
-      return dialogState.value.mode === "worktree" ? "Start in a fresh worktree" : "Start a new local chat";
+      return dialogState.value.mode === "worktree" ? "Start a worktree chat" : "Start a local chat";
     case "project-browser":
       return "Project Files";
     case "project-diff":
@@ -1208,8 +1208,8 @@ const dialogBody = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
       return dialogState.value.mode === "worktree"
-        ? "Choose an existing project or point at a git-backed path before starting a fresh worktree on your Mac."
-        : "Choose an existing project or type a new path for the next chat on your Mac.";
+        ? "Pick an existing project or enter a git-backed path. Phodex creates a fresh worktree before the chat starts."
+        : "Pick an existing project or enter a new path for the next local chat on your Mac.";
     case "project-browser":
       return `Browse ${dialogState.value.title} and lazily preview a file when you tap it.`;
     case "project-diff":
@@ -4029,100 +4029,102 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     </div>
 
                     <template v-if="dialogState.kind === 'create-thread'">
-                      <div class="thread-create-sheet__body">
-                        <div class="thread-create-sheet__modes">
-                          <button
-                            class="thread-create-sheet__mode"
-                            :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'local' }"
-                            @click="setCreateThreadMode('local')"
-                          >
-                            <AppIcon name="folder" />
-                            <div>
-                              <strong>Local Chat</strong>
-                              <span>Starts at the project root</span>
-                            </div>
-                          </button>
-                          <button
-                            class="thread-create-sheet__mode"
-                            :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'worktree' }"
-                            @click="setCreateThreadMode('worktree')"
-                          >
-                            <AppIcon name="worktree" />
-                            <div>
-                              <strong>Worktree Chat</strong>
-                              <span>Creates a fresh git worktree first</span>
-                            </div>
-                          </button>
-                        </div>
-
-                        <div class="thread-create-sheet__custom">
-                          <button
-                            class="thread-create-sheet__target"
-                            :class="{ 'thread-create-sheet__target--active': dialogState.useCustomCwd }"
-                            @click="activateCustomCreateThreadInput"
-                          >
-                            <span class="thread-create-sheet__target-icon">
-                              <AppIcon name="plus" />
-                            </span>
-                            <div class="thread-create-sheet__target-copy">
-                              <div class="thread-create-sheet__target-head">
-                                <strong>New Project Path</strong>
-                                <span v-if="dialogState.useCustomCwd" class="thread-create-sheet__target-tag">Custom</span>
-                              </div>
-                              <p>Paste a full path or just type a folder name.</p>
-                              <span>Folder names default into {{ PROJECTS_ROOT_HINT }}</span>
-                            </div>
-                          </button>
-
-                          <div v-if="dialogState.useCustomCwd" class="thread-create-sheet__custom-body">
-                            <label class="input-label input-label--stacked thread-create-sheet__field-label">Project path</label>
-                            <input
-                              :value="dialogState.customCwdInput"
-                              class="input-field app-dialog-card__input"
-                              type="text"
-                              placeholder="my-project or /Users/young/code/my-project"
-                              @input="updateCreateThreadCustomCwd(($event.target as HTMLInputElement).value)"
-                            />
-
-                            <div class="thread-create-sheet__preview">
-                              <span class="section-label">Resolved Path</span>
-                              <strong>{{ createThreadResolvedPathHint }}</strong>
-                              <p>{{ createThreadHintCopy }}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="thread-create-sheet__targets-wrap">
-                          <div class="thread-create-sheet__targets-head">
-                            <span class="section-label">Existing Projects</span>
-                            <span>{{ drawerProjectTargets.length }} options</span>
-                          </div>
-
-                          <div class="thread-create-sheet__targets">
+                      <div class="app-dialog-card__body app-dialog-card__body--create-thread">
+                        <div class="thread-create-sheet__body">
+                          <div class="thread-create-sheet__modes">
                             <button
-                              v-for="target in drawerProjectTargets"
-                              :key="`${target.label}-${target.cwd ?? 'default'}`"
+                              class="thread-create-sheet__mode"
+                              :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'local' }"
+                              @click="setCreateThreadMode('local')"
+                            >
+                              <AppIcon name="folder" />
+                              <div>
+                                <strong>Local Chat</strong>
+                                <span>Starts at the project root</span>
+                              </div>
+                            </button>
+                            <button
+                              class="thread-create-sheet__mode"
+                              :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'worktree' }"
+                              @click="setCreateThreadMode('worktree')"
+                            >
+                              <AppIcon name="worktree" />
+                              <div>
+                                <strong>Worktree Chat</strong>
+                                <span>Creates a fresh git worktree first</span>
+                              </div>
+                            </button>
+                          </div>
+
+                          <div class="thread-create-sheet__custom">
+                            <button
                               class="thread-create-sheet__target"
-                              :class="{
-                                'thread-create-sheet__target--active':
-                                  !dialogState.useCustomCwd &&
-                                  dialogState.projectLabel === target.label &&
-                                  dialogState.cwd === target.cwd,
-                              }"
-                              @click="selectCreateThreadTarget(target)"
+                              :class="{ 'thread-create-sheet__target--active': dialogState.useCustomCwd }"
+                              @click="activateCustomCreateThreadInput"
                             >
                               <span class="thread-create-sheet__target-icon">
-                                <AppIcon :name="dialogState.mode === 'worktree' ? 'worktree' : 'folder'" />
+                                <AppIcon name="plus" />
                               </span>
                               <div class="thread-create-sheet__target-copy">
                                 <div class="thread-create-sheet__target-head">
-                                  <strong>{{ target.label }}</strong>
-                                  <span v-if="target.isCurrent" class="thread-create-sheet__target-tag">Current</span>
+                                  <strong>New Project Path</strong>
+                                  <span v-if="dialogState.useCustomCwd" class="thread-create-sheet__target-tag">Custom</span>
                                 </div>
-                                <p>{{ target.detail }}</p>
-                                <span>{{ target.liveCount }} live {{ target.liveCount === 1 ? "chat" : "chats" }}</span>
+                                <p>Paste a full path or type a folder name.</p>
+                                <span>Folder names default to {{ PROJECTS_ROOT_HINT }}</span>
                               </div>
                             </button>
+
+                            <div v-if="dialogState.useCustomCwd" class="thread-create-sheet__custom-body">
+                              <label class="input-label input-label--stacked thread-create-sheet__field-label">Project path</label>
+                              <input
+                                :value="dialogState.customCwdInput"
+                                class="input-field app-dialog-card__input"
+                                type="text"
+                                placeholder="my-project or /Users/young/code/my-project"
+                                @input="updateCreateThreadCustomCwd(($event.target as HTMLInputElement).value)"
+                              />
+
+                              <div class="thread-create-sheet__preview">
+                                <span class="section-label">Resolved Path</span>
+                                <strong>{{ createThreadResolvedPathHint }}</strong>
+                                <p>{{ createThreadHintCopy }}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="thread-create-sheet__targets-wrap">
+                            <div class="thread-create-sheet__targets-head">
+                              <span class="section-label">Existing Projects</span>
+                              <span>{{ drawerProjectTargets.length }} options</span>
+                            </div>
+
+                            <div class="thread-create-sheet__targets">
+                              <button
+                                v-for="target in drawerProjectTargets"
+                                :key="`${target.label}-${target.cwd ?? 'default'}`"
+                                class="thread-create-sheet__target"
+                                :class="{
+                                  'thread-create-sheet__target--active':
+                                    !dialogState.useCustomCwd &&
+                                    dialogState.projectLabel === target.label &&
+                                    dialogState.cwd === target.cwd,
+                                }"
+                                @click="selectCreateThreadTarget(target)"
+                              >
+                                <span class="thread-create-sheet__target-icon">
+                                  <AppIcon :name="dialogState.mode === 'worktree' ? 'worktree' : 'folder'" />
+                                </span>
+                                <div class="thread-create-sheet__target-copy">
+                                  <div class="thread-create-sheet__target-head">
+                                    <strong>{{ target.label }}</strong>
+                                    <span v-if="target.isCurrent" class="thread-create-sheet__target-tag">Current</span>
+                                  </div>
+                                  <p>{{ target.detail }}</p>
+                                  <span>{{ target.liveCount }} live {{ target.liveCount === 1 ? "chat" : "chats" }}</span>
+                                </div>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -4271,7 +4273,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     />
 
                     <div
-                      class="alert-card__actions"
+                      class="alert-card__actions app-dialog-card__footer"
                       :class="{
                         'alert-card__actions--dialog':
                           dialogState.kind === 'create-thread' ||
