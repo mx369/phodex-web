@@ -663,6 +663,25 @@ function clearThreadCreateDispatch(userId: string, requestId: string) {
   pendingThreadCreateDispatches.delete(key);
 }
 
+function acknowledgePendingThreadCreateFromMirror(userId: string, threadId: string | null | undefined) {
+  if (!threadId) {
+    return;
+  }
+  const pending = [...pendingThreadCreateDispatches.values()].find((entry) => entry.userId === userId);
+  if (!pending) {
+    return;
+  }
+  clearThreadCreateDispatch(userId, pending.requestId);
+  setSelectedThreadForUser(userId, threadId);
+  ensureMirroredThread(userId, threadId);
+  schedulePersist();
+  broadcast(userId, {
+    type: "thread:created",
+    requestId: pending.requestId,
+    threadId,
+  });
+}
+
 function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
   if (!user.bridgeDevices[bridgeId]) {
     sendToast(user.profile.id, "error", "That Mac is no longer registered to this account.");
@@ -755,6 +774,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
         ensureMirroredThread(bridgeUserId, selectedThreadId);
       }
       normalizeSelectionForUser(bridgeUserId);
+      acknowledgePendingThreadCreateFromMirror(bridgeUserId, persisted.users[bridgeUserId]?.selectedThreadId);
       broadcastSnapshot(bridgeUserId);
       broadcastPresence(bridgeUserId);
       break;
@@ -888,6 +908,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
         setSelectedThreadForUser(user.profile.id, event.selectedThreadId ?? null);
         if (user.selectedThreadId) {
           ensureMirroredThread(user.profile.id, user.selectedThreadId);
+          acknowledgePendingThreadCreateFromMirror(user.profile.id, user.selectedThreadId);
         }
       }
       if (Object.prototype.hasOwnProperty.call(event, "banner")) {
