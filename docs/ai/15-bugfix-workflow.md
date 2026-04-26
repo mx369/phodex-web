@@ -21,6 +21,21 @@ Use this workflow for UI/state-machine regressions, especially mobile polish, fl
 11. Merge the verified fix back into the main worktree, then remove the temporary worktree.
 12. Summarize the result with links to code, logs, screenshots, and recordings.
 
+## Worktree Discipline
+
+- Before creating a bugfix worktree, confirm the main worktree is clean with `git status --short --branch`.
+- Create bugfix worktrees from the current main HEAD with a unique branch and sibling path, for example:
+  `git worktree add -b bugfix/<topic> ../phodex-web-bugfix-<topic>`.
+- If verification in a temporary worktree requires `bun install`, run Bun with an explicit PATH on this Mac:
+  `PATH=/Users/young/.bun/bin:$PATH /Users/young/.bun/bin/bun install`.
+- After `bun install`, check for accidental mode-only changes. If `packages/bridge-installer/bin/phodex-bridge.js` flips from `100644` to `100755`, restore it with:
+  `chmod 644 packages/bridge-installer/bin/phodex-bridge.js`.
+- Commit only source/doc changes that belong to the fix. Do not commit `node_modules`, build output, ignored artifacts, or mode-only installer changes.
+- Fresh evidence under `.artifacts/current-audit/` is ignored by Git. Copy the relevant evidence directory from the temporary worktree back to the main worktree before removing the worktree.
+- Before merging back, confirm both worktrees are clean. Try `git merge --ff-only bugfix/<topic>` from main first.
+- If fast-forward merge fails because main advanced while the bugfix worktree was active, inspect `git log --oneline --graph --decorate --max-count=12 --all`; then use a normal merge from main if the histories are expected and conflicts are absent. Do not treat the failed fast-forward as a missing branch or lost work.
+- After the merge and final verification in main, remove the temporary worktree with `git worktree remove ../phodex-web-bugfix-<topic>` and delete the bugfix branch.
+
 ## Evidence Rules
 
 - Keep issue checklists explicit:

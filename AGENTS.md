@@ -44,6 +44,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Delegation does not transfer final responsibility.
 - In fix loops: reproduce, fix, verify.
 - Bug fixes must be done in a dedicated Git worktree. After verification, merge the fix back into the main worktree, then remove the temporary worktree.
+- For bugfix worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
 - Before fixing a bug, reproduce it first with fresh runtime evidence. Prefer CDP screenshots; if the failure is transient, capture a short frame sequence or timestamped logs that prove the bug exists before changing code.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
 - Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
