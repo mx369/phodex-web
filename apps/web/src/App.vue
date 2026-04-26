@@ -373,6 +373,7 @@ const isScrolledToBottom = ref(true);
 const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
+const DRAWER_CLOSE_NAVIGATION_DELAY_MS = 180;
 const DRAWER_THREAD_SYNC_HINT_MS = 8_000;
 const DRAWER_THREAD_BATCH_SIZE = 16;
 const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
@@ -388,6 +389,7 @@ let lastConversationScrollTop = 0;
 let ignoreManualAutoScrollUntil = 0;
 let installCommandCopyTimer: number | null = null;
 let drawerThreadSyncTimer: number | null = null;
+let drawerThreadNavigationTimer: number | null = null;
 let previousScrollRestoration: ScrollRestoration | null = null;
 const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
@@ -597,6 +599,7 @@ onBeforeUnmount(() => {
   conversationResizeObserver = null;
   clearInstallCommandCopyTimer();
   clearDrawerThreadSyncTimer();
+  clearDrawerThreadNavigationTimer();
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -773,6 +776,14 @@ function clearDrawerThreadSyncTimer() {
   }
   window.clearTimeout(drawerThreadSyncTimer);
   drawerThreadSyncTimer = null;
+}
+
+function clearDrawerThreadNavigationTimer() {
+  if (drawerThreadNavigationTimer === null) {
+    return;
+  }
+  window.clearTimeout(drawerThreadNavigationTimer);
+  drawerThreadNavigationTimer = null;
 }
 
 function showDrawerThreadSyncHint() {
@@ -2526,6 +2537,18 @@ function navigateToThread(threadId: string) {
   });
 }
 
+function handleDrawerThreadClick(threadId: string) {
+  clearDrawerThreadNavigationTimer();
+  closeSidebar();
+  if (currentThread.value?.id === threadId) {
+    return;
+  }
+  drawerThreadNavigationTimer = window.setTimeout(() => {
+    drawerThreadNavigationTimer = null;
+    navigateToThread(threadId);
+  }, DRAWER_CLOSE_NAVIGATION_DELAY_MS);
+}
+
 function navigateHome() {
   client.logFlowTrace("route.home.manual");
   void router.push({
@@ -3519,10 +3542,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 'drawer-thread--selected': currentThread?.id === thread.id,
                                 'drawer-thread--archived': thread.state === 'archived',
                               }"
-                              @click="
-                                navigateToThread(thread.id);
-                                closeSidebar();
-                              "
+                              @click="handleDrawerThreadClick(thread.id)"
                             >
                               <div class="drawer-thread__indicator">
                                 <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
