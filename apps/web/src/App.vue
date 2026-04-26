@@ -3440,14 +3440,13 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <span>{{ liveThreadCount }} chats</span>
                         </div>
 
-                        <input
-                          v-model="state.ui.search"
-                          class="drawer-search"
-                          type="search"
-                          placeholder="Search conversations"
-                        />
-
-                        <div class="drawer-toolbar-actions">
+                        <div class="drawer-search-row">
+                          <input
+                            v-model="state.ui.search"
+                            class="drawer-search"
+                            type="search"
+                            placeholder="Search conversations"
+                          />
                           <button class="drawer-new-chat" @click="startLocalChat">
                             <span class="drawer-new-chat__icon">
                               <AppIcon name="plus" />
@@ -3524,7 +3523,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   <strong>{{ thread.title }}</strong>
                                   <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
                                 </div>
-                                <p v-if="currentThread?.id === thread.id" class="drawer-thread__preview">{{ thread.preview }}</p>
                                 <div v-if="thread.queuedDrafts.length || thread.unreadCount" class="drawer-thread__meta">
                                   <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
                                   <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
@@ -3584,11 +3582,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                         <div class="drawer-footer-actions">
                           <button class="drawer-footer-pill" @click="navigateHome()">Home</button>
-                          <button class="drawer-footer-pill drawer-footer-pill--primary" @click="openPanel('settings')">
-                            Settings
-                          </button>
+                          <button class="drawer-footer-pill" @click="openPanel('settings')">Settings</button>
                           <button class="drawer-footer-pill" @click="openPanel('archived')">Archived</button>
-                          <button class="drawer-footer-pill drawer-footer-pill--danger" @click="client.logout()">Disconnect</button>
+                          <button class="drawer-footer-pill" @click="client.logout()">Disconnect</button>
                         </div>
                       </div>
                     </aside>
