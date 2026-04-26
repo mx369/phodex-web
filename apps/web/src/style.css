@@ -2199,51 +2199,6 @@ button {
   text-align: center;
 }
 
-.home-empty-state__tabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-empty-state__tab {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--muted-strong);
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 10px 22px rgba(18, 18, 18, 0.06);
-}
-
-.home-empty-state__tab--active {
-  color: var(--text);
-}
-
-.home-empty-state__tab--green {
-  color: #1f7b55;
-  background: rgba(38, 162, 105, 0.1);
-}
-
-.home-empty-state__tab--amber {
-  color: #ad6438;
-  background: rgba(239, 142, 85, 0.12);
-}
-
-.home-empty-state__tab--slate {
-  color: var(--text-secondary);
-  background: rgba(18, 18, 18, 0.05);
-}
-
-.home-empty-state__logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 17px;
-  box-shadow: 0 14px 28px rgba(18, 18, 18, 0.12);
-}
-
 .home-status-badge {
   display: inline-flex;
   align-items: center;

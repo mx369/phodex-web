@@ -3962,7 +3962,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       <div v-else-if="currentThread" class="turn-empty-canvas" aria-hidden="true"></div>
 
                       <div v-else class="home-empty-state">
-                        <img :src="remodexAppLogo" alt="" class="home-empty-state__logo" />
                         <div class="home-status-badge">
                           <strong :class="`home-status-badge__label home-status-badge__label--${homeStatusTone}`">
                             {{ homeStatusLabel }}
