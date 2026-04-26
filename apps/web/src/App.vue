@@ -273,7 +273,7 @@ type RootFlowState =
   | "email-otp"
   | "auto";
 
-type ShellPageState = "settings" | "archived" | "about" | "paywall";
+type ShellPageState = "settings" | "archived" | "paywall";
 
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
@@ -312,7 +312,6 @@ type AppRouteName =
   | "thread"
   | "settings"
   | "archived"
-  | "about"
   | "paywall"
   | "onboarding"
   | "email-otp"
@@ -322,14 +321,12 @@ type AppRouteName =
 const PANEL_ROUTE_NAMES: Record<ShellPageState, AppRouteName> = {
   settings: "settings",
   archived: "archived",
-  about: "about",
   paywall: "paywall",
 };
 
 const ROUTE_NAME_TO_PANEL: Partial<Record<AppRouteName, ShellPageState>> = {
   settings: "settings",
   archived: "archived",
-  about: "about",
   paywall: "paywall",
 };
 
@@ -514,50 +511,6 @@ const paywallFeatures = [
   "$skills, /commands & @file mentions",
   "Hosted relay included",
   "Support development",
-] as const;
-
-const architectureSteps = [
-  ["Remodex mobile UI", "HTTPS + WSS", "Phodex relay"],
-  ["Phodex relay", "JSON-RPC", "Bridge (Mac)"],
-  ["Bridge (Mac)", "JSONL rollout", "codex app-server"],
-] as const;
-
-const aboutSections = [
-  {
-    title: "How It Works",
-    body:
-      "Your Mac runs a lightweight bridge that connects to a relay server over WebSocket, and replies stream back to the iPhone in real time.",
-  },
-  {
-    title: "Relay",
-    body:
-      "A lightweight WebSocket relay routes messages between your iPhone and your Mac and only needs connection metadata to do that job.",
-  },
-  {
-    title: "Sign In",
-    body:
-      "Use a one-time email code to connect this phone to the relay session running from your Mac.",
-  },
-  {
-    title: "Codex App-Server",
-    body:
-      "The bridge spawns codex app-server, so phone conversations stay first-class Codex sessions and produce JSONL rollout files under ~/.codex/sessions.",
-  },
-  {
-    title: "Session Recovery",
-    body:
-      "If the phone disconnects, sign in again, reload the relay snapshot, and continue the same Codex threads from your Mac.",
-  },
-  {
-    title: "Git & Workspace",
-    body:
-      "The bridge handles git commands from your phone locally on the Mac, including status, commit, push, pull, branch switching, and workspace revert flows.",
-  },
-  {
-    title: "Desktop Integration",
-    body:
-      "All execution happens on your Mac, so code generation, tool use, file edits, and credentials stay on the desktop side while the phone acts as a focused remote.",
-  },
 ] as const;
 
 const fileSuggestionCatalog = [
@@ -1177,10 +1130,6 @@ function readAppErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Request failed";
 }
 
-function formatThreadLocation(thread: ThreadRecord) {
-  return thread.isWorktree ? `Worktree · ${pathTail(thread.repoLabel, 3)}` : `Project · ${pathTail(thread.repoLabel, 2)}`;
-}
-
 const currentThreadRepoName = computed(() => {
   return repoNameFromPath(currentThread.value?.repoLabel ?? "");
 });
@@ -1409,8 +1358,6 @@ const activePanelTitle = computed(() => {
       return "Settings";
     case "archived":
       return "Archived Chats";
-    case "about":
-      return "About Remodex";
     case "paywall":
       return "Remodex Pro";
     default:
@@ -3376,14 +3323,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </section>
 
                       <section class="settings-card">
-                        <span class="section-label">About</span>
-                        <button class="settings-row-button" @click="openPanel('about')">
-                          <span>About Remodex</span>
-                          <strong>Open</strong>
-                        </button>
-                      </section>
-
-                      <section class="settings-card">
                         <span class="section-label">Usage</span>
                         <div class="settings-metric-row">
                           <span>Live chats</span>
@@ -3436,37 +3375,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <p class="settings-copy">Archived conversations will appear here after you move a chat out of the main thread list.</p>
                         </div>
                       </section>
-                    </template>
-
-                    <template v-else-if="activePanel === 'about'">
-                      <section class="about-header">
-                        <span class="section-label">Remodex</span>
-                        <h2 class="settings-hero-title">Control Codex from your iPhone.</h2>
-                        <p class="settings-copy">
-                          The Codex runtime stays on your Mac. Your phone is a focused remote control connected through a relay.
-                        </p>
-                      </section>
-
-                      <div class="about-divider"></div>
-
-                      <section class="about-section">
-                        <span class="section-label">Architecture</span>
-                        <div class="about-diagram">
-                          <div v-for="step in architectureSteps" :key="step[0]" class="about-diagram__row">
-                            <strong>{{ step[0] }}</strong>
-                            <span>{{ step[1] }}</span>
-                            <strong>{{ step[2] }}</strong>
-                          </div>
-                        </div>
-                      </section>
-
-                      <template v-for="section in aboutSections" :key="section.title">
-                        <div class="about-divider"></div>
-                        <section class="about-section">
-                          <span class="section-label">{{ section.title }}</span>
-                          <p class="settings-copy">{{ section.body }}</p>
-                        </section>
-                      </template>
                     </template>
 
                     <template v-else-if="activePanel === 'paywall'">
@@ -3546,18 +3454,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             </span>
                             <span>New Chat</span>
                           </button>
-                          <button class="drawer-toolbar-pill" @click="startWorktreeChat">
-                            <AppIcon name="worktree" />
-                            <span>Worktree</span>
-                          </button>
-                          <button
-                            v-if="currentThread"
-                            class="drawer-toolbar-pill"
-                            @click="navigateHome()"
-                          >
-                            <AppIcon name="home" />
-                            <span>Home</span>
-                          </button>
                         </div>
                       </div>
 
@@ -3629,8 +3525,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
                                 </div>
                                 <p v-if="currentThread?.id === thread.id" class="drawer-thread__preview">{{ thread.preview }}</p>
-                                <div class="drawer-thread__meta">
-                                  <span>{{ formatThreadLocation(thread) }}</span>
+                                <div v-if="thread.queuedDrafts.length || thread.unreadCount" class="drawer-thread__meta">
                                   <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
                                   <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
                                 </div>
@@ -3688,11 +3583,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                         </div>
 
                         <div class="drawer-footer-actions">
+                          <button class="drawer-footer-pill" @click="navigateHome()">Home</button>
                           <button class="drawer-footer-pill drawer-footer-pill--primary" @click="openPanel('settings')">
                             Settings
                           </button>
                           <button class="drawer-footer-pill" @click="openPanel('archived')">Archived</button>
-                          <button class="drawer-footer-pill" @click="openPanel('about')">About</button>
                           <button class="drawer-footer-pill drawer-footer-pill--danger" @click="client.logout()">Disconnect</button>
                         </div>
                       </div>

@@ -15,7 +15,6 @@ export const router = createRouter({
     { path: "/:machineId/:threadId", name: "thread", component: RouteStub, props: true },
     { path: "/settings", name: "settings", component: RouteStub },
     { path: "/archived", name: "archived", component: RouteStub },
-    { path: "/about", name: "about", component: RouteStub },
     { path: "/pro", name: "paywall", component: RouteStub },
     { path: "/onboarding", name: "onboarding", component: RouteStub },
     { path: "/login", name: "email-otp", component: RouteStub },
