@@ -1161,7 +1161,6 @@ const planAccessory = computed(() => {
   return null;
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
-const conversationQueuedDrafts = computed(() => [...(currentThread.value?.queuedDrafts ?? [])].reverse());
 const currentThreadHistory = computed(() => currentThread.value?.history ?? null);
 const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
   const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
@@ -3753,64 +3752,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   <template
                                     v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
                                     :key="`pending-run-${paragraphIndex}-${segment.type}-${segmentIndex}`"
-                                  >
-                                    <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
-                                    <span v-else-if="segment.type === 'text'">{{ segment.text }}</span>
-                                    <span v-else-if="segment.type === 'file-link'" class="phone-inline-file-link" :title="segment.href">
-                                      <AppIcon name="file" />
-                                      <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
-                                      <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
-                                    </span>
-                                    <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
-                                      {{ segment.label }}
-                                    </a>
-                                  </template>
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </article>
-
-                        <article
-                          v-for="draft in conversationQueuedDrafts"
-                          :key="draft.id"
-                          class="phone-message phone-message--user phone-message--pending phone-message--queued-draft"
-                        >
-                          <div class="phone-message__meta phone-message__meta--pending-user">
-                            <span>You</span>
-                            <span>{{ formatRelativeTime(draft.createdAt) }}</span>
-                            <span>queued</span>
-                          </div>
-
-                          <div class="phone-message__pending-bubble">
-                            <span class="phone-message__status-dot phone-message__status-dot--waiting" aria-hidden="true"></span>
-
-                            <div class="phone-message__card">
-                              <div v-if="draft.images?.length" class="message-input-images">
-                                <figure
-                                  v-for="(image, index) in draft.images"
-                                  :key="`${draft.id}-image-${index}`"
-                                  class="message-input-image"
-                                >
-                                  <button
-                                    class="message-input-image__preview"
-                                    type="button"
-                                    @click="openInputImagePreview(image, index)"
-                                  >
-                                    <img :src="inputImageSource(image)" :alt="formatInputImageLabel(image, index)" />
-                                  </button>
-                                  <figcaption>{{ formatInputImageLabel(image, index) }}</figcaption>
-                                </figure>
-                              </div>
-
-                              <div v-if="draft.text.trim()" class="phone-message__copy">
-                                <p
-                                  v-for="(paragraph, paragraphIndex) in splitParagraphs(draft.text)"
-                                  :key="`${draft.id}-queued-${paragraphIndex}`"
-                                >
-                                  <template
-                                    v-for="(segment, segmentIndex) in splitInlineSegments(paragraph)"
-                                    :key="`${draft.id}-queued-${paragraphIndex}-${segment.type}-${segmentIndex}`"
                                   >
                                     <code v-if="segment.type === 'code'" class="phone-inline-code">{{ segment.text }}</code>
                                     <span v-else-if="segment.type === 'text'">{{ segment.text }}</span>
