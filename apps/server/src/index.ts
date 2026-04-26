@@ -724,7 +724,7 @@ function queueDraft(
   preview: string
 ) {
   const local = ensureThreadLocal(thread.id);
-  local.queuedDrafts.unshift(buildQueuedDraft(text, images, event));
+  local.queuedDrafts.push(buildQueuedDraft(text, images, event));
   thread.queuedDrafts = local.queuedDrafts;
   thread.state = "running";
   thread.preview = preview;
@@ -961,8 +961,7 @@ async function resumeNextQueuedDraft(userId: string | undefined, threadId: strin
   }
 
   const local = ensureThreadLocal(threadId);
-  // New queued drafts are unshifted, so auto-drain from the tail to preserve send order.
-  const nextDraft = local.queuedDrafts.at(-1);
+  const nextDraft = local.queuedDrafts[0];
   if (!nextDraft) {
     return;
   }

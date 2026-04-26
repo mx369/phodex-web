@@ -190,7 +190,7 @@ function mergeIncomingQueuedDrafts(thread: ThreadRecord) {
   optimisticQueuedDrafts.set(thread.id, remainingOptimisticDrafts);
   return {
     ...thread,
-    queuedDrafts: [...remainingOptimisticDrafts, ...serverQueuedDrafts],
+    queuedDrafts: [...serverQueuedDrafts, ...remainingOptimisticDrafts],
   };
 }
 
@@ -205,7 +205,7 @@ function addOptimisticQueuedDraft(threadId: string, text: string, images: InputI
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
   };
-  optimisticQueuedDrafts.set(threadId, [draft, ...(optimisticQueuedDrafts.get(threadId) ?? [])]);
+  optimisticQueuedDrafts.set(threadId, [...(optimisticQueuedDrafts.get(threadId) ?? []), draft]);
   const thread = findThread(threadId);
   if (thread) {
     thread.queuedDrafts = mergeIncomingQueuedDrafts(thread).queuedDrafts;
