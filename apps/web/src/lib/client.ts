@@ -1062,7 +1062,18 @@ function reconcilePendingRunFeedback(threadId?: string) {
     state.ui.pendingRunFeedback = null;
     return;
   }
+  syncPendingRunFeedbackFromThread(thread);
+  if (state.ui.pendingRunFeedback !== pending) {
+    return;
+  }
   if (pending.promptAcknowledged) {
+    if (thread.state !== "running") {
+      state.ui.pendingRunFeedback = null;
+    }
+    return;
+  }
+  if (Date.now() - Date.parse(pending.startedAt) > PENDING_RUN_FEEDBACK_STALE_MS) {
+    pending.promptAcknowledged = true;
     if (thread.state !== "running") {
       state.ui.pendingRunFeedback = null;
     }
@@ -1071,7 +1082,25 @@ function reconcilePendingRunFeedback(threadId?: string) {
   if (thread.state === "running") {
     return;
   }
-  if (Date.now() - Date.parse(pending.startedAt) > PENDING_RUN_FEEDBACK_STALE_MS) {
+}
+
+function syncPendingRunFeedbackFromThread(thread: ThreadRecord) {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending || pending.threadId !== thread.id) {
+    return;
+  }
+
+  const prompt = normalizePendingRunPrompt(pending.prompt);
+  const hasMatchingUserMessage = thread.messages.some(
+    (message) => message.role === "user" && normalizePendingRunPrompt(message.text) === prompt
+  );
+  if (!hasMatchingUserMessage) {
+    return;
+  }
+
+  pending.promptAcknowledged = true;
+  const hasAssistantProgress = thread.messages.some((message) => message.role !== "user");
+  if (hasAssistantProgress || thread.state !== "running") {
     state.ui.pendingRunFeedback = null;
   }
 }

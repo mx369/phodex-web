@@ -164,6 +164,7 @@ const MAX_IMAGE_ARTIFACT_PREVIEW_BYTES = 5 * 1024 * 1024;
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
+const ACTIVE_TURN_STALE_MS = Math.max(60_000, Number(process.env.PHODEX_ACTIVE_TURN_STALE_MS ?? "600000"));
 const CODEX_BIN = resolveCodexBinary();
 const OTP_MAIL_CONFIG = resolveOtpMailConfig();
 const FLOW_TRACE_ENABLED = /^(1|true)$/i.test(process.env.PHODEX_FLOW_TRACE ?? "");
@@ -185,6 +186,7 @@ const threadCache = new Map<string, ThreadRecord>();
 const activeTurns = new Map<string, ActiveTurnState>();
 const pendingTurnModes = new Map<string, "chat" | "plan">();
 const pendingTurnTraces = new Map<string, PendingTurnTrace>();
+const activeTurnStaleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
 const projectContextCache = new Map<string, ProjectContext>();
 
@@ -1369,6 +1371,7 @@ function handleTurnStarted(params: any) {
     promptTrace: currentTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
     promptSummary: currentTurn?.promptSummary ?? pendingTrace?.promptSummary ?? "",
   });
+  scheduleActiveTurnStaleCheck(threadId);
   logFlowTrace("codex.turn-started", {
     threadId,
     turnId,
@@ -1453,6 +1456,7 @@ function handleAgentMessageDelta(params: any) {
   message.isStreaming = true;
   thread.preview = message.text || thread.preview;
   thread.lastActivityAt = new Date().toISOString();
+  scheduleActiveTurnStaleCheck(threadId);
   const activeTurn = activeTurns.get(threadId);
   const pendingTrace = pendingTurnTraces.get(threadId);
   logFlowTrace("codex.agent-delta", {
@@ -1514,6 +1518,7 @@ function handleItemCompleted(params: any) {
       liveMessage.isStreaming = false;
     }
     sendBridgeEvent({ type: "bridge:message:finished", threadId, messageId: message.id });
+    scheduleActiveTurnStaleCheck(threadId);
     logFlowTrace("relay.message-finished.sent", {
       threadId,
       messageId: message.id,
@@ -1548,6 +1553,7 @@ function handleTurnCompleted(params: any) {
   }
 
   const completedTurn = activeTurns.get(threadId);
+  clearActiveTurnStaleCheck(threadId);
   activeTurns.delete(threadId);
   pendingTurnModes.delete(threadId);
   pendingTurnTraces.delete(threadId);
@@ -1954,6 +1960,52 @@ function applyThreadStatusUpdate(threadId: string, statusType: string) {
   broadcastThreadToAllUsers(threadId);
 }
 
+function scheduleActiveTurnStaleCheck(threadId: string) {
+  clearActiveTurnStaleCheck(threadId);
+  activeTurnStaleTimers.set(
+    threadId,
+    setTimeout(() => {
+      activeTurnStaleTimers.delete(threadId);
+      reconcileStaleActiveTurn(threadId);
+    }, ACTIVE_TURN_STALE_MS)
+  );
+}
+
+function clearActiveTurnStaleCheck(threadId: string) {
+  const timer = activeTurnStaleTimers.get(threadId);
+  if (!timer) {
+    return;
+  }
+  clearTimeout(timer);
+  activeTurnStaleTimers.delete(threadId);
+}
+
+function reconcileStaleActiveTurn(threadId: string) {
+  const activeTurn = activeTurns.get(threadId);
+  const thread = threadCache.get(threadId);
+  if (!activeTurn || !thread || thread.state !== "running") {
+    return;
+  }
+  if (thread.messages.some((message) => message.isStreaming)) {
+    scheduleActiveTurnStaleCheck(threadId);
+    return;
+  }
+
+  activeTurns.delete(threadId);
+  pendingTurnModes.delete(threadId);
+  pendingTurnTraces.delete(threadId);
+  thread.state = deriveThreadState("idle", threadId, thread.state === "archived");
+  thread.lastActivityAt = new Date().toISOString();
+  logFlowTrace("codex.turn-stale-reconciled", {
+    threadId,
+    turnId: activeTurn.turnId,
+    promptTrace: activeTurn.promptTrace,
+    promptSummary: activeTurn.promptSummary,
+  });
+  schedulePersist();
+  broadcastThreadToAllUsers(threadId);
+}
+
 function deriveThreadState(statusType: string, threadId: string, archived: boolean) {
   if (archived) {
     return "archived";
@@ -2078,6 +2130,7 @@ function forgetThread(threadId: string, userId?: string) {
     clearTimeout(retryTimer);
     selectedThreadHydrationRetryTimers.delete(threadId);
   }
+  clearActiveTurnStaleCheck(threadId);
   selectedThreadHydrationRetryCounts.delete(threadId);
   activeTurns.delete(threadId);
   pendingTurnModes.delete(threadId);
