@@ -31,6 +31,7 @@ type PersistedUser = {
   profile: UserSummary;
   settings: AppSettings;
   selectedThreadId: string | null;
+  activeBridgeId: string | null;
   banner: CompletionBanner | null;
   bridgeDevices: Record<string, PersistedBridgeDevice>;
 };
@@ -709,6 +710,7 @@ function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
   }
 
   activeBridgeIdsByUserId.set(user.profile.id, bridgeId);
+  user.activeBridgeId = bridgeId;
   getThreadMirror(user.profile.id).clear();
   setSelectedThreadForUser(user.profile.id, null);
   user.banner = null;
@@ -1137,6 +1139,7 @@ function ensureUser(email: string): PersistedUser {
         compactSidebar: false,
       },
       selectedThreadId: null,
+      activeBridgeId: null,
       banner: null,
       bridgeDevices: {},
     };
@@ -1284,17 +1287,11 @@ function listSortedBridgeIds(userId: string, candidateBridgeIds?: string[]) {
 }
 
 function getActiveBridgeId(userId: string) {
-  const activeBridgeId = activeBridgeIdsByUserId.get(userId) ?? "";
+  const user = persisted.users[userId];
+  const activeBridgeId = user?.activeBridgeId ?? activeBridgeIdsByUserId.get(userId) ?? "";
   const bestOnlineBridgeId = pickBestBridgeId(userId, listOnlineBridgeIds(userId));
   if (activeBridgeId && hasBridgeSocket(userId, activeBridgeId)) {
-    if (bestOnlineBridgeId && bestOnlineBridgeId !== activeBridgeId) {
-      const activeConnection = getBridgeConnection(userId, activeBridgeId);
-      const bestOnlineConnection = getBridgeConnection(userId, bestOnlineBridgeId);
-      if (bridgeConnectionScore(bestOnlineConnection) > bridgeConnectionScore(activeConnection)) {
-        activeBridgeIdsByUserId.set(userId, bestOnlineBridgeId);
-        return bestOnlineBridgeId;
-      }
-    }
+    activeBridgeIdsByUserId.set(userId, activeBridgeId);
     return activeBridgeId;
   }
   if (activeBridgeId) {
@@ -1304,6 +1301,10 @@ function getActiveBridgeId(userId: string) {
   const nextBridgeId = bestOnlineBridgeId;
   if (nextBridgeId) {
     activeBridgeIdsByUserId.set(userId, nextBridgeId);
+    if (user && user.activeBridgeId !== nextBridgeId) {
+      user.activeBridgeId = nextBridgeId;
+      schedulePersist();
+    }
   }
   return nextBridgeId;
 }
@@ -1313,9 +1314,14 @@ function maybePromoteBridge(userId: string, candidateBridgeId: string) {
     return false;
   }
 
+  const user = persisted.users[userId];
   const activeBridgeId = getActiveBridgeId(userId);
   if (!activeBridgeId) {
     activeBridgeIdsByUserId.set(userId, candidateBridgeId);
+    if (user && user.activeBridgeId !== candidateBridgeId) {
+      user.activeBridgeId = candidateBridgeId;
+      schedulePersist();
+    }
     return true;
   }
   if (activeBridgeId === candidateBridgeId) {
@@ -1328,6 +1334,10 @@ function maybePromoteBridge(userId: string, candidateBridgeId: string) {
   const activeScore = bridgeConnectionScore(activeConnection);
   if (candidateScore > activeScore && candidateConnection.state === "connected" && activeConnection.state !== "connected") {
     activeBridgeIdsByUserId.set(userId, candidateBridgeId);
+    if (user && user.activeBridgeId !== candidateBridgeId) {
+      user.activeBridgeId = candidateBridgeId;
+      schedulePersist();
+    }
     return true;
   }
 
@@ -2216,13 +2226,17 @@ function loadState(): PersistedState {
     const users = Object.fromEntries(
       Object.entries(parsed.users ?? {}).map(([userId, rawUser]) => {
         const user = rawUser as LegacyPersistedUser | undefined;
+        const bridgeDevices = normalizePersistedBridgeDevices(user);
+        const activeBridgeId =
+          typeof user?.activeBridgeId === "string" && bridgeDevices[user.activeBridgeId] ? user.activeBridgeId : null;
         return [
-        userId,
-        {
-          ...user,
-          bridgeDevices: normalizePersistedBridgeDevices(user),
-        } as PersistedUser,
-      ];
+          userId,
+          {
+            ...user,
+            activeBridgeId,
+            bridgeDevices,
+          } as PersistedUser,
+        ];
       })
     );
     return {
