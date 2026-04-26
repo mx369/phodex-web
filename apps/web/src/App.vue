@@ -3447,11 +3447,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             type="search"
                             placeholder="Search conversations"
                           />
-                          <button class="drawer-new-chat" @click="startLocalChat">
+                          <button class="drawer-new-chat" aria-label="New chat" @click="startLocalChat">
                             <span class="drawer-new-chat__icon">
                               <AppIcon name="plus" />
                             </span>
-                            <span>New Chat</span>
                           </button>
                         </div>
                       </div>

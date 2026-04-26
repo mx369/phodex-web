@@ -3489,7 +3489,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .drawer-search {
@@ -3515,21 +3515,23 @@ button {
 }
 
 .drawer-new-chat {
-  width: auto;
+  width: 42px;
+  min-width: 42px;
   margin-top: 0;
-  background: rgba(18, 18, 18, 0.08);
+  padding: 0;
+  background: rgba(18, 18, 18, 0.095);
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-  box-shadow: none;
+  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.045);
 }
 
 .drawer-new-chat__icon {
   display: inline-grid;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: none;
 }
@@ -3645,7 +3647,7 @@ button {
   flex: 1;
   min-width: 0;
   color: var(--muted-strong);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -3673,16 +3675,17 @@ button {
 .drawer-group__threads {
   display: grid;
   gap: 4px;
-  padding-left: 22px;
+  padding-left: 24px;
 }
 
 .drawer-thread {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: flex-start;
+  align-items: center;
   width: 100%;
   gap: 8px;
-  padding: 7px 8px;
+  min-height: 44px;
+  padding: 6px 8px;
   border-radius: 14px;
   background: transparent;
   text-align: left;
@@ -3701,7 +3704,6 @@ button {
   justify-items: center;
   gap: 5px;
   width: 14px;
-  margin-top: 3px;
 }
 
 .drawer-thread__dot {
@@ -3747,7 +3749,11 @@ button {
 }
 
 .drawer-thread__body {
+  display: flex;
+  min-height: 28px;
   min-width: 0;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .drawer-thread__top {
@@ -3762,7 +3768,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .drawer-thread__top span,
