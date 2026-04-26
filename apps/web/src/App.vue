@@ -1946,6 +1946,8 @@ function updateCreateThreadCustomCwd(value: string) {
 
 function modelOptionCopy(model: string) {
   switch (model) {
+    case "GPT-5.5":
+      return "Best default for heavier reasoning and edits.";
     case "GPT-5.4":
       return "Heavier edits and coding work.";
     case "GPT-5.4 mini":
@@ -2343,10 +2345,17 @@ function openPanel(panel: ShellPageState, replace = false) {
 function navigateToThread(threadId: string) {
   const machineId = currentRouteMachineId();
   if (!machineId) {
+    client.logFlowTrace("route.thread.manual-missing-machine", {
+      threadId,
+    });
     client.selectThread(threadId);
     return;
   }
 
+  client.logFlowTrace("route.thread.manual", {
+    threadId,
+    machineId,
+  });
   void router.push({
     name: "thread",
     params: { machineId, threadId },
@@ -2355,6 +2364,7 @@ function navigateToThread(threadId: string) {
 }
 
 function navigateHome() {
+  client.logFlowTrace("route.home.manual");
   void router.push({
     name: "home",
     query: preservedRouteQuery(),

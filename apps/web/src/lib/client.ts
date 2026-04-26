@@ -375,6 +375,12 @@ export function createAppClient() {
     }
 
     const requestId = createClientId();
+    logFlowTrace("thread.create.requested", {
+      requestId,
+      projectLabel: projectLabel ?? "Phodex Web",
+      mode,
+      cwd: cwd ?? null,
+    });
     const sent = send({
       type: "thread:create",
       requestId,
@@ -525,6 +531,7 @@ export function createAppClient() {
     requestCode,
     verifyCode,
     logout,
+    logFlowTrace,
     selectBridge,
     createThread,
     createThreadAndSend,
@@ -904,6 +911,13 @@ function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) 
   if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
     return;
   }
+  logFlowTrace("thread.create.resolved", {
+    requestId,
+    threadId,
+    tempId: pendingThreadCreate.tempId,
+    projectLabel: pendingThreadCreate.projectLabel,
+    mode: pendingThreadCreate.mode,
+  });
   pendingThreadCreate.resolve(threadId);
 }
 
@@ -911,6 +925,13 @@ function rejectPendingThreadCreate(requestId: string, message: string) {
   if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
     return;
   }
+  logFlowTrace("thread.create.rejected", {
+    requestId,
+    tempId: pendingThreadCreate.tempId,
+    projectLabel: pendingThreadCreate.projectLabel,
+    mode: pendingThreadCreate.mode,
+    message,
+  });
   const reject = pendingThreadCreate.reject;
   rollbackPendingThreadCreate(false);
   reject(new Error(message));

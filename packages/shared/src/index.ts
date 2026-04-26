@@ -360,7 +360,7 @@ export const ACCESS_MODE_LABELS: Record<AccessMode, string> = {
   "full-access": "Full access",
 };
 
-export const MODELS = ["GPT-5.4", "GPT-5.4 mini", "o4-mini"] as const;
+export const MODELS = ["GPT-5.5", "GPT-5.4", "GPT-5.4 mini", "o4-mini"] as const;
 
 function normalizeTraceText(value: string) {
   return value.trim().replace(/\s+/g, " ");

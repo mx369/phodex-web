@@ -3473,6 +3473,9 @@ function isPlanPrompt(text: string) {
 
 function normalizeModel(model: string) {
   const normalized = model.trim().toLowerCase();
+  if (normalized === "gpt-5.5") {
+    return "gpt-5.5";
+  }
   if (normalized === "gpt-5.4 mini") {
     return "gpt-5.4-mini";
   }
