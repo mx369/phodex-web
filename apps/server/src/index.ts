@@ -166,6 +166,7 @@ const pendingTurnTraces = new Map<string, PendingTurnTrace>();
 const activeTurnStaleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
 const projectContextCache = new Map<string, ProjectContext>();
+const threadReadInFlight = new Map<string, Promise<ThreadRecord | null>>();
 
 function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
   if (!FLOW_TRACE_ENABLED) {
@@ -1554,6 +1555,20 @@ async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
     return null;
   }
 
+  const syncKey = `${threadId}:${includeTurns ? "turns" : "metadata"}`;
+  const existingSync = threadReadInFlight.get(syncKey);
+  if (existingSync) {
+    return existingSync;
+  }
+
+  const syncPromise = readThreadFromCodex(threadId, includeTurns).finally(() => {
+    threadReadInFlight.delete(syncKey);
+  });
+  threadReadInFlight.set(syncKey, syncPromise);
+  return syncPromise;
+}
+
+async function readThreadFromCodex(threadId: string, includeTurns: boolean) {
   let result: any;
   try {
     result = await codexRequest("thread/read", {
@@ -1584,7 +1599,7 @@ async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
   } else if (includeTurns && shouldRetrySelectedThreadHydration(thread.id)) {
     scheduleSelectedThreadHydrationRetry(thread.id);
   }
-  broadcastThreadToAllUsers(thread.id);
+  broadcastThreadToAllUsers(thread.id, includeTurns);
   publishPresenceToAllUsers();
   return thread;
 }
@@ -3609,14 +3624,14 @@ function broadcastBannersToAllUsers() {
   }
 }
 
-function broadcastThreadToAllUsers(threadId: string) {
+function broadcastThreadToAllUsers(threadId: string, includeMessages = false) {
   const thread = threadCache.get(threadId);
   if (!thread) {
     return;
   }
   sendBridgeEvent({
     type: "bridge:thread:updated",
-    thread: serializeThreadForSelections(thread, bridgeSelectedThreadIds()),
+    thread: includeMessages ? thread : serializeThreadForSelections(thread, bridgeSelectedThreadIds()),
   });
 }
 

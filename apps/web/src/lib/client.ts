@@ -675,7 +675,7 @@ function handleServerEvent(event: ServerEvent) {
       const existingThread = findThread(event.thread.id);
       beginPendingRunFeedbackFromResumedDraft(existingThread, event.thread, nextSelectedThreadId);
       beginPendingRunFeedbackFromQueuedDraft(existingThread, event.thread, nextSelectedThreadId);
-      upsertThread(event.thread, nextSelectedThreadId);
+      upsertThread(event.thread);
       reconcilePendingRunFeedback(event.thread.id);
       state.snapshot.selectedThreadId = nextSelectedThreadId;
       resolvePendingThreadCreate(nextSelectedThreadId);
@@ -771,7 +771,7 @@ function applySnapshot(snapshot: AppSnapshot) {
 
 function mergeSnapshotWithPendingThread(snapshot: AppSnapshot) {
   let nextSelectedThreadId = coercePendingThreadSelection(snapshot.selectedThreadId);
-  const nextThreads = snapshot.threads.map((thread) => stabilizeIncomingThread(thread, nextSelectedThreadId));
+  const nextThreads = snapshot.threads.map((thread) => stabilizeIncomingThread(thread));
   if (
     pendingThreadCreate?.confirmedThreadId &&
     snapshot.selectedThreadId === pendingThreadCreate.confirmedThreadId &&
@@ -815,18 +815,15 @@ function coercePendingThreadSelection(selectedThreadId: string | null) {
   return selectedThreadId;
 }
 
-function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
+function stabilizeIncomingThread(nextThread: ThreadRecord) {
   const existing = state.snapshot?.threads.find((thread) => thread.id === nextThread.id) ?? null;
   if (!existing) {
     return mergeIncomingQueuedDrafts(nextThread);
   }
 
-  const shouldPreserveSelectedMessages =
-    nextThread.id === selectedThreadId &&
-    nextThread.messages.length === 0 &&
-    existing.messages.length > 0;
+  const shouldPreserveCachedMessages = nextThread.messages.length === 0 && existing.messages.length > 0;
 
-  if (!shouldPreserveSelectedMessages) {
+  if (!shouldPreserveCachedMessages) {
     return mergeIncomingQueuedDrafts(nextThread);
   }
 
@@ -837,11 +834,11 @@ function stabilizeIncomingThread(nextThread: ThreadRecord, selectedThreadId = st
   });
 }
 
-function upsertThread(nextThread: ThreadRecord, selectedThreadId = state.snapshot?.selectedThreadId ?? null) {
+function upsertThread(nextThread: ThreadRecord) {
   if (!state.snapshot) {
     return;
   }
-  const stableThread = stabilizeIncomingThread(nextThread, selectedThreadId);
+  const stableThread = stabilizeIncomingThread(nextThread);
   const index = state.snapshot.threads.findIndex((thread) => thread.id === stableThread.id);
   if (index === -1) {
     state.snapshot.threads.unshift(stableThread);

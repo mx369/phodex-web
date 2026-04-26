@@ -505,14 +505,6 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
       if (hasAnyBridgeSocket(user.profile.id)) {
         sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" });
-        if (user.selectedThreadId) {
-          const selectedThread = getThreadMirror(user.profile.id).get(user.selectedThreadId);
-          if ((selectedThread?.messages.length ?? 0) > 0) {
-            sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
-          } else {
-            sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
-          }
-        }
       }
       break;
     case "bridge:select":
@@ -534,11 +526,12 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       user.banner = null;
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
-      if (shouldSyncThreadBeforeSelect(user.profile.id, event.threadId)) {
-        sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: event.threadId });
-        break;
+      if (getThreadMirror(user.profile.id).has(event.threadId)) {
+        broadcastThreadToUser(user.profile.id, event.threadId);
       }
-      dispatchToBridge(user, event);
+      if (!dispatchToBridge(user, event) && shouldSyncThreadBeforeSelect(user.profile.id, event.threadId)) {
+        sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: event.threadId });
+      }
       break;
     case "thread:history:load": {
       if (user.selectedThreadId !== event.threadId) {
