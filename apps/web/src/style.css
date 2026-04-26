@@ -3526,7 +3526,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .drawer-search {
@@ -3544,38 +3544,48 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 36px;
+  gap: 6px;
+  min-height: 42px;
   padding: 0 12px;
   border-radius: 18px;
   white-space: nowrap;
 }
 
 .drawer-new-chat {
-  width: 42px;
-  min-width: 42px;
+  min-width: 72px;
   margin-top: 0;
-  padding: 0;
-  background: rgba(18, 18, 18, 0.095);
+  border: 1px solid rgba(18, 18, 18, 0.07);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.045);
+  letter-spacing: -0.01em;
+  box-shadow: none;
+}
+
+.drawer-new-chat:hover,
+.drawer-new-chat:focus-visible {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(18, 18, 18, 0.12);
+  outline: none;
 }
 
 .drawer-new-chat__icon {
   display: inline-grid;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   place-items: center;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: none;
+  border-radius: var(--radius-pill);
+  background: rgba(18, 18, 18, 0.055);
 }
 
 .drawer-new-chat__icon .app-icon {
   width: 13px;
   height: 13px;
+}
+
+.drawer-new-chat__label {
+  line-height: 1;
 }
 
 .drawer-toolbar-pill {
