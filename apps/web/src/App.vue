@@ -3487,10 +3487,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     <div class="phone-topbar__title">
                       <strong>{{ currentThread?.title ?? "Home" }}</strong>
                       <span v-if="currentThread" class="phone-topbar__subtitle" aria-live="polite">
-                        <span class="phone-topbar__workspace">{{ currentThreadWorkspaceLabel }}</span>
                         <strong class="phone-topbar-status__label" :class="`phone-topbar-status__label--${composerRuntimeState.tone}`">
                           {{ composerRuntimeState.label }}
                         </strong>
+                        <span class="phone-topbar__workspace">{{ currentThreadWorkspaceLabel }}</span>
                       </span>
                     </div>
 

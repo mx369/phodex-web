@@ -1480,29 +1480,29 @@ button {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  min-height: 17px;
-  padding: 0 7px;
+  min-height: 14px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
   background: rgba(18, 18, 18, 0.05);
   color: var(--text-secondary);
   font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .phone-topbar-status__label--amber {
-  color: #ad6438;
-  background: rgba(239, 142, 85, 0.12);
+  color: rgba(173, 100, 56, 0.86);
+  background: rgba(239, 142, 85, 0.08);
 }
 
 .phone-topbar-status__label--blue {
-  color: #4f62eb;
-  background: rgba(92, 109, 255, 0.12);
+  color: rgba(79, 98, 235, 0.86);
+  background: rgba(92, 109, 255, 0.08);
 }
 
 .phone-topbar-status__label--slate {
-  color: var(--text-secondary);
-  background: rgba(18, 18, 18, 0.05);
+  color: rgba(18, 18, 18, 0.46);
+  background: rgba(18, 18, 18, 0.04);
 }
 
 .thread-menu {
