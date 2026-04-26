@@ -1925,17 +1925,18 @@ button {
 }
 
 .message-card__output {
-  overflow: auto;
+  overflow: visible;
   margin: 0;
   padding: 13px 14px;
-  max-height: 148px;
   border-radius: 16px;
   background: rgba(18, 18, 18, 0.92);
   color: #f6f6f6;
   font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
   font-size: 11px;
   line-height: 1.55;
-  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-card__image-preview {
@@ -2203,7 +2204,7 @@ button {
 }
 
 .phone-message__code {
-  overflow: auto;
+  overflow: visible;
   margin: 16px 0 0;
   padding: 16px 18px;
   border-radius: 22px;
@@ -2212,6 +2213,9 @@ button {
   font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   box-shadow: 0 18px 32px rgba(18, 18, 18, 0.12);
 }
 
