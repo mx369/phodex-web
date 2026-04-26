@@ -2197,13 +2197,13 @@ button {
 
 .home-empty-state {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   place-content: start center;
   min-height: 100%;
-  width: min(100%, 272px);
+  width: min(100%, 318px);
   margin: 0 auto;
   justify-items: center;
-  padding: 2px 0 44px;
+  padding: 0 0 32px;
   text-align: center;
 }
 
@@ -2246,10 +2246,10 @@ button {
 }
 
 .home-empty-state__logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  box-shadow: 0 16px 34px rgba(18, 18, 18, 0.14);
+  width: 64px;
+  height: 64px;
+  border-radius: 17px;
+  box-shadow: 0 14px 28px rgba(18, 18, 18, 0.12);
 }
 
 .home-status-badge {
@@ -2441,14 +2441,14 @@ button {
   display: grid;
   gap: 8px;
   width: 100%;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid rgba(18, 18, 18, 0.08);
   border-radius: var(--radius-3);
   background: rgba(18, 18, 18, 0.03);
 }
 
 .home-empty-state__install-card--command {
-  gap: 12px;
+  gap: 10px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.52) 100%),
     rgba(18, 18, 18, 0.02);
@@ -2461,10 +2461,8 @@ button {
 }
 
 .home-empty-state__install-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 10px;
 }
 
 .home-empty-state__install-heading {
@@ -2487,16 +2485,15 @@ button {
 
 .home-empty-state__install-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
-  align-items: stretch;
+  align-items: center;
 }
 
 .home-empty-state__install-copy {
-  min-width: 84px;
+  min-width: 74px;
   min-height: var(--control-h-secondary);
-  padding: 0 14px;
-  align-self: flex-start;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.88);
@@ -2514,6 +2511,16 @@ button {
   background: rgba(255, 242, 242, 0.96);
   color: #b34141;
   border-color: rgba(201, 72, 72, 0.18);
+}
+
+.home-empty-state__install-toggle,
+.home-empty-state__install-refresh {
+  min-height: var(--control-h-secondary);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(18, 18, 18, 0.04);
+  box-shadow: none;
 }
 
 .home-empty-state__install-code-shell {
@@ -2547,21 +2554,25 @@ button {
 .home-empty-state__install-platforms {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 4px;
+  justify-content: flex-start;
+  min-height: var(--control-h-secondary);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: rgba(18, 18, 18, 0.045);
 }
 
 .home-empty-state__install-platform {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(18, 18, 18, 0.06);
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.78);
+  background: transparent;
   color: var(--muted-strong);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   transition:
     transform 140ms ease,
@@ -2572,15 +2583,14 @@ button {
 }
 
 .home-empty-state__install-platform:hover {
-  transform: translateY(-1px);
-  border-color: rgba(92, 109, 255, 0.18);
+  transform: none;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .home-empty-state__install-platform--active {
-  border-color: rgba(92, 109, 255, 0.18);
-  background: rgba(242, 245, 255, 0.96);
-  color: #4958d2;
-  box-shadow: 0 10px 20px rgba(92, 109, 255, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  box-shadow: 0 5px 12px rgba(18, 18, 18, 0.06);
 }
 
 .home-empty-state__install-code {
@@ -2626,12 +2636,20 @@ button {
 }
 
 @media (max-width: 420px) {
-  .home-empty-state__install-header {
-    flex-direction: column;
+  .home-empty-state {
+    width: min(100%, 300px);
   }
 
-  .home-empty-state__install-copy {
-    align-self: stretch;
+  .home-empty-state__install-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .home-empty-state__install-platforms {
+    grid-column: 1 / -1;
+  }
+
+  .home-empty-state__install-copy,
+  .home-empty-state__install-toggle {
     justify-content: center;
   }
 }
