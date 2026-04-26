@@ -830,21 +830,6 @@ const drawerThreadSyncHintVisible = computed(() =>
   threadGroups.value.length === 0 &&
   (state.snapshot?.connection.state === "connected" || state.snapshot?.connection.state === "connecting")
 );
-const queuedDraftCount = computed(() =>
-  (state.snapshot?.threads ?? []).reduce((count, thread) => count + thread.queuedDrafts.length, 0)
-);
-const connectionStatusLabel = computed(() => {
-  switch (state.snapshot?.connection.state) {
-    case "connected":
-      return "Connected";
-    case "connecting":
-      return "Connecting";
-    case "disconnected":
-      return "Offline";
-    default:
-      return "Unknown";
-  }
-});
 const drawerRateLimitSummary = computed(() => formatRateLimitSummary(state.snapshot?.connection.rateLimits ?? null));
 const composerPlaceholder = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
@@ -2314,7 +2299,7 @@ function toggleDrawerThreadMenu(threadId: string) {
   drawerThreadMenuOpenId.value = drawerThreadMenuOpenId.value === threadId ? null : threadId;
 }
 
-function setDrawerThreadMenuEl(threadId: string, element: Element | null) {
+function setDrawerThreadMenuEl(threadId: string, element: unknown) {
   if (drawerThreadMenuOpenId.value === threadId) {
     drawerThreadMenuEl.value = element instanceof HTMLElement ? element : null;
   }
@@ -2631,6 +2616,9 @@ function handleDrawerAfterLeave() {
 
 function navigateHome() {
   client.logFlowTrace("route.home.manual");
+  if (state.snapshot?.selectedThreadId) {
+    client.clearThreadSelection();
+  }
   void router.push({
     name: "home",
     query: preservedRouteQuery(),
