@@ -39,7 +39,6 @@ type AppIconName =
   | "more-horizontal"
   | "plus"
   | "relay"
-  | "settings"
   | "restore"
   | "stop"
   | "terminal"
@@ -188,19 +187,6 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
       "M5.75 9.75a8.75 8.75 0 0 1 12.5 0",
     ],
   },
-  settings: {
-    circles: [{ cx: 12, cy: 12, r: 2.5 }],
-    lines: [
-      { x1: 12, y1: 3.5, x2: 12, y2: 6 },
-      { x1: 12, y1: 18, x2: 12, y2: 20.5 },
-      { x1: 3.5, y1: 12, x2: 6, y2: 12 },
-      { x1: 18, y1: 12, x2: 20.5, y2: 12 },
-      { x1: 6.35, y1: 6.35, x2: 8.15, y2: 8.15 },
-      { x1: 15.85, y1: 15.85, x2: 17.65, y2: 17.65 },
-      { x1: 15.85, y1: 8.15, x2: 17.65, y2: 6.35 },
-      { x1: 6.35, y1: 17.65, x2: 8.15, y2: 15.85 },
-    ],
-  },
   restore: {
     lines: [
       { x1: 4, y1: 8, x2: 20, y2: 8 },
@@ -287,7 +273,7 @@ type RootFlowState =
   | "email-otp"
   | "auto";
 
-type ShellPageState = "settings" | "archived" | "paywall";
+type ShellPageState = "archived" | "paywall";
 
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
@@ -325,7 +311,6 @@ type PendingThreadRouteState = {
 type AppRouteName =
   | "home"
   | "thread"
-  | "settings"
   | "archived"
   | "paywall"
   | "onboarding"
@@ -334,13 +319,11 @@ type AppRouteName =
   | "bootstrap-failure";
 
 const PANEL_ROUTE_NAMES: Record<ShellPageState, AppRouteName> = {
-  settings: "settings",
   archived: "archived",
   paywall: "paywall",
 };
 
 const ROUTE_NAME_TO_PANEL: Partial<Record<AppRouteName, ShellPageState>> = {
-  settings: "settings",
   archived: "archived",
   paywall: "paywall",
 };
@@ -1350,8 +1333,6 @@ const dialogConfirmLabel = computed(() => {
 });
 const activePanelTitle = computed(() => {
   switch (activePanel.value) {
-    case "settings":
-      return "Settings";
     case "archived":
       return "Archived Chats";
     case "paywall":
@@ -2590,11 +2571,6 @@ function startWorktreeChat() {
 function openPanel(panel: ShellPageState, replace = false) {
   closeModelPicker();
   closeThreadMenu();
-  if (panel === "settings") {
-    shellPageStack.value = ["settings"];
-    state.ui.sidebarOpen = false;
-    return;
-  }
 
   if (replace || !shellPageStack.value.length) {
     shellPageStack.value = [panel];
@@ -3348,129 +3324,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                   </header>
 
                   <div class="mobile-page__body">
-                    <template v-if="activePanel === 'settings' && state.snapshot">
-                      <section class="settings-card">
-                        <span class="section-label">Archived Chats</span>
-                        <button class="settings-row-button" @click="openPanel('archived')">
-                          <span>Archived Chats</span>
-                          <strong>{{ archivedThreads.length }}</strong>
-                        </button>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Appearance</span>
-                        <label class="settings-toggle">
-                          <span>Mono UI text</span>
-                          <input
-                            type="checkbox"
-                            :checked="state.snapshot.settings.fontStyle === 'mono'"
-                            @change="client.updateSettings({ fontStyle: state.snapshot!.settings.fontStyle === 'mono' ? 'system' : 'mono' })"
-                          />
-                        </label>
-                        <label class="settings-toggle">
-                          <span>Liquid glass</span>
-                          <input
-                            type="checkbox"
-                            :checked="state.snapshot.settings.glassMode"
-                            @change="client.updateSettings({ glassMode: !state.snapshot!.settings.glassMode })"
-                          />
-                        </label>
-                        <label class="settings-toggle">
-                          <span>Reduced motion</span>
-                          <input
-                            type="checkbox"
-                            :checked="state.snapshot.settings.reducedMotion"
-                            @change="client.updateSettings({ reducedMotion: !state.snapshot!.settings.reducedMotion })"
-                          />
-                        </label>
-                        <button class="ghost-cta ghost-cta--compact" @click="restartOnboarding">Replay onboarding</button>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Notifications</span>
-                        <label class="settings-toggle">
-                          <span>Run complete notifications</span>
-                          <input
-                            type="checkbox"
-                            :checked="state.snapshot.settings.notifications"
-                            @change="client.updateSettings({ notifications: !state.snapshot!.settings.notifications })"
-                          />
-                        </label>
-                        <p class="settings-copy">Used for local alerts when a run finishes while the shell is backgrounded.</p>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">GPT Account</span>
-                        <div class="settings-metric-row">
-                          <span>Status</span>
-                          <strong>{{ state.snapshot.connection.state === "connected" ? "Bridge connected" : "Awaiting bridge" }}</strong>
-                        </div>
-                        <p class="settings-copy">Account-aware extras remain deferred in this local build.</p>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Remodex Pro</span>
-                        <p class="settings-copy">Open the Pro preview. Purchase and restore remain disabled in this local build.</p>
-                        <button class="primary-cta primary-cta--compact" @click="openPanel('paywall')">Open Pro Preview</button>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Bridge Version</span>
-                        <div class="settings-metric-row">
-                          <span>Installed on Mac</span>
-                          <strong>{{ state.snapshot.connection.relayLabel }}</strong>
-                        </div>
-                        <div class="settings-metric-row">
-                          <span>Relay latency</span>
-                          <strong>{{ state.snapshot.connection.latencyMs }}ms</strong>
-                        </div>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Runtime Defaults</span>
-                        <div class="settings-metric-row">
-                          <span>Model</span>
-                          <strong>{{ state.ui.selectedModel }}</strong>
-                        </div>
-                        <div class="settings-metric-row">
-                          <span>Access</span>
-                          <strong>{{ ACCESS_MODE_LABELS[state.ui.accessMode] }}</strong>
-                        </div>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Usage</span>
-                        <div class="settings-metric-row">
-                          <span>Live chats</span>
-                          <strong>{{ liveThreadCount }}</strong>
-                        </div>
-                        <div class="settings-metric-row">
-                          <span>Queued drafts</span>
-                          <strong>{{ queuedDraftCount }}</strong>
-                        </div>
-                        <div class="settings-metric-row">
-                          <span>Connection</span>
-                          <strong>{{ connectionStatusLabel }}</strong>
-                        </div>
-                      </section>
-
-                      <section class="settings-card">
-                        <span class="section-label">Connection</span>
-                        <div class="settings-metric-row">
-                          <span>Mac</span>
-                          <strong>{{ state.snapshot.connection.macLabel }}</strong>
-                        </div>
-                        <div class="settings-metric-row">
-                          <span>Relay</span>
-                          <strong>{{ state.snapshot.connection.relayLabel }}</strong>
-                        </div>
-                        <button class="ghost-cta" @click="client.logout()">Sign out</button>
-                      </section>
-                    </template>
-
-                    <template v-else-if="activePanel === 'archived'">
+                    <template v-if="activePanel === 'archived'">
                       <section class="archived-page">
-                        <p class="settings-copy archived-page__note">
+                        <p class="mobile-page-copy archived-page__note">
                           Permanent delete is unavailable in the current Codex bridge. Archived chats can only be restored.
                         </p>
                         <div v-if="archivedThreads.length" class="archived-list">
@@ -3488,7 +3344,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                         <div v-else class="archived-empty">
                           <span class="archived-empty__icon"><AppIcon name="archive" /></span>
                           <strong>No archived chats</strong>
-                          <p class="settings-copy">Archived conversations will appear here after you move a chat out of the main thread list.</p>
+                          <p class="mobile-page-copy">Archived conversations will appear here after you move a chat out of the main thread list.</p>
                         </div>
                       </section>
                     </template>
@@ -3498,8 +3354,8 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                         <div class="paywall-header">
                           <img :src="remodexAppLogo" alt="" class="paywall-header__logo" />
                           <span class="section-label">Remodex Pro</span>
-                          <h2 class="settings-hero-title">Unlock Remodex Pro</h2>
-                          <p class="settings-copy">Everything runs on your Mac. Your phone is the remote.</p>
+                          <h2 class="mobile-page-hero-title">Unlock Remodex Pro</h2>
+                          <p class="mobile-page-copy">Everything runs on your Mac. Your phone is the remote.</p>
                         </div>
 
                         <div class="paywall-feature-list">
@@ -3528,7 +3384,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                         <button class="primary-cta" disabled>Purchase Preview Only</button>
 
                         <div class="paywall-footer">
-                          <p class="settings-copy">Purchase, restore, and manage are preview-only in this local build.</p>
+                          <p class="mobile-page-copy">Purchase, restore, and manage are preview-only in this local build.</p>
                           <div class="paywall-footer__links">
                             <button class="root-auth-screen__link" disabled>Restore Preview</button>
                             <button class="root-auth-screen__link" disabled>Manage Preview</button>
@@ -3734,7 +3590,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                         <div class="drawer-footer-actions">
                           <button class="drawer-footer-pill" @click="navigateHome()">Home</button>
-                          <button class="drawer-footer-pill" @click="openPanel('settings')">Settings</button>
                           <button class="drawer-footer-pill" @click="openPanel('archived')">Archived</button>
                           <button class="drawer-footer-pill" @click="client.logout()">Disconnect</button>
                         </div>
@@ -3761,14 +3616,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </span>
                     </div>
 
-                    <button
-                      v-if="!currentThread"
-                      class="icon-button phone-topbar__action"
-                      aria-label="Settings"
-                      @click="openPanel('settings')"
-                    >
-                      <AppIcon name="settings" />
-                    </button>
+                    <span v-if="!currentThread" class="phone-topbar__action" aria-hidden="true"></span>
                     <div v-else ref="threadMenuEl" class="thread-menu">
                       <button
                         class="icon-button phone-topbar__action"

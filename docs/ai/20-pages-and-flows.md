@@ -14,7 +14,6 @@ This file is the UI and flow reference. Read it when you need page-level status 
 | Sidebar | Partial | Real thread list, select, rename, archive, project-targeted local/worktree create, tap-outside dismissal, and collapsible project groups; the drawer keeps search plus compact new-chat actions, and per-thread edit/archive/delete actions live behind a low-frequency overflow menu so more conversation rows stay visible | Final parity and a few density tradeoffs still differ |
 | Turn empty | Partial | Real selected thread, blank conversation canvas, bottom workspace-action rail, composer, pending-thread state, a persisted `Normal / Fast` runtime toggle, inline access-mode selection inside the runtime picker, and single-image attachment send; the old thread-toolbar action strip is removed so the main shell stays focused on title, message area, and composer | Structured-input replacement and final polish are still missing |
 | Turn with messages | Partial | Real streaming, richer tool/file/system cards, latest-jump, an inline pending-send that now stays visible until the real user message lands, queued drafts with inline waiting previews plus bottom-card controls, pinned plan, thread-scoped project diff/file inspectors, compact inline file-reference chips for Markdown local file links, inline rendering of user-sent images, and a top-right overflow menu for thread/file/diff actions | Some empty branches, queue states, and toolbar/sheet parity still differ |
-| Settings | Partial | Real setting patches persist in a dedicated page | Visual and IA parity still differ |
 | Archived chats | Partial | Real archived list and restore | Permanent delete is intentionally absent; list behavior is simplified |
 | About | Partial | Dedicated informational page exists | Still simplified versus upstream |
 | Paywall | Shell | Preview-only paywall page exists | No real billing flow |
@@ -24,7 +23,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 - Auth/onboarding routes:
   `/onboarding`, `/login`, `/subscribe`, `/bootstrap-failure`
 - Authenticated shell routes:
-  `/` for Home, `/:machineId/:threadId` for the active chat, `/settings`, `/archived`, `/about`, `/pro`
+  `/` for Home, `/:machineId/:threadId` for the active chat, `/archived`, `/about`, `/pro`
 - The web client now treats these paths as the source of truth and syncs page/thread selection back into the URL instead of relying only on query-string boot params.
 
 ## Flow Inventory

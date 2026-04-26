@@ -2,7 +2,6 @@ import { reactive } from "vue";
 import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
 import type {
   AccessMode,
-  AppSettings,
   AppSnapshot,
   AuthSession,
   ClientEvent,
@@ -101,7 +100,6 @@ export const state = reactive({
     planArmed: storedComposerPreferences.planArmed ?? false,
     accessMode: storedComposerPreferences.accessMode ?? DEFAULT_ACCESS_MODE,
     sidebarOpen: false,
-    settingsOpen: false,
     authStatus: "",
     authStatusTone: "neutral" as AuthStatusTone,
     toasts: [] as UiToast[],
@@ -349,7 +347,6 @@ export function createAppClient() {
     state.auth.phase = "idle";
     state.ui.composerText = "";
     state.ui.composerImages = [];
-    state.ui.settingsOpen = false;
     state.ui.authStatus = "";
     state.ui.authStatusTone = "neutral";
     state.ui.pendingRunFeedback = null;
@@ -539,19 +536,6 @@ export function createAppClient() {
     return sent;
   }
 
-  function updateSettings(patch: Partial<AppSettings>) {
-    if (state.snapshot) {
-      state.snapshot.settings = {
-        ...state.snapshot.settings,
-        ...patch,
-      };
-    }
-    send({
-      type: "settings:update",
-      patch,
-    });
-  }
-
   return {
     restoreSession,
     requestCode,
@@ -571,7 +555,6 @@ export function createAppClient() {
     resumeDraft,
     removeDraft,
     stopRun,
-    updateSettings,
   };
 }
 

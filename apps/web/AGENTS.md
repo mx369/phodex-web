@@ -19,7 +19,7 @@ Read this file before editing anything under `apps/web`.
 
 ## Current Truth
 
-- The UI now uses a full-page mobile shell with dedicated mobile-page routes for settings/about/paywall/archived.
+- The UI now uses a full-page mobile shell with dedicated mobile-page routes for archived/about/paywall.
 - `Email OTP`, `new chat`, `send`, `stream`, `stop`, `queue`, `resume draft`, `rename`, and `archive` are wired.
 - Visual parity and richer turn/tool surfaces still remain partial.
 

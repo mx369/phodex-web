@@ -21,7 +21,6 @@ Pages to finish:
 - Email OTP
 - Turn empty
 - Turn with messages
-- Settings
 - Archived
 - About
 - Paywall

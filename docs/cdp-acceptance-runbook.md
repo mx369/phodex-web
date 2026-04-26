@@ -139,7 +139,6 @@ Capture at least these states in one acceptance pass:
 - Home empty
 - Sidebar
 - Turn empty
-- Settings
 - Archived
 - About
 - Paywall
