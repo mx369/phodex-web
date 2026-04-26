@@ -26,8 +26,12 @@ Use this workflow for UI/state-machine regressions, especially mobile polish, fl
 - Before creating a bugfix worktree, confirm the main worktree is clean with `git status --short --branch`.
 - Create bugfix worktrees from the current main HEAD with a unique branch and sibling path, for example:
   `git worktree add -b bugfix/<topic> ../phodex-web-bugfix-<topic>`.
-- If verification in a temporary worktree requires `bun install`, run Bun with an explicit PATH on this Mac:
+- A fresh Git worktree does not share `node_modules`. Do not run `bun run build:web` there before bootstrapping dependencies.
+- Bootstrap temporary worktrees with Bun's absolute path and an explicit PATH on this Mac:
   `PATH=/Users/young/.bun/bin:$PATH /Users/young/.bun/bin/bun install`.
+- Run builds in temporary worktrees with the same explicit PATH:
+  `PATH=/Users/young/.bun/bin:$PATH /Users/young/.bun/bin/bun run build:web`.
+- Treat `bun: command not found` from nested package scripts and `vue-tsc: command not found` as setup failures in a fresh worktree, not as product-code failures.
 - After `bun install`, check for accidental mode-only changes. If `packages/bridge-installer/bin/phodex-bridge.js` flips from `100644` to `100755`, restore it with:
   `chmod 644 packages/bridge-installer/bin/phodex-bridge.js`.
 - Commit only source/doc changes that belong to the fix. Do not commit `node_modules`, build output, ignored artifacts, or mode-only installer changes.
