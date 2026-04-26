@@ -4010,17 +4010,18 @@ button {
 }
 
 .drawer-footer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .drawer-footer-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   min-height: 28px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
   background: rgba(18, 18, 18, 0.05);
   color: var(--muted-strong);
