@@ -507,10 +507,28 @@ export function createAppClient() {
   }
 
   function stopRun(threadId: string) {
-    send({
+    const thread = findThread(threadId);
+    if (thread?.state === "running") {
+      thread.state = thread.queuedDrafts.length ? "queued" : "idle";
+      thread.preview = "Stop requested.";
+      thread.lastActivityAt = new Date().toISOString();
+      for (const message of thread.messages) {
+        if (message.isStreaming) {
+          message.isStreaming = false;
+        }
+      }
+    }
+    if (state.ui.pendingRunFeedback?.threadId === threadId) {
+      state.ui.pendingRunFeedback = null;
+    }
+    const sent = send({
       type: "run:stop",
       threadId,
     });
+    if (sent) {
+      pushToast("info", "Stop requested.");
+    }
+    return sent;
   }
 
   function updateSettings(patch: Partial<AppSettings>) {

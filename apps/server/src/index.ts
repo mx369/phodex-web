@@ -1155,11 +1155,21 @@ async function handleRunStop(userId: string, threadId: string) {
 
   try {
     ensureCodexReady();
+    const thread = threadCache.get(threadId);
+    if (thread?.state === "running") {
+      thread.state = deriveThreadState("idle", threadId, false);
+      for (const message of thread.messages) {
+        if (message.isStreaming) {
+          message.isStreaming = false;
+        }
+      }
+      broadcastThreadToAllUsers(threadId);
+    }
+    sendToast(userId, "info", "Interrupt requested.");
     await codexRequest("turn/interrupt", {
       threadId,
       turnId: activeTurn.turnId,
     });
-    sendToast(userId, "info", "Interrupt sent to local Codex.");
   } catch (error) {
     sendToast(userId, "error", readErrorMessage(error));
   }
