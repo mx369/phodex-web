@@ -911,14 +911,31 @@ function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) 
   if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
     return;
   }
+  const pending = pendingThreadCreate;
   logFlowTrace("thread.create.resolved", {
     requestId,
     threadId,
-    tempId: pendingThreadCreate.tempId,
-    projectLabel: pendingThreadCreate.projectLabel,
-    mode: pendingThreadCreate.mode,
+    tempId: pending.tempId,
+    projectLabel: pending.projectLabel,
+    mode: pending.mode,
   });
-  pendingThreadCreate.resolve(threadId);
+  window.clearTimeout(pending.slowTimerId);
+  if (pending.failureTimerId !== null) {
+    window.clearTimeout(pending.failureTimerId);
+  }
+  if (state.snapshot) {
+    const tempThread = state.snapshot.threads.find((thread) => thread.id === pending.tempId);
+    if (tempThread) {
+      tempThread.id = threadId;
+      tempThread.preview = "Opening the new chat…";
+      tempThread.lastActivityAt = new Date().toISOString();
+    }
+    if (state.snapshot.selectedThreadId === pending.tempId) {
+      state.snapshot.selectedThreadId = threadId;
+    }
+  }
+  pendingThreadCreate = null;
+  pending.resolve(threadId);
 }
 
 function rejectPendingThreadCreate(requestId: string, message: string) {

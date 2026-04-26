@@ -712,6 +712,31 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       broadcastPresence(bridgeUserId);
       break;
     }
+    case "bridge:thread:created": {
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
+        break;
+      }
+      setSelectedThreadForUser(event.userId, event.threadId);
+      ensureMirroredThread(event.userId, event.threadId);
+      schedulePersist();
+      broadcast(event.userId, {
+        type: "thread:created",
+        requestId: event.requestId,
+        threadId: event.threadId,
+      });
+      break;
+    }
+    case "bridge:thread:create-failed": {
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
+        break;
+      }
+      broadcast(event.userId, {
+        type: "thread:create-failed",
+        requestId: event.requestId,
+        message: event.message,
+      });
+      break;
+    }
     case "bridge:thread:updated":
       logFlowTrace("bridge.thread-updated.received", {
         userId: bridgeUserId,

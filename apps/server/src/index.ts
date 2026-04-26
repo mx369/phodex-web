@@ -616,7 +616,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       });
       break;
     case "thread:create":
-      void handleThreadCreate(ws, user, event);
+      void handleThreadCreate(user, event, ws);
       break;
     case "thread:select":
       user.selectedThreadId = event.threadId;
@@ -666,7 +666,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
   }
 }
 
-async function handleThreadCreate(ws: ServerWebSocket<SocketData>, user: PersistedUser, event: ThreadCreateRequest) {
+async function handleThreadCreate(user: PersistedUser, event: ThreadCreateRequest, ws?: ServerWebSocket<SocketData>) {
   try {
     ensureCodexReady();
     const requestedCwd = resolveRequestedThreadCwd(user, event);
@@ -690,11 +690,20 @@ async function handleThreadCreate(ws: ServerWebSocket<SocketData>, user: Persist
     const thread = mergeCodexThread(result.thread, false, false);
     threadCache.set(thread.id, thread);
     user.selectedThreadId = thread.id;
-    sendEvent(ws, {
-      type: "thread:created",
-      requestId: event.requestId,
-      threadId: thread.id,
-    });
+    if (ws) {
+      sendEvent(ws, {
+        type: "thread:created",
+        requestId: event.requestId,
+        threadId: thread.id,
+      });
+    } else {
+      sendBridgeEvent({
+        type: "bridge:thread:created",
+        userId: user.profile.id,
+        requestId: event.requestId,
+        threadId: thread.id,
+      });
+    }
     sendUserPatch(user.profile.id, {
       selectedThreadId: thread.id,
       banner: null,
@@ -707,11 +716,20 @@ async function handleThreadCreate(ws: ServerWebSocket<SocketData>, user: Persist
     void syncAllThreadsFromCodex();
   } catch (error) {
     const message = readErrorMessage(error);
-    sendEvent(ws, {
-      type: "thread:create-failed",
-      requestId: event.requestId,
-      message,
-    });
+    if (ws) {
+      sendEvent(ws, {
+        type: "thread:create-failed",
+        requestId: event.requestId,
+        message,
+      });
+    } else {
+      sendBridgeEvent({
+        type: "bridge:thread:create-failed",
+        userId: user.profile.id,
+        requestId: event.requestId,
+        message,
+      });
+    }
     sendToast(user.profile.id, "error", message);
   }
 }
