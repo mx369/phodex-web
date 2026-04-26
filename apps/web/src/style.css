@@ -2251,19 +2251,19 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 34px;
-  padding: 4px 14px 4px 4px;
-  border: 1px solid rgba(18, 18, 18, 0.06);
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid rgba(18, 18, 18, 0.05);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 10px 22px rgba(18, 18, 18, 0.05);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .home-status-badge__label {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
@@ -2286,6 +2286,8 @@ button {
 }
 
 .home-status-badge__detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -2294,47 +2296,43 @@ button {
 
 .home-connection-panel {
   display: grid;
-  gap: 10px;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(18, 18, 18, 0.07);
-  border-radius: var(--radius-3);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.54)),
-    rgba(18, 18, 18, 0.025);
-  box-shadow: 0 12px 30px rgba(18, 18, 18, 0.05);
-}
-
-.home-connection-panel__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
-}
-
-.home-connection-panel .home-status-badge {
-  min-width: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
   box-shadow: none;
 }
 
+.home-status-row,
 .home-install-compact {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(18, 18, 18, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.home-status-row {
+  justify-content: flex-start;
+}
+
+.home-install-compact {
+  justify-content: space-between;
 }
 
 .home-install-compact__summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
+  display: contents;
 }
 
 .home-install-compact__heading {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  flex: 1 1 auto;
   text-align: left;
 }
 
@@ -2344,6 +2342,28 @@ button {
   white-space: nowrap;
   font-size: 13px;
   letter-spacing: -0.02em;
+}
+
+.home-install-compact__heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.home-install-compact:has(.home-empty-state__install-code-shell) {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.home-install-compact:has(.home-empty-state__install-code-shell) .home-install-compact__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .home-install-compact__copy {
@@ -2652,16 +2672,12 @@ button {
     width: min(100%, 300px);
   }
 
-  .home-connection-panel__top {
-    align-items: flex-start;
-  }
-
-  .home-install-compact__summary {
-    grid-template-columns: 1fr auto;
+  .home-status-row {
+    align-items: center;
   }
 
   .home-empty-state__install-platforms {
-    grid-column: 1 / -1;
+    flex: 1 1 auto;
   }
 
   .home-empty-state__install-copy,
