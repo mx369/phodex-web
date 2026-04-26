@@ -1096,15 +1096,11 @@ function reconcilePendingRunFeedback(threadId?: string) {
     }
     return;
   }
-  if (Date.now() - Date.parse(pending.startedAt) > PENDING_RUN_FEEDBACK_STALE_MS) {
-    pending.promptAcknowledged = true;
-    if (thread.state !== "running") {
-      state.ui.pendingRunFeedback = null;
-    }
-    return;
-  }
   if (thread.state === "running") {
     return;
+  }
+  if (Date.now() - Date.parse(pending.startedAt) > PENDING_RUN_FEEDBACK_STALE_MS) {
+    state.ui.pendingRunFeedback = null;
   }
 }
 
