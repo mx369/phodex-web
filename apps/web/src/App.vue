@@ -660,9 +660,18 @@ const onboardingCtaLabel = computed(() => {
   if (onboardingPage.value === onboardingScreens.length - 1) return "Continue with Email";
   return "Continue";
 });
+const routeThreadId = computed(() => {
+  if (route.name !== "thread") {
+    return null;
+  }
+  return normalizedRouteParam(route.params.threadId);
+});
 const currentThread = computed(() => {
   if (!state.snapshot) {
     return null;
+  }
+  if (routeThreadId.value) {
+    return state.snapshot.threads.find((thread) => thread.id === routeThreadId.value) ?? null;
   }
   return state.snapshot.threads.find((thread) => thread.id === state.snapshot?.selectedThreadId) ?? null;
 });
@@ -2564,6 +2573,12 @@ function normalizedRouteParam(value: unknown) {
 }
 
 function currentRouteMachineId() {
+  if (route.name === "thread") {
+    const routeMachineId = normalizedRouteParam(route.params.machineId);
+    if (routeMachineId) {
+      return routeMachineId;
+    }
+  }
   return state.snapshot?.activeBridgeId ?? null;
 }
 
