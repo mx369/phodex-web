@@ -692,6 +692,8 @@ function startBridgeViaLaunchAgent(installDir, startScript, logFile) {
   writeFileSync(plistPath, buildLaunchAgentPlist(label, installDir, startScript, logFile), "utf8");
 
   spawnSync("launchctl", ["bootout", domain], { stdio: "ignore" });
+  spawnSync("launchctl", ["enable", domain], { stdio: "ignore" });
+  spawnSync("launchctl", ["remove", label], { stdio: "ignore" });
 
   const bootstrap = spawnSync("launchctl", ["bootstrap", `gui/${process.getuid()}`, plistPath], {
     encoding: "utf8",
