@@ -3440,6 +3440,18 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     </div>
                   </header>
 
+                  <div
+                    v-if="currentThread"
+                    class="phone-topbar-status"
+                    :class="`phone-topbar-status--${composerRuntimeState.tone}`"
+                    aria-live="polite"
+                  >
+                    <strong class="phone-topbar-status__label">{{ composerRuntimeState.label }}</strong>
+                    <span v-if="composerRuntimeState.detail" class="phone-topbar-status__detail">
+                      {{ composerRuntimeState.detail }}
+                    </span>
+                  </div>
+
                   <div v-if="floatingToasts.length" class="toast-stack">
                     <div
                       v-for="toast in floatingToasts"
@@ -4005,13 +4017,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           rows="2"
                           @keydown="handleComposerKeyDown"
                         ></textarea>
-
-                        <div class="phone-composer__meta" aria-live="polite">
-                          <div class="composer-runtime-state" :class="`composer-runtime-state--${composerRuntimeState.tone}`">
-                            <strong class="composer-runtime-state__label">{{ composerRuntimeState.label }}</strong>
-                            <span v-if="composerRuntimeState.detail" class="composer-runtime-state__detail">{{ composerRuntimeState.detail }}</span>
-                          </div>
-                        </div>
 
                         <div class="phone-composer__toolbar">
                           <div class="phone-composer__toolbar-left">
