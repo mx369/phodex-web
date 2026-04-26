@@ -1813,11 +1813,28 @@ button {
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 16px 34px rgba(18, 18, 18, 0.06);
+  position: relative;
+  overflow: hidden;
 }
 
 .message-card--amber {
-  background: linear-gradient(180deg, rgba(255, 248, 243, 0.96), rgba(255, 242, 235, 0.94));
-  border-color: rgba(239, 142, 85, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(92, 109, 255, 0.18);
+  box-shadow: 0 14px 30px rgba(18, 18, 18, 0.055);
+}
+
+.message-card--amber::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(92, 109, 255, 0.22) 45%, transparent 88%)
+      0 0 / 58% 1px no-repeat,
+    linear-gradient(90deg, transparent 0%, rgba(92, 109, 255, 0.16) 45%, transparent 88%)
+      0 100% / 58% 1px no-repeat;
+  animation: running-card-scan 1.7s ease-in-out infinite;
 }
 
 .message-card--blue {
@@ -1826,8 +1843,8 @@ button {
 }
 
 .message-card--green {
-  background: linear-gradient(180deg, rgba(242, 251, 246, 0.96), rgba(236, 247, 241, 0.94));
-  border-color: rgba(38, 162, 105, 0.15);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(18, 18, 18, 0.06);
 }
 
 .message-card--rose {
@@ -1868,6 +1885,31 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.message-card--amber .message-card__status {
+  gap: 7px;
+  background: rgba(18, 18, 18, 0.045);
+  color: var(--muted-strong);
+}
+
+.message-card--amber .message-card__status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(92, 109, 255, 0.78);
+  animation: running-dot 1.2s ease-in-out infinite;
+}
+
+.message-card--green .message-card__status {
+  background: rgba(18, 18, 18, 0.045);
+  color: var(--muted-strong);
+}
+
+.message-card--rose .message-card__status {
+  background: rgba(210, 74, 74, 0.12);
+  color: #9a3636;
 }
 
 .message-card__detail,
@@ -2124,6 +2166,39 @@ button {
   40% {
     transform: translateY(-3px);
     opacity: 1;
+  }
+}
+
+@keyframes running-card-scan {
+  0% {
+    background-position: -70% 0, -70% 100%;
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    background-position: 170% 0, 170% 100%;
+    opacity: 0.45;
+  }
+}
+
+@keyframes running-dot {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-card--amber::before,
+  .message-card--amber .message-card__status::before {
+    animation: none;
   }
 }
 
