@@ -33,6 +33,7 @@ type PendingThreadCreate = {
   projectLabel: string;
   mode: ThreadCreateMode;
   previousSelectedThreadId: string | null;
+  confirmedThreadId: string | null;
   slowTimerId: number;
   failureTimerId: number | null;
   isSlow: boolean;
@@ -769,8 +770,15 @@ function applySnapshot(snapshot: AppSnapshot) {
 }
 
 function mergeSnapshotWithPendingThread(snapshot: AppSnapshot) {
-  const nextSelectedThreadId = coercePendingThreadSelection(snapshot.selectedThreadId);
+  let nextSelectedThreadId = coercePendingThreadSelection(snapshot.selectedThreadId);
   const nextThreads = snapshot.threads.map((thread) => stabilizeIncomingThread(thread, nextSelectedThreadId));
+  if (
+    pendingThreadCreate?.confirmedThreadId &&
+    snapshot.selectedThreadId === pendingThreadCreate.confirmedThreadId &&
+    !nextThreads.some((thread) => thread.id === pendingThreadCreate?.confirmedThreadId)
+  ) {
+    nextSelectedThreadId = pendingThreadCreate.tempId;
+  }
   if (!pendingThreadCreate || nextSelectedThreadId !== pendingThreadCreate.tempId) {
     return {
       ...snapshot,
@@ -892,6 +900,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
       projectLabel,
       mode,
       previousSelectedThreadId,
+      confirmedThreadId: null,
       slowTimerId: window.setTimeout(() => {
         markPendingThreadCreateSlow(tempId, mode);
       }, PENDING_THREAD_SLOW_MS),
@@ -912,8 +921,14 @@ function resolvePendingThreadCreate(selectedThreadId: string | null) {
   ) {
     return;
   }
+  if (pendingThreadCreate.confirmedThreadId && selectedThreadId !== pendingThreadCreate.confirmedThreadId) {
+    return;
+  }
+  if (!state.snapshot?.threads.some((thread) => thread.id === selectedThreadId)) {
+    return;
+  }
 
-  const tempId = pendingThreadCreate.tempId;
+  const { tempId, resolve } = pendingThreadCreate;
   if (state.snapshot) {
     state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
   }
@@ -923,6 +938,7 @@ function resolvePendingThreadCreate(selectedThreadId: string | null) {
     window.clearTimeout(pendingThreadCreate.failureTimerId);
   }
   pendingThreadCreate = null;
+  resolve(selectedThreadId);
 }
 
 function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) {
@@ -941,19 +957,17 @@ function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) 
   if (pending.failureTimerId !== null) {
     window.clearTimeout(pending.failureTimerId);
   }
+  pending.confirmedThreadId = threadId;
   if (state.snapshot) {
     const tempThread = state.snapshot.threads.find((thread) => thread.id === pending.tempId);
     if (tempThread) {
-      tempThread.id = threadId;
       tempThread.preview = "Opening the new chat…";
       tempThread.lastActivityAt = new Date().toISOString();
     }
-    if (state.snapshot.selectedThreadId === pending.tempId) {
-      state.snapshot.selectedThreadId = threadId;
-    }
   }
-  pendingThreadCreate = null;
-  pending.resolve(threadId);
+  pending.failureTimerId = window.setTimeout(() => {
+    failPendingThreadCreate("Opening the new chat failed. Try again.");
+  }, PENDING_THREAD_FAILURE_MS);
 }
 
 function rejectPendingThreadCreate(requestId: string, message: string) {
@@ -1003,6 +1017,17 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   }
 }
 
+function failPendingThreadCreate(message: string) {
+  if (!pendingThreadCreate) {
+    return;
+  }
+
+  const reject = pendingThreadCreate.reject;
+  rollbackPendingThreadCreate(false);
+  reject(new Error(message));
+  pushToast("error", message);
+}
+
 function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
   if (!pendingThreadCreate || pendingThreadCreate.tempId !== tempId || pendingThreadCreate.isSlow) {
     return;
@@ -1021,8 +1046,7 @@ function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
 
   pushToast("error", "Starting the new chat is taking longer than usual. Still waiting on your Mac.");
   pendingThreadCreate.failureTimerId = window.setTimeout(() => {
-    rollbackPendingThreadCreate(false);
-    pushToast("error", "Starting the new chat failed. Try again.");
+    failPendingThreadCreate("Starting the new chat failed. Try again.");
   }, Math.max(PENDING_THREAD_FAILURE_MS - PENDING_THREAD_SLOW_MS, 0));
 }
 
