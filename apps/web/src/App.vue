@@ -371,6 +371,7 @@ const autoScrollMode = ref<TurnAutoScrollMode>("followBottom");
 const isScrolledToBottom = ref(true);
 
 const TURN_BOTTOM_THRESHOLD = 24;
+const USER_SCROLL_INTENT_MS = 900;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
 const DRAWER_CLOSE_NAVIGATION_FALLBACK_MS = 320;
@@ -387,6 +388,7 @@ let followBottomFrame: number | null = null;
 let conversationResizeObserver: ResizeObserver | null = null;
 let lastConversationScrollTop = 0;
 let ignoreManualAutoScrollUntil = 0;
+let userConversationScrollIntentUntil = 0;
 let installCommandCopyTimer: number | null = null;
 let drawerThreadSyncTimer: number | null = null;
 let drawerThreadNavigationTimer: number | null = null;
@@ -1538,6 +1540,35 @@ watch(
   { flush: "post" }
 );
 
+const latestMessageGrowthKey = computed(() => {
+  const thread = currentThread.value;
+  const latestMessage = thread?.messages.at(-1);
+  if (!thread || !latestMessage) {
+    return "";
+  }
+  return [
+    thread.id,
+    thread.messages.length,
+    latestMessage.id,
+    latestMessage.text.length,
+    latestMessage.isStreaming ? "streaming" : "settled",
+    currentPendingRunFeedback.value ? "pending" : "acknowledged",
+  ].join(":");
+});
+
+watch(
+  latestMessageGrowthKey,
+  async () => {
+    if (autoScrollMode.value !== "followBottom") {
+      return;
+    }
+    await nextTick();
+    markProgrammaticConversationScroll();
+    queueFollowBottomScroll();
+  },
+  { flush: "post" }
+);
+
 watch(
   [() => currentThread.value?.id ?? null, isAuthenticated, activePanel],
   async ([nextThreadId, authenticated, panel]) => {
@@ -1564,6 +1595,7 @@ function observeConversationResizeTarget(nextEl: HTMLElement | null, previousEl:
       if (autoScrollMode.value === "followBottom") {
         // Keep the CTA hidden while runtime chrome or message growth is auto-followed.
         isScrolledToBottom.value = true;
+        markProgrammaticConversationScroll();
         queueFollowBottomScroll();
         return;
       }
@@ -2933,6 +2965,14 @@ function markProgrammaticConversationScroll() {
   ignoreManualAutoScrollUntil = window.performance.now() + 180;
 }
 
+function markUserConversationScrollIntent() {
+  userConversationScrollIntentUntil = window.performance.now() + USER_SCROLL_INTENT_MS;
+}
+
+function hasRecentUserConversationScrollIntent() {
+  return window.performance.now() <= userConversationScrollIntentUntil;
+}
+
 function scrollConversationToBottom() {
   const scrollEl = conversationScrollEl.value;
   if (!scrollEl) {
@@ -2970,7 +3010,12 @@ function handleConversationScroll() {
     autoScrollMode.value = "followBottom";
     return;
   }
-  if (autoScrollMode.value === "followBottom" && movingUp && window.performance.now() >= ignoreManualAutoScrollUntil) {
+  if (
+    autoScrollMode.value === "followBottom" &&
+    movingUp &&
+    hasRecentUserConversationScrollIntent() &&
+    window.performance.now() >= ignoreManualAutoScrollUntil
+  ) {
     autoScrollMode.value = "manual";
   }
 }
@@ -3751,6 +3796,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     ref="conversationScrollEl"
                     class="phone-conversation"
                     @scroll.passive="handleConversationScroll"
+                    @touchstart.passive="markUserConversationScrollIntent"
+                    @touchmove.passive="markUserConversationScrollIntent"
+                    @wheel.passive="markUserConversationScrollIntent"
                   >
                     <div ref="conversationInnerEl" class="phone-conversation__inner">
                       <template v-if="currentThread && showConversationContent">
