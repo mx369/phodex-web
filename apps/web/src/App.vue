@@ -1360,22 +1360,24 @@ watch(
 watch(
   [() => state.snapshot, pendingThreadRoute],
   () => {
-    if (!isAuthenticated.value || !pendingThreadRoute.value || !state.snapshot) {
+    const pendingRoute = pendingThreadRoute.value;
+    const snapshot = state.snapshot;
+    if (!isAuthenticated.value || !pendingRoute || !snapshot) {
       return;
     }
     if (
-      pendingThreadRoute.value.machineId &&
-      state.snapshot.activeBridgeId !== pendingThreadRoute.value.machineId &&
-      state.snapshot.bridgeDevices.some((device) => device.id === pendingThreadRoute.value?.machineId)
+      pendingRoute.machineId &&
+      snapshot.activeBridgeId !== pendingRoute.machineId &&
+      snapshot.bridgeDevices.some((device) => device.id === pendingRoute.machineId)
     ) {
-      client.selectBridge(pendingThreadRoute.value.machineId);
+      client.selectBridge(pendingRoute.machineId);
       return;
     }
-    if (!state.snapshot.threads.some((thread) => thread.id === pendingThreadRoute.value.threadId)) {
+    if (!snapshot.threads.some((thread) => thread.id === pendingRoute.threadId)) {
       return;
     }
-    if (state.snapshot.selectedThreadId !== pendingThreadRoute.value.threadId) {
-      client.selectThread(pendingThreadRoute.value.threadId);
+    if (snapshot.selectedThreadId !== pendingRoute.threadId) {
+      client.selectThread(pendingRoute.threadId);
       return;
     }
     pendingThreadRoute.value = null;

@@ -502,7 +502,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
           if ((selectedThread?.messages.length ?? 0) > 0) {
             sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
           } else {
-            dispatchToBridge(user, { type: "thread:select", threadId: user.selectedThreadId });
+            sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: user.selectedThreadId });
           }
         }
       }
@@ -518,6 +518,10 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       user.banner = null;
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
+      if (shouldSyncThreadBeforeSelect(user.profile.id, event.threadId)) {
+        sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread", threadId: event.threadId });
+        break;
+      }
       dispatchToBridge(user, event);
       break;
     case "thread:history:load": {
@@ -909,6 +913,25 @@ function ensureMirroredThread(userId: string, threadId: string) {
   };
   mirror.set(threadId, thread);
   return thread;
+}
+
+function isPlaceholderThread(thread: ThreadRecord | undefined) {
+  return Boolean(
+    thread &&
+      thread.title === "New Chat" &&
+      thread.projectLabel === "Codex" &&
+      !thread.preview &&
+      !thread.repoLabel &&
+      thread.messages.length === 0
+  );
+}
+
+function shouldSyncThreadBeforeSelect(userId: string, threadId: string) {
+  if (!hasAnyBridgeSocket(userId)) {
+    return false;
+  }
+  const thread = getThreadMirror(userId).get(threadId);
+  return !thread || isPlaceholderThread(thread);
 }
 
 function setSelectedThreadForUser(userId: string, selectedThreadId: string | null) {
