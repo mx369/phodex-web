@@ -365,6 +365,7 @@ const isScrolledToBottom = ref(true);
 const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
+const DRAWER_THREAD_SYNC_HINT_MS = 8_000;
 const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
 const ACCESS_MODE_COMPACT_LABELS: Record<AccessMode, string> = {
   "read-only": "Read",
@@ -377,11 +378,13 @@ let conversationResizeObserver: ResizeObserver | null = null;
 let lastConversationScrollTop = 0;
 let ignoreManualAutoScrollUntil = 0;
 let installCommandCopyTimer: number | null = null;
+let drawerThreadSyncTimer: number | null = null;
 const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
 const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
 const installCommandPlatform = ref<InstallCommandPlatform>("shell");
 const expandedDrawerGroups = ref<string[]>([]);
+const drawerThreadSyncing = ref(false);
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
 const projectTreeError = ref("");
@@ -574,6 +577,7 @@ onBeforeUnmount(() => {
   conversationResizeObserver?.disconnect();
   conversationResizeObserver = null;
   clearInstallCommandCopyTimer();
+  clearDrawerThreadSyncTimer();
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -666,6 +670,7 @@ const isCurrentThreadPendingCreate = computed(() =>
   Boolean(currentThread.value?.id.startsWith("pending-thread:"))
 );
 const liveThreads = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived"));
+const liveThreadCount = computed(() => liveThreads.value.length);
 const floatingToasts = computed(() => state.ui.toasts.filter((toast) => toast.tone === "error"));
 const currentPendingRunFeedback = computed(() => {
   const pending = state.ui.pendingRunFeedback;
@@ -732,6 +737,41 @@ watch(
   },
   { immediate: true }
 );
+
+function clearDrawerThreadSyncTimer() {
+  if (drawerThreadSyncTimer === null) {
+    return;
+  }
+  window.clearTimeout(drawerThreadSyncTimer);
+  drawerThreadSyncTimer = null;
+}
+
+function showDrawerThreadSyncHint() {
+  drawerThreadSyncing.value = true;
+  clearDrawerThreadSyncTimer();
+  drawerThreadSyncTimer = window.setTimeout(() => {
+    drawerThreadSyncing.value = false;
+    drawerThreadSyncTimer = null;
+  }, DRAWER_THREAD_SYNC_HINT_MS);
+}
+
+watch(
+  () => state.snapshot?.activeBridgeId ?? null,
+  (nextBridgeId, previousBridgeId) => {
+    if (!previousBridgeId || !nextBridgeId || nextBridgeId === previousBridgeId) {
+      return;
+    }
+    showDrawerThreadSyncHint();
+  }
+);
+
+watch(liveThreadCount, (count) => {
+  if (count > 0) {
+    drawerThreadSyncing.value = false;
+    clearDrawerThreadSyncTimer();
+  }
+});
+
 const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
   const targets: DrawerProjectTarget[] = threadGroups.value.map((group) => ({
     label: group.label,
@@ -782,7 +822,13 @@ const archivedThreads = computed(() =>
     .filter((thread) => thread.state === "archived")
     .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
 );
-const liveThreadCount = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived").length);
+const drawerThreadSyncHintVisible = computed(() =>
+  state.ui.sidebarOpen &&
+  drawerThreadSyncing.value &&
+  !state.ui.search.trim() &&
+  threadGroups.value.length === 0 &&
+  (state.snapshot?.connection.state === "connected" || state.snapshot?.connection.state === "connecting")
+);
 const queuedDraftCount = computed(() =>
   (state.snapshot?.threads ?? []).reduce((count, thread) => count + thread.queuedDrafts.length, 0)
 );
@@ -3281,6 +3327,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </div>
 
                       <div class="drawer-groups">
+                        <div v-if="drawerThreadSyncHintVisible" class="drawer-sync-hint" role="status" aria-live="polite">
+                          <span class="drawer-sync-hint__dot" aria-hidden="true"></span>
+                          <span>Syncing conversations</span>
+                        </div>
                         <section v-for="group in threadGroups" :key="group.label" class="drawer-group">
                           <div class="drawer-group__head">
                             <button
