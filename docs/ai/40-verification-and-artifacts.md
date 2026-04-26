@@ -72,6 +72,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
+- On this workstation, default real OTP validation to `otth.xyz@qq.com`, which is available through the local Apple Mail `QQ` account, unless the user explicitly names another email.
 - In local operator language, `Email Scale` refers to the provisioned OTP mail sender already wired through the repo's Resend path; do not treat that phrase as evidence that mail delivery is absent.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
 - Do not say OTP mail is unavailable unless you first verify it with evidence, such as relay startup logs reporting missing credentials or `/api/auth/request-code` returning `503`.
