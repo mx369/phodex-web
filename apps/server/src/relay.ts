@@ -794,6 +794,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
         requestId: event.requestId,
         threadId: event.threadId,
       });
+      broadcastSnapshot(event.userId);
       break;
     }
     case "bridge:thread:create-failed": {
