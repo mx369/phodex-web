@@ -4,20 +4,22 @@ Use this workflow for UI/state-machine regressions, especially mobile polish, fl
 
 ## Default Order
 
-1. Verify the bug exists before proposing a fix.
-2. Prefer runtime evidence first:
+1. Create a dedicated Git worktree for the bugfix before editing code.
+2. Verify the bug exists before proposing a fix.
+3. Prefer runtime evidence first:
    use Electron CDP, Computer Use, browser devtools, websocket logs, or server logs.
-3. For transient issues such as flicker, auto-scroll loss, or disappearing cards, record a short video or frame sequence plus state logs.
+4. For transient issues such as flicker, auto-scroll loss, or disappearing cards, record a short video or frame sequence plus state logs.
    A single screenshot is not enough unless the issue is static.
-4. If runtime capture is blocked, say what blocked it, then fall back to code analysis.
-5. Search the repo first:
+5. If runtime capture is blocked, say what blocked it, then fall back to code analysis.
+6. Search the repo first:
    inspect current code, nearby flows, and any prior acceptance artifacts.
-6. Search official or primary sources next.
+7. Search official or primary sources next.
    Prefer vendor docs, MDN, framework docs, standards, and upstream issue trackers from the technology owner.
-7. Only after those steps, fill gaps with engineering judgment.
-8. Implement the smallest fix that resolves the verified failure.
-9. Re-run the real flow and capture fresh evidence.
-10. Summarize the result with links to code, logs, screenshots, and recordings.
+8. Only after those steps, fill gaps with engineering judgment.
+9. Implement the smallest fix that resolves the verified failure.
+10. Re-run the real flow and capture fresh evidence.
+11. Merge the verified fix back into the main worktree, then remove the temporary worktree.
+12. Summarize the result with links to code, logs, screenshots, and recordings.
 
 ## Evidence Rules
 
