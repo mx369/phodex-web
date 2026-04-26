@@ -13,6 +13,7 @@ import type {
   BridgeDispatchEvent,
   BridgeEvent,
   ClientEvent,
+  CodexRateLimitSnapshot,
   CompletionBanner,
   DiffStats,
   FileChangeSummary,
@@ -189,6 +190,7 @@ let relaySocket: WebSocket | null = null;
 let relayReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let codexConnectionState: RelayConnection["state"] = "connecting";
 let codexLastSyncAt: string | null = null;
+let codexRateLimits: CodexRateLimitSnapshot | null = null;
 let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
@@ -1134,6 +1136,7 @@ function connectCodexSocket() {
       setCodexConnectionState("connected");
       codexLastSyncAt = new Date().toISOString();
       console.log("[phodex] Connected to local Codex app-server.");
+      void refreshCodexRateLimits();
       return syncAllThreadsFromCodex();
     }).catch((error) => {
       console.error(`[phodex] Failed to initialize Codex app-server: ${readErrorMessage(error)}`);
@@ -1235,6 +1238,9 @@ function handleCodexNotification(method: string, params: any) {
     case "turn/completed":
       handleTurnCompleted(params);
       break;
+    case "account/rateLimits/updated":
+      codexRateLimits = normalizeCodexRateLimitSnapshot(params?.rateLimits);
+      break;
     case "error":
       console.error(`[phodex] Codex notification error: ${readString(params?.message) || "unknown error"}`);
       break;
@@ -1242,6 +1248,85 @@ function handleCodexNotification(method: string, params: any) {
 
   codexLastSyncAt = new Date().toISOString();
   publishPresenceToAllUsers();
+}
+
+async function refreshCodexRateLimits() {
+  if (!isCodexReady()) {
+    return;
+  }
+
+  try {
+    const response = await codexRequest("account/rateLimits/read", undefined);
+    codexRateLimits = selectCodexRateLimitSnapshot(response);
+    publishPresenceToAllUsers();
+  } catch (error) {
+    console.warn(`[phodex] Codex rate limits unavailable: ${readErrorMessage(error)}`);
+  }
+}
+
+function selectCodexRateLimitSnapshot(response: any): CodexRateLimitSnapshot | null {
+  const byLimitId = response?.rateLimitsByLimitId;
+  if (byLimitId && typeof byLimitId === "object") {
+    const codexSnapshot = normalizeCodexRateLimitSnapshot(byLimitId.codex);
+    if (codexSnapshot) {
+      return codexSnapshot;
+    }
+
+    for (const value of Object.values(byLimitId)) {
+      const snapshot = normalizeCodexRateLimitSnapshot(value);
+      if (snapshot) {
+        return snapshot;
+      }
+    }
+  }
+
+  return normalizeCodexRateLimitSnapshot(response?.rateLimits);
+}
+
+function normalizeCodexRateLimitSnapshot(value: any): CodexRateLimitSnapshot | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const primary = normalizeCodexRateLimitWindow(value.primary);
+  const secondary = normalizeCodexRateLimitWindow(value.secondary);
+  const credits = value.credits && typeof value.credits === "object"
+    ? {
+        hasCredits: value.credits.hasCredits === true,
+        unlimited: value.credits.unlimited === true,
+        balance: readString(value.credits.balance) || null,
+      }
+    : null;
+
+  if (!primary && !secondary && !credits) {
+    return null;
+  }
+
+  return {
+    limitId: readString(value.limitId) || null,
+    limitName: readString(value.limitName) || null,
+    primary,
+    secondary,
+    credits,
+    planType: readString(value.planType) || null,
+  };
+}
+
+function normalizeCodexRateLimitWindow(value: any): CodexRateLimitSnapshot["primary"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const usedPercent = readNumber(value.usedPercent);
+  if (usedPercent == null) {
+    return null;
+  }
+
+  return {
+    usedPercent,
+    windowDurationMins: readNumber(value.windowDurationMins),
+    resetsAt: readNumber(value.resetsAt),
+  };
 }
 
 function handleTurnStarted(params: any) {
@@ -1995,6 +2080,7 @@ function buildConnection(): RelayConnection {
     macLabel: MAC_LABEL,
     latencyMs: codexConnectionState === "connected" ? randomInt(8, 22) : 0,
     lastSyncAt: codexLastSyncAt,
+    rateLimits: codexRateLimits,
   };
 }
 

@@ -203,6 +203,27 @@ export interface UserSummary {
   displayName: string;
 }
 
+export interface CodexRateLimitWindow {
+  usedPercent: number;
+  windowDurationMins: number | null;
+  resetsAt: number | null;
+}
+
+export interface CodexCreditsSnapshot {
+  hasCredits: boolean;
+  unlimited: boolean;
+  balance: string | null;
+}
+
+export interface CodexRateLimitSnapshot {
+  limitId: string | null;
+  limitName: string | null;
+  primary: CodexRateLimitWindow | null;
+  secondary: CodexRateLimitWindow | null;
+  credits: CodexCreditsSnapshot | null;
+  planType: string | null;
+}
+
 export interface RelayConnection {
   bridgeOnline: boolean;
   state: "connecting" | "connected" | "disconnected";
@@ -210,6 +231,7 @@ export interface RelayConnection {
   macLabel: string;
   latencyMs: number;
   lastSyncAt: string | null;
+  rateLimits: CodexRateLimitSnapshot | null;
 }
 
 export interface BridgeDeviceSummary {

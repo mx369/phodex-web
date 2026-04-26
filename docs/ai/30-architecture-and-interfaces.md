@@ -47,6 +47,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - `AppSnapshot` now carries `activeBridgeId` plus `bridgeDevices[]`, and relay `presence` events rebroadcast those same per-device records so Home can render every registered Mac instead of only the active one.
 - When Home sends `bridge:select`, the relay validates that the target bridge is both registered and currently online before moving `activeBridgeId`, clearing mirrored thread selection, rebroadcasting snapshot/presence, and requesting a fresh `bridge:sync-all` from that bridge.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
+- `RelayConnection` carries the local Codex `account/rateLimits` snapshot when available. The bridge refreshes it after app-server initialization, applies `account/rateLimits/updated` notifications, and the drawer footer displays short-window and weekly remaining quota beside the relay latency.
 - The public relay stores user/session/settings state; the local bridge stores thread-local execution state and talks to Codex.
 - The local bridge dials out to the public relay, so the public side does not need direct LAN access to the client machine.
 - The public relay now publishes both a Bun-style `curl -fsSL ... | bash` installer for Mac/Linux and a Bun-based `bridge-installer.js` entrypoint for Windows PowerShell, plus the bundled bridge runtime.

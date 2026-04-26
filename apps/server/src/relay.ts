@@ -1186,6 +1186,7 @@ function disconnectedBridgeConnection(macLabel = DEFAULT_MAC_LABEL): RelayConnec
     macLabel,
     latencyMs: 0,
     lastSyncAt: null,
+    rateLimits: null,
   };
 }
 

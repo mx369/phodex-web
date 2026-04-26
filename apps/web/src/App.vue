@@ -5,6 +5,8 @@ import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
 import type {
   AccessMode,
   BridgeDeviceSummary,
+  CodexRateLimitSnapshot,
+  CodexRateLimitWindow,
   ImageMessageCard,
   InputImageAttachment,
   ProjectDiffFile,
@@ -845,6 +847,7 @@ const connectionStatusLabel = computed(() => {
       return "Unknown";
   }
 });
+const drawerRateLimitSummary = computed(() => formatRateLimitSummary(state.snapshot?.connection.rateLimits ?? null));
 const composerPlaceholder = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
     return "Starting a new chat on your Mac…";
@@ -1581,6 +1584,69 @@ function formatRelativeTime(value: string) {
   }
   const days = Math.round(hours / 24);
   return `${days}d`;
+}
+
+function formatRateLimitSummary(snapshot: CodexRateLimitSnapshot | null) {
+  if (!snapshot) {
+    return "";
+  }
+
+  const parts = [
+    formatRateLimitWindow(snapshot.primary, "5h"),
+    formatRateLimitWindow(snapshot.secondary, "Weekly"),
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+}
+
+function formatRateLimitWindow(window: CodexRateLimitWindow | null, fallbackLabel: string) {
+  if (!window) {
+    return "";
+  }
+
+  const label = formatRateLimitWindowLabel(window.windowDurationMins, fallbackLabel);
+  const remainingPercent = Math.max(0, Math.min(100, Math.round(100 - window.usedPercent)));
+  const resetLabel = formatRateLimitReset(window.resetsAt);
+  return resetLabel
+    ? `${label} ${remainingPercent}% left, resets ${resetLabel}`
+    : `${label} ${remainingPercent}% left`;
+}
+
+function formatRateLimitWindowLabel(windowDurationMins: number | null, fallbackLabel: string) {
+  if (!windowDurationMins) {
+    return fallbackLabel;
+  }
+  if (windowDurationMins >= 7 * 24 * 60) {
+    return "Weekly";
+  }
+  if (windowDurationMins % (24 * 60) === 0) {
+    return `${windowDurationMins / (24 * 60)}d`;
+  }
+  if (windowDurationMins % 60 === 0) {
+    return `${windowDurationMins / 60}h`;
+  }
+  return `${windowDurationMins}m`;
+}
+
+function formatRateLimitReset(resetsAt: number | null) {
+  if (!resetsAt) {
+    return "";
+  }
+
+  const deltaMinutes = Math.ceil((resetsAt * 1_000 - Date.now()) / 60_000);
+  if (deltaMinutes <= 0) {
+    return "soon";
+  }
+  if (deltaMinutes < 60) {
+    return `in ${deltaMinutes}m`;
+  }
+
+  const hours = Math.ceil(deltaMinutes / 60);
+  if (hours < 24) {
+    return `in ${hours}h`;
+  }
+
+  return `in ${Math.ceil(hours / 24)}d`;
 }
 
 async function loadInstallManifest() {
@@ -3575,6 +3641,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               <template v-if="state.snapshot?.connection.state === 'connected'">
                                 · {{ state.snapshot?.connection.latencyMs }}ms
                               </template>
+                            </span>
+                            <span v-if="drawerRateLimitSummary" class="drawer-status__quota">
+                              {{ drawerRateLimitSummary }}
                             </span>
                           </div>
                         </div>
