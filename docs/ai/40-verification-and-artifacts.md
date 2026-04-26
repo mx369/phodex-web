@@ -29,7 +29,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - On Mac/Linux, installed bridge launches should re-enter the detected login shell before starting the runtime so downstream tools such as `codex`, Homebrew binaries, `asdf`, `nvm`, or `volta` resolve against the same `PATH` a normal Terminal session exposes.
 - If `bun` cannot be found in PATH or the common host fallback locations, the installer should fail fast and print the official Bun install command `curl -fsSL https://bun.com/install | bash` instead of auto-installing it.
 - For the Windows command, the missing-`bun` hint should instead print `powershell -c "irm bun.sh/install.ps1 | iex"`.
-- Installer verification should also capture whether install-time auto-pinning happened: when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, the installed `bridge.env` should contain `PHODEX_CODEX_WS_URL` plus `PHODEX_MANAGE_CODEX=false`; otherwise those keys should be absent and managed fallback stays enabled.
+- Installer verification should confirm `bridge.env` always contains `PHODEX_MANAGE_CODEX=false`. When a local Codex app-server is already listening on `ws://127.0.0.1:8765`, it should also contain `PHODEX_CODEX_WS_URL`; otherwise the bridge must report Codex disconnected instead of launching a background Codex process under Bun.
 - Production web deployments should keep client API calls same-origin. A public `apps/web/dist` bundle must not contain loopback client targets like `127.0.0.1:3443`.
 
 ## QCP Deploy Truth
@@ -65,7 +65,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Server changes: validate affected endpoints or websocket flow, then exercise at least one real end-to-end path.
 - For bridge-install security changes, verify all of: anonymous manifest access is blocked, a fresh login can mint a setup token, the same setup token can mint multiple per-device bridge tokens until expiry, and unauthenticated health checks do not expose another account's bridge state.
 - For bridge-install behavior changes around Codex permissions, verify both install outcomes you can reproduce:
-  when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, and when the installer must fall back to managed background Codex.
+  when a local Codex app-server is already listening on `ws://127.0.0.1:8765`, and when no app-server is listening so the bridge stays disconnected without managed background Codex.
 - For bridge-install environment fixes on Mac/Linux, inspect the generated `current/start-bridge.sh` and confirm it execs the detected login shell with `-lc` or the fish login equivalent before handing off to Bun.
 - For multi-device bridge changes, prefer proving one local install plus one CNB install (or another genuinely separate second machine) against the same signed-in account.
 - For Home registered-device interaction changes, capture a real mobile runtime showing all three cases: tapping the active online device, tapping a second online device to switch `activeBridgeId`, and tapping an offline saved device to confirm it stays inert.
