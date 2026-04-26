@@ -106,6 +106,12 @@ type PendingProjectRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type PendingThreadCreateDispatch = {
+  userId: string;
+  requestId: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -162,6 +168,7 @@ const bridgeConnectionsByUserId = new Map<string, Map<string, RelayConnection>>(
 const activeBridgeIdsByUserId = new Map<string, string>();
 const selectedThreadHistoryWindowByUserId = new Map<string, number>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
+const pendingThreadCreateDispatches = new Map<string, PendingThreadCreateDispatch>();
 
 function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
   if (!FLOW_TRACE_ENABLED) {
@@ -511,7 +518,15 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       selectBridgeForUser(user, event.bridgeId);
       break;
     case "thread:create":
-      dispatchToBridge(user, event);
+      if (!dispatchToBridge(user, event)) {
+        sendEvent(ws, {
+          type: "thread:create-failed",
+          requestId: event.requestId,
+          message: "The local bridge is offline.",
+        });
+      } else {
+        trackThreadCreateDispatch(user.profile.id, event.requestId);
+      }
       break;
     case "thread:select":
       setSelectedThreadForUser(user.profile.id, event.threadId);
@@ -616,6 +631,38 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
   return true;
 }
 
+function threadCreateDispatchKey(userId: string, requestId: string) {
+  return `${userId}:${requestId}`;
+}
+
+function trackThreadCreateDispatch(userId: string, requestId: string) {
+  const key = threadCreateDispatchKey(userId, requestId);
+  clearThreadCreateDispatch(userId, requestId);
+  pendingThreadCreateDispatches.set(key, {
+    userId,
+    requestId,
+    timer: setTimeout(() => {
+      pendingThreadCreateDispatches.delete(key);
+      sendToast(userId, "error", "The Mac did not acknowledge the new chat request. Restart the bridge and try again.");
+      broadcast(userId, {
+        type: "thread:create-failed",
+        requestId,
+        message: "The Mac did not acknowledge the new chat request. Restart the bridge and try again.",
+      });
+    }, 22_000),
+  });
+}
+
+function clearThreadCreateDispatch(userId: string, requestId: string) {
+  const key = threadCreateDispatchKey(userId, requestId);
+  const pending = pendingThreadCreateDispatches.get(key);
+  if (!pending) {
+    return;
+  }
+  clearTimeout(pending.timer);
+  pendingThreadCreateDispatches.delete(key);
+}
+
 function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
   if (!user.bridgeDevices[bridgeId]) {
     sendToast(user.profile.id, "error", "That Mac is no longer registered to this account.");
@@ -716,6 +763,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
         break;
       }
+      clearThreadCreateDispatch(event.userId, event.requestId);
       setSelectedThreadForUser(event.userId, event.threadId);
       ensureMirroredThread(event.userId, event.threadId);
       schedulePersist();
@@ -730,6 +778,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
         break;
       }
+      clearThreadCreateDispatch(event.userId, event.requestId);
       broadcast(event.userId, {
         type: "thread:create-failed",
         requestId: event.requestId,
