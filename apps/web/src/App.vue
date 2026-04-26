@@ -3486,7 +3486,12 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                     <div class="phone-topbar__title">
                       <strong>{{ currentThread?.title ?? "Home" }}</strong>
-                      <span v-if="currentThread" class="phone-topbar__subtitle">{{ currentThreadWorkspaceLabel }}</span>
+                      <span v-if="currentThread" class="phone-topbar__subtitle" aria-live="polite">
+                        <span class="phone-topbar__workspace">{{ currentThreadWorkspaceLabel }}</span>
+                        <strong class="phone-topbar-status__label" :class="`phone-topbar-status__label--${composerRuntimeState.tone}`">
+                          {{ composerRuntimeState.label }}
+                        </strong>
+                      </span>
                     </div>
 
                     <button
@@ -3551,18 +3556,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </transition>
                     </div>
                   </header>
-
-                  <div
-                    v-if="currentThread"
-                    class="phone-topbar-status"
-                    :class="`phone-topbar-status--${composerRuntimeState.tone}`"
-                    aria-live="polite"
-                  >
-                    <strong class="phone-topbar-status__label">{{ composerRuntimeState.label }}</strong>
-                    <span v-if="composerRuntimeState.detail" class="phone-topbar-status__detail">
-                      {{ composerRuntimeState.detail }}
-                    </span>
-                  </div>
 
                   <div v-if="floatingToasts.length" class="toast-stack">
                     <div
