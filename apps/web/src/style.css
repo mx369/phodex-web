@@ -1819,22 +1819,6 @@ button {
 
 .message-card--amber {
   background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(92, 109, 255, 0.18);
-  box-shadow: 0 14px 30px rgba(18, 18, 18, 0.055);
-}
-
-.message-card--amber::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, transparent 0%, rgba(92, 109, 255, 0.22) 45%, transparent 88%)
-      0 0 / 58% 1px no-repeat,
-    linear-gradient(90deg, transparent 0%, rgba(92, 109, 255, 0.16) 45%, transparent 88%)
-      0 100% / 58% 1px no-repeat;
-  animation: running-card-scan 1.7s ease-in-out infinite;
 }
 
 .message-card--blue {
@@ -2170,20 +2154,6 @@ button {
   }
 }
 
-@keyframes running-card-scan {
-  0% {
-    background-position: -70% 0, -70% 100%;
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    background-position: 170% 0, 170% 100%;
-    opacity: 0.45;
-  }
-}
-
 @keyframes running-dot {
   0%,
   100% {
@@ -2197,7 +2167,6 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .message-card--amber::before,
   .message-card--amber .message-card__status::before {
     animation: none;
   }
