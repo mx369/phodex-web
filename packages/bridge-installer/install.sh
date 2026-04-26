@@ -350,23 +350,31 @@ start_bridge() {
   if [[ $(uname -s) == Darwin ]]; then
     local plist_path
     local bootstrap_ok=0
+    local bootstrap_output=""
     local kickstart_ok=0
+    local kickstart_output=""
     plist_path="$(launch_agent_plist_path)"
     write_launch_agent_plist "$plist_path"
 
+    launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
+    launchctl enable "$(launch_agent_domain)" >/dev/null 2>&1 || true
+    launchctl remove "$(launch_agent_label)" >/dev/null 2>&1 || true
+
     for _ in $(seq 1 5); do
-      if launchctl bootstrap "gui/$(id -u)" "$plist_path" >/dev/null 2>&1; then
+      if bootstrap_output="$(launchctl bootstrap "gui/$(id -u)" "$plist_path" 2>&1)"; then
         bootstrap_ok=1
         break
       fi
       launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
+      launchctl enable "$(launch_agent_domain)" >/dev/null 2>&1 || true
+      launchctl remove "$(launch_agent_label)" >/dev/null 2>&1 || true
       sleep 0.2
     done
 
-    [[ $bootstrap_ok -eq 1 ]] || error "Failed to register launch agent with launchctl."
+    [[ $bootstrap_ok -eq 1 ]] || error "Failed to register launch agent with launchctl. ${bootstrap_output:-Run launchctl bootstrap manually for details.}"
 
     for _ in $(seq 1 5); do
-      if launchctl kickstart -k "$(launch_agent_domain)" >/dev/null 2>&1; then
+      if kickstart_output="$(launchctl kickstart -k "$(launch_agent_domain)" 2>&1)"; then
         kickstart_ok=1
         break
       fi
@@ -378,7 +386,7 @@ start_bridge() {
       sleep 0.2
     done
 
-    [[ $kickstart_ok -eq 1 ]] || error "Failed to start launch agent with launchctl."
+    [[ $kickstart_ok -eq 1 ]] || error "Failed to start launch agent with launchctl. ${kickstart_output:-Run launchctl kickstart manually for details.}"
 
     for _ in $(seq 1 20); do
       pid="$(launch_agent_pid || true)"
