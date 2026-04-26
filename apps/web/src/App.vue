@@ -3423,7 +3423,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             <span class="drawer-new-chat__icon">
                               <AppIcon name="plus" />
                             </span>
-                            <span class="drawer-new-chat__label">New</span>
                           </button>
                         </div>
                       </div>
