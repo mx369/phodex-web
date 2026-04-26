@@ -1554,10 +1554,18 @@ async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
     return null;
   }
 
-  const result = await codexRequest("thread/read", {
-    threadId,
-    includeTurns,
-  });
+  let result: any;
+  try {
+    result = await codexRequest("thread/read", {
+      threadId,
+      includeTurns,
+    });
+  } catch (error) {
+    if (includeTurns && isThreadNotMaterializedError(error)) {
+      return syncThreadFromCodex(threadId, false);
+    }
+    throw error;
+  }
   if (!result?.thread) {
     return null;
   }
@@ -3485,6 +3493,11 @@ function isThreadNotFoundError(error: unknown) {
   return message.startsWith("thread not found")
     || message.startsWith("thread not loaded")
     || message.startsWith("invalid thread id");
+}
+
+function isThreadNotMaterializedError(error: unknown) {
+  const message = readErrorMessage(error).toLowerCase();
+  return message.includes("not materialized yet") && message.includes("includeturns is unavailable");
 }
 
 function handleMissingThread(userId: string | undefined, threadId: string, error: unknown) {

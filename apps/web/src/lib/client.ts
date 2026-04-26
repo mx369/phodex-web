@@ -928,17 +928,7 @@ function resolvePendingThreadCreate(selectedThreadId: string | null) {
     return;
   }
 
-  const { tempId, resolve } = pendingThreadCreate;
-  if (state.snapshot) {
-    state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
-  }
-
-  window.clearTimeout(pendingThreadCreate.slowTimerId);
-  if (pendingThreadCreate.failureTimerId !== null) {
-    window.clearTimeout(pendingThreadCreate.failureTimerId);
-  }
-  pendingThreadCreate = null;
-  resolve(selectedThreadId);
+  finalizePendingThreadCreate(selectedThreadId);
 }
 
 function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) {
@@ -959,15 +949,52 @@ function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) 
   }
   pending.confirmedThreadId = threadId;
   if (state.snapshot) {
+    const existingThread = state.snapshot.threads.find((thread) => thread.id === threadId);
     const tempThread = state.snapshot.threads.find((thread) => thread.id === pending.tempId);
     if (tempThread) {
-      tempThread.preview = "Opening the new chat…";
-      tempThread.lastActivityAt = new Date().toISOString();
+      const confirmedThread = existingThread ?? {
+        ...tempThread,
+        id: threadId,
+        preview: "",
+        state: "idle" as const,
+        lastActivityAt: new Date().toISOString(),
+      };
+      state.snapshot.threads = [
+        confirmedThread,
+        ...state.snapshot.threads.filter((thread) => thread.id !== pending.tempId && thread.id !== threadId),
+      ];
+      state.snapshot.selectedThreadId = threadId;
+      if (pendingSendAfterThreadCreate && confirmedThread.messages.length === 0) {
+        pendingSendAfterThreadCreate = false;
+        flushComposer(threadId);
+      }
+      finalizePendingThreadCreate(threadId);
+      return;
     }
   }
   pending.failureTimerId = window.setTimeout(() => {
     failPendingThreadCreate("Opening the new chat failed. Try again.");
   }, PENDING_THREAD_FAILURE_MS);
+}
+
+function finalizePendingThreadCreate(threadId: string) {
+  if (!pendingThreadCreate) {
+    return;
+  }
+  if (!state.snapshot?.threads.some((thread) => thread.id === threadId)) {
+    return;
+  }
+
+  const { tempId, resolve } = pendingThreadCreate;
+  state.snapshot.selectedThreadId = threadId;
+  state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
+
+  window.clearTimeout(pendingThreadCreate.slowTimerId);
+  if (pendingThreadCreate.failureTimerId !== null) {
+    window.clearTimeout(pendingThreadCreate.failureTimerId);
+  }
+  pendingThreadCreate = null;
+  resolve(threadId);
 }
 
 function rejectPendingThreadCreate(requestId: string, message: string) {
