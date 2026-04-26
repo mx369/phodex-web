@@ -35,6 +35,7 @@ type AppIconName =
   | "folder"
   | "home"
   | "info"
+  | "lock"
   | "menu"
   | "more-horizontal"
   | "plus"
@@ -43,6 +44,7 @@ type AppIconName =
   | "stop"
   | "terminal"
   | "trash"
+  | "unlock"
   | "worktree";
 
 type AppIconSpec = {
@@ -160,6 +162,9 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
       { x1: 12, y1: 7.5, x2: 12, y2: 7.5 },
     ],
   },
+  lock: {
+    paths: ["M7.25 10.25h9.5a1.25 1.25 0 0 1 1.25 1.25v6.25A1.25 1.25 0 0 1 16.75 19h-9.5A1.25 1.25 0 0 1 6 17.75V11.5a1.25 1.25 0 0 1 1.25-1.25z", "M8.75 10.25V8a3.25 3.25 0 0 1 6.5 0v2.25"],
+  },
   menu: {
     lines: [
       { x1: 5, y1: 7, x2: 19, y2: 7 },
@@ -215,6 +220,9 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
       "M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7",
       "M7 7l.75 12A1.25 1.25 0 0 0 9 20.25h6A1.25 1.25 0 0 0 16.25 19L17 7",
     ],
+  },
+  unlock: {
+    paths: ["M7.25 10.25h9.5a1.25 1.25 0 0 1 1.25 1.25v6.25A1.25 1.25 0 0 1 16.75 19h-9.5A1.25 1.25 0 0 1 6 17.75V11.5a1.25 1.25 0 0 1 1.25-1.25z", "M8.75 10.25V8a3.25 3.25 0 0 1 5.8-2"],
   },
   worktree: {
     circles: [
@@ -360,6 +368,7 @@ const threadMenuEl = ref<HTMLElement | null>(null);
 const drawerThreadMenuOpenId = ref<string | null>(null);
 const drawerThreadMenuEl = ref<HTMLElement | null>(null);
 const imagePreviewState = ref<ImagePreviewState | null>(null);
+const unlockedOutputBlocks = ref<Set<string>>(new Set());
 const composerImageInputEl = ref<HTMLInputElement | null>(null);
 const composerInputEl = ref<HTMLTextAreaElement | null>(null);
 const conversationScrollEl = ref<HTMLElement | null>(null);
@@ -2149,6 +2158,24 @@ function closeImagePreview() {
   imagePreviewState.value = null;
 }
 
+function outputBlockKey(messageId: string, blockId: string | number) {
+  return `${messageId}:${blockId}`;
+}
+
+function isOutputBlockUnlocked(key: string) {
+  return unlockedOutputBlocks.value.has(key);
+}
+
+function toggleOutputBlockScroll(key: string) {
+  const next = new Set(unlockedOutputBlocks.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  unlockedOutputBlocks.value = next;
+}
+
 function openInputImagePreview(image: InputImageAttachment, index: number) {
   openImagePreview(inputImageSource(image), formatInputImageLabel(image, index), image.mimeType);
 }
@@ -3746,7 +3773,21 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 </div>
 
                                 <p v-if="'meta' in card && card.meta" class="message-card__meta-line">{{ card.meta }}</p>
-                                <pre v-if="'output' in card && card.output" class="message-card__output"><code>{{ card.output }}</code></pre>
+                                <div
+                                  v-if="'output' in card && card.output"
+                                  class="message-output-shell"
+                                  :class="{ 'message-output-shell--unlocked': isOutputBlockUnlocked(outputBlockKey(message.id, `card-${index}`)) }"
+                                >
+                                  <button
+                                    class="message-output-shell__lock"
+                                    type="button"
+                                    :aria-label="isOutputBlockUnlocked(outputBlockKey(message.id, `card-${index}`)) ? 'Lock output scrolling' : 'Unlock output scrolling'"
+                                    @click="toggleOutputBlockScroll(outputBlockKey(message.id, `card-${index}`))"
+                                  >
+                                    <AppIcon :name="isOutputBlockUnlocked(outputBlockKey(message.id, `card-${index}`)) ? 'unlock' : 'lock'" />
+                                  </button>
+                                  <pre class="message-card__output"><code>{{ card.output }}</code></pre>
+                                </div>
                               </article>
                             </div>
 
@@ -3803,7 +3844,21 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               <span v-if="message.isStreaming" class="stream-cursor"></span>
                             </div>
 
-                            <pre v-if="message.codeBlock" class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
+                            <div
+                              v-if="message.codeBlock"
+                              class="message-output-shell message-output-shell--standalone"
+                              :class="{ 'message-output-shell--unlocked': isOutputBlockUnlocked(outputBlockKey(message.id, 'code')) }"
+                            >
+                              <button
+                                class="message-output-shell__lock"
+                                type="button"
+                                :aria-label="isOutputBlockUnlocked(outputBlockKey(message.id, 'code')) ? 'Lock code scrolling' : 'Unlock code scrolling'"
+                                @click="toggleOutputBlockScroll(outputBlockKey(message.id, 'code'))"
+                              >
+                                <AppIcon :name="isOutputBlockUnlocked(outputBlockKey(message.id, 'code')) ? 'unlock' : 'lock'" />
+                              </button>
+                              <pre class="phone-message__code"><code>{{ message.codeBlock.content }}</code></pre>
+                            </div>
 
                             <div v-if="message.fileChanges?.length" class="file-change-stack">
                               <button

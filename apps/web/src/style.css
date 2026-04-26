@@ -1918,10 +1918,43 @@ button {
   color: var(--muted);
 }
 
+.message-output-shell {
+  position: relative;
+  border-radius: 16px;
+}
+
+.message-output-shell__lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  box-shadow: none;
+}
+
+.message-output-shell__lock .app-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.message-output-shell__lock:hover,
+.message-output-shell__lock:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
 .message-card__output {
-  overflow: visible;
+  overflow: hidden;
   margin: 0;
   padding: 13px 14px;
+  padding-right: 40px;
+  max-height: 148px;
   border-radius: 16px;
   background: rgba(18, 18, 18, 0.92);
   color: #f6f6f6;
@@ -1931,6 +1964,14 @@ button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+  touch-action: pan-y;
+}
+
+.message-output-shell--unlocked .message-card__output {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: auto;
 }
 
 .message-card__image-preview {
@@ -2183,9 +2224,11 @@ button {
 }
 
 .phone-message__code {
-  overflow: visible;
+  overflow: hidden;
   margin: 16px 0 0;
   padding: 16px 18px;
+  padding-right: 42px;
+  max-height: 148px;
   border-radius: 22px;
   background: #131313;
   color: #f6f6f6;
@@ -2195,7 +2238,15 @@ button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+  touch-action: pan-y;
   box-shadow: 0 18px 32px rgba(18, 18, 18, 0.12);
+}
+
+.message-output-shell--unlocked .phone-message__code {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: auto;
 }
 
 .file-change-stack {
