@@ -260,7 +260,7 @@ export interface VerifyCodeResponse {
 export type ClientEvent =
   | { type: "bootstrap" }
   | { type: "bridge:select"; bridgeId: string }
-  | { type: "thread:create"; projectLabel?: string; cwd?: string; mode?: ThreadCreateMode }
+  | { type: "thread:create"; requestId: string; projectLabel?: string; cwd?: string; mode?: ThreadCreateMode }
   | { type: "thread:select"; threadId: string }
   | { type: "thread:history:load"; threadId: string; loadedMessages: number }
   | { type: "thread:clearSelection" }
@@ -344,6 +344,8 @@ export type BridgeEvent =
 
 export type ServerEvent =
   | { type: "snapshot"; snapshot: AppSnapshot }
+  | { type: "thread:created"; requestId: string; threadId: string }
+  | { type: "thread:create-failed"; requestId: string; message: string }
   | { type: "thread:updated"; thread: ThreadRecord; selectedThreadId: string | null }
   | { type: "message:appended"; threadId: string; message: ThreadMessage }
   | { type: "message:delta"; threadId: string; messageId: string; delta: string }

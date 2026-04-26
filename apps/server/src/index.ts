@@ -616,7 +616,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       });
       break;
     case "thread:create":
-      void handleThreadCreate(user, event);
+      void handleThreadCreate(ws, user, event);
       break;
     case "thread:select":
       user.selectedThreadId = event.threadId;
@@ -666,7 +666,7 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
   }
 }
 
-async function handleThreadCreate(user: PersistedUser, event: ThreadCreateRequest) {
+async function handleThreadCreate(ws: ServerWebSocket<SocketData>, user: PersistedUser, event: ThreadCreateRequest) {
   try {
     ensureCodexReady();
     const requestedCwd = resolveRequestedThreadCwd(user, event);
@@ -690,6 +690,11 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
     const thread = mergeCodexThread(result.thread, false, false);
     threadCache.set(thread.id, thread);
     user.selectedThreadId = thread.id;
+    sendEvent(ws, {
+      type: "thread:created",
+      requestId: event.requestId,
+      threadId: thread.id,
+    });
     sendUserPatch(user.profile.id, {
       selectedThreadId: thread.id,
       banner: null,
@@ -701,7 +706,13 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
     publishPresenceToAllUsers();
     void syncAllThreadsFromCodex();
   } catch (error) {
-    sendToast(user.profile.id, "error", readErrorMessage(error));
+    const message = readErrorMessage(error);
+    sendEvent(ws, {
+      type: "thread:create-failed",
+      requestId: event.requestId,
+      message,
+    });
+    sendToast(user.profile.id, "error", message);
   }
 }
 

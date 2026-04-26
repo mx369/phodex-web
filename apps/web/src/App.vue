@@ -2270,7 +2270,12 @@ watch(verificationCode, () => {
 
 function handleSend() {
   if (!currentThread.value) {
-    client.createThreadAndSend("Phodex Web", "local");
+    void client
+      .createThreadAndSend("Phodex Web", "local")
+      .then((threadId) => {
+        navigateToThread(threadId);
+      })
+      .catch(() => {});
     return;
   }
   client.sendComposer(currentThread.value.id);
@@ -2306,7 +2311,12 @@ function startToolbarLocalChat() {
     return;
   }
   closeModelPicker();
-  client.createThread(currentThread.value.projectLabel, "local", currentThread.value.repoLabel || undefined);
+  void client
+    .createThread(currentThread.value.projectLabel, "local", currentThread.value.repoLabel || undefined)
+    .then((threadId) => {
+      navigateToThread(threadId);
+    })
+    .catch(() => {});
 }
 
 function startWorktreeChat() {
@@ -2381,11 +2391,16 @@ function confirmDialogAction() {
     if (!nextSelection?.cwd && nextSelection?.isCustom) {
       return;
     }
-    client.createThread(
-      nextSelection?.projectLabel ?? dialogState.value.projectLabel,
-      dialogState.value.mode,
-      nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
-    );
+    void client
+      .createThread(
+        nextSelection?.projectLabel ?? dialogState.value.projectLabel,
+        dialogState.value.mode,
+        nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
+      )
+      .then((threadId) => {
+        navigateToThread(threadId);
+      })
+      .catch(() => {});
     closeDialog();
     closeSidebar();
     return;

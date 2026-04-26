@@ -29,10 +29,15 @@ type AuthStatusTone = "neutral" | "success" | "error";
 type AuthPhase = "idle" | "requested" | "authenticated";
 type PendingThreadCreate = {
   tempId: string;
+  requestId: string;
+  projectLabel: string;
+  mode: ThreadCreateMode;
   previousSelectedThreadId: string | null;
   slowTimerId: number;
   failureTimerId: number | null;
   isSlow: boolean;
+  resolve: (threadId: string) => void;
+  reject: (error: Error) => void;
 };
 type PendingRunFeedback = {
   threadId: string;
@@ -366,28 +371,30 @@ export function createAppClient() {
   function createThread(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
     if (pendingThreadCreate) {
       pushToast("info", "A new chat is already starting on your Mac.");
-      return false;
+      return Promise.reject(new Error("A new chat is already starting on your Mac."));
     }
 
+    const requestId = createClientId();
     const sent = send({
       type: "thread:create",
+      requestId,
       projectLabel,
       cwd,
       mode,
     });
     if (!sent) {
-      return false;
+      return Promise.reject(new Error("Relay not connected yet."));
     }
 
-    beginPendingThreadCreate(projectLabel ?? "Phodex Web", mode);
-    return true;
+    return beginPendingThreadCreate(requestId, projectLabel ?? "Phodex Web", mode);
   }
 
   function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
-    const created = createThread(projectLabel, mode, cwd);
-    if (created) {
-      pendingSendAfterThreadCreate = true;
-    }
+    pendingSendAfterThreadCreate = true;
+    return createThread(projectLabel, mode, cwd).catch((error) => {
+      pendingSendAfterThreadCreate = false;
+      throw error;
+    });
   }
 
   function selectThread(threadId: string) {
@@ -602,6 +609,12 @@ function send(event: ClientEvent) {
 
 function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
+    case "thread:created":
+      resolvePendingThreadCreateSuccess(event.requestId, event.threadId);
+      break;
+    case "thread:create-failed":
+      rejectPendingThreadCreate(event.requestId, event.message);
+      break;
     case "snapshot": {
       const nextSnapshot = mergeSnapshotWithPendingThread(event.snapshot);
       const previousSelectedThread = findThread(nextSnapshot.selectedThreadId ?? "");
@@ -811,9 +824,9 @@ function updateConnectionState(next: AppSnapshot["connection"]["state"]) {
   state.snapshot.connection.state = next;
 }
 
-function beginPendingThreadCreate(projectLabel: string, mode: ThreadCreateMode) {
+function beginPendingThreadCreate(requestId: string, projectLabel: string, mode: ThreadCreateMode) {
   if (!state.snapshot) {
-    return;
+    return Promise.reject(new Error("Snapshot not ready."));
   }
 
   rollbackPendingThreadCreate(false);
@@ -847,15 +860,22 @@ function beginPendingThreadCreate(projectLabel: string, mode: ThreadCreateMode) 
   state.snapshot.selectedThreadId = tempId;
   state.snapshot.threads = [tempThread, ...state.snapshot.threads.filter((thread) => thread.id !== tempId)];
 
-  pendingThreadCreate = {
-    tempId,
-    previousSelectedThreadId,
-    slowTimerId: window.setTimeout(() => {
-      markPendingThreadCreateSlow(tempId, mode);
-    }, PENDING_THREAD_SLOW_MS),
-    failureTimerId: null,
-    isSlow: false,
-  };
+  return new Promise<string>((resolve, reject) => {
+    pendingThreadCreate = {
+      tempId,
+      requestId,
+      projectLabel,
+      mode,
+      previousSelectedThreadId,
+      slowTimerId: window.setTimeout(() => {
+        markPendingThreadCreateSlow(tempId, mode);
+      }, PENDING_THREAD_SLOW_MS),
+      failureTimerId: null,
+      isSlow: false,
+      resolve,
+      reject,
+    };
+  });
 }
 
 function resolvePendingThreadCreate(selectedThreadId: string | null) {
@@ -880,12 +900,28 @@ function resolvePendingThreadCreate(selectedThreadId: string | null) {
   pendingThreadCreate = null;
 }
 
+function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) {
+  if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
+    return;
+  }
+  pendingThreadCreate.resolve(threadId);
+}
+
+function rejectPendingThreadCreate(requestId: string, message: string) {
+  if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
+    return;
+  }
+  const reject = pendingThreadCreate.reject;
+  rollbackPendingThreadCreate(false);
+  reject(new Error(message));
+}
+
 function rollbackPendingThreadCreate(pushFallbackToast = true) {
   if (!pendingThreadCreate) {
     return;
   }
 
-  const { tempId, previousSelectedThreadId, slowTimerId, failureTimerId } = pendingThreadCreate;
+  const { tempId, previousSelectedThreadId, slowTimerId, failureTimerId, reject } = pendingThreadCreate;
   window.clearTimeout(slowTimerId);
   if (failureTimerId !== null) {
     window.clearTimeout(failureTimerId);
@@ -906,6 +942,7 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   pendingThreadCreate = null;
 
   if (pushFallbackToast) {
+    reject(new Error("Unable to keep the pending chat open."));
     pushToast("error", "Unable to keep the pending chat open.");
   }
 }
