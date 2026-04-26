@@ -373,7 +373,7 @@ const isScrolledToBottom = ref(true);
 const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
-const DRAWER_CLOSE_NAVIGATION_DELAY_MS = 180;
+const DRAWER_CLOSE_NAVIGATION_FALLBACK_MS = 320;
 const DRAWER_THREAD_SYNC_HINT_MS = 8_000;
 const DRAWER_THREAD_BATCH_SIZE = 16;
 const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
@@ -390,6 +390,7 @@ let ignoreManualAutoScrollUntil = 0;
 let installCommandCopyTimer: number | null = null;
 let drawerThreadSyncTimer: number | null = null;
 let drawerThreadNavigationTimer: number | null = null;
+let pendingDrawerThreadNavigationId: string | null = null;
 let previousScrollRestoration: ScrollRestoration | null = null;
 const installManifest = ref<InstallManifest | null>(null);
 const installManifestLoading = ref(false);
@@ -599,7 +600,7 @@ onBeforeUnmount(() => {
   conversationResizeObserver = null;
   clearInstallCommandCopyTimer();
   clearDrawerThreadSyncTimer();
-  clearDrawerThreadNavigationTimer();
+  clearPendingDrawerThreadNavigation();
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -784,6 +785,11 @@ function clearDrawerThreadNavigationTimer() {
   }
   window.clearTimeout(drawerThreadNavigationTimer);
   drawerThreadNavigationTimer = null;
+}
+
+function clearPendingDrawerThreadNavigation() {
+  clearDrawerThreadNavigationTimer();
+  pendingDrawerThreadNavigationId = null;
 }
 
 function showDrawerThreadSyncHint() {
@@ -2306,6 +2312,7 @@ function handleComposerKeyDown(event: KeyboardEvent) {
 }
 
 function openSidebar() {
+  clearPendingDrawerThreadNavigation();
   closeModelPicker();
   closeThreadMenu();
   state.ui.sidebarOpen = true;
@@ -2538,15 +2545,31 @@ function navigateToThread(threadId: string) {
 }
 
 function handleDrawerThreadClick(threadId: string) {
-  clearDrawerThreadNavigationTimer();
+  clearPendingDrawerThreadNavigation();
   closeSidebar();
   if (currentThread.value?.id === threadId) {
     return;
   }
+  pendingDrawerThreadNavigationId = threadId;
   drawerThreadNavigationTimer = window.setTimeout(() => {
-    drawerThreadNavigationTimer = null;
-    navigateToThread(threadId);
-  }, DRAWER_CLOSE_NAVIGATION_DELAY_MS);
+    flushPendingDrawerThreadNavigation();
+  }, DRAWER_CLOSE_NAVIGATION_FALLBACK_MS);
+}
+
+function flushPendingDrawerThreadNavigation() {
+  const threadId = pendingDrawerThreadNavigationId;
+  if (!threadId) {
+    return;
+  }
+  clearDrawerThreadNavigationTimer();
+  pendingDrawerThreadNavigationId = null;
+  navigateToThread(threadId);
+}
+
+function handleDrawerAfterLeave() {
+  window.requestAnimationFrame(() => {
+    flushPendingDrawerThreadNavigation();
+  });
 }
 
 function navigateHome() {
@@ -3452,7 +3475,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
               <transition v-if="!activePanel" name="panel" mode="out-in">
                 <div key="main-shell" class="phone-app">
-                  <transition name="drawer">
+                  <transition name="drawer" @after-leave="handleDrawerAfterLeave">
                     <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
                       <button class="icon-button icon-button--tiny drawer-dismiss" aria-label="Close menu" @click="closeSidebar">
                         <AppIcon name="close" />
