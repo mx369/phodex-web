@@ -462,6 +462,13 @@ export function createAppClient() {
     });
   }
 
+  function deleteThread(threadId: string) {
+    send({
+      type: "thread:delete",
+      threadId,
+    });
+  }
+
   function sendComposer(threadId: string) {
     return flushComposer(threadId);
   }
@@ -559,6 +566,7 @@ export function createAppClient() {
     clearThreadSelection,
     renameThread,
     toggleArchiveThread,
+    deleteThread,
     sendComposer,
     resumeDraft,
     removeDraft,

@@ -43,6 +43,7 @@ type AppIconName =
   | "restore"
   | "stop"
   | "terminal"
+  | "trash"
   | "worktree";
 
 type AppIconSpec = {
@@ -218,6 +219,17 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
     ],
     polylines: ["5.5 8 9.5 12 5.5 16"],
   },
+  trash: {
+    lines: [
+      { x1: 5, y1: 7, x2: 19, y2: 7 },
+      { x1: 10, y1: 11, x2: 10, y2: 17 },
+      { x1: 14, y1: 11, x2: 14, y2: 17 },
+    ],
+    paths: [
+      "M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7",
+      "M7 7l.75 12A1.25 1.25 0 0 0 9 20.25h6A1.25 1.25 0 0 0 16.25 19L17 7",
+    ],
+  },
   worktree: {
     circles: [
       { cx: 7, cy: 5.75, r: 1.7 },
@@ -279,6 +291,7 @@ type ShellPageState = "settings" | "archived" | "paywall";
 
 type AppDialogState =
   | { kind: "rename-thread"; threadId: string; title: string }
+  | { kind: "delete-thread"; threadId: string; title: string }
   | { kind: "archive-group"; projectLabel: string; liveCount: number }
   | {
       kind: "create-thread";
@@ -361,6 +374,8 @@ const modelPickerOpen = ref(false);
 const modelPickerEl = ref<HTMLElement | null>(null);
 const threadMenuOpen = ref(false);
 const threadMenuEl = ref<HTMLElement | null>(null);
+const drawerThreadMenuOpenId = ref<string | null>(null);
+const drawerThreadMenuEl = ref<HTMLElement | null>(null);
 const imagePreviewState = ref<ImagePreviewState | null>(null);
 const composerImageInputEl = ref<HTMLInputElement | null>(null);
 const composerInputEl = ref<HTMLTextAreaElement | null>(null);
@@ -1286,6 +1301,8 @@ const dialogTitle = computed(() => {
       return "Code Changes";
     case "rename-thread":
       return "Rename chat";
+    case "delete-thread":
+      return "Delete chat?";
     case "archive-group":
       return `Archive "${dialogState.value.projectLabel}"?`;
     default:
@@ -1306,6 +1323,8 @@ const dialogBody = computed(() => {
         : `Inspect the working-tree diff for ${dialogState.value.title}.`;
     case "rename-thread":
       return "Update the thread title shown in the sidebar and top navigation.";
+    case "delete-thread":
+      return "This sends a delete request to the Codex bridge for this conversation. If the bridge cannot delete it, you will see an error and the chat will remain available.";
     case "archive-group":
       return `All ${dialogState.value.liveCount} live chats in this project group will move to Archived Chats.`;
     default:
@@ -1321,6 +1340,8 @@ const dialogConfirmLabel = computed(() => {
       return dialogState.value.mode === "worktree" ? "Create Worktree" : "Start Chat";
     case "rename-thread":
       return "Save";
+    case "delete-thread":
+      return "Delete";
     case "archive-group":
       return "Archive";
     default:
@@ -2263,11 +2284,16 @@ function closeThreadMenu() {
   threadMenuOpen.value = false;
 }
 
+function closeDrawerThreadMenu() {
+  drawerThreadMenuOpenId.value = null;
+}
+
 function toggleModelPicker() {
   if (isCurrentThreadPendingCreate.value) {
     return;
   }
   closeThreadMenu();
+  closeDrawerThreadMenu();
   modelPickerOpen.value = !modelPickerOpen.value;
 }
 
@@ -2297,7 +2323,20 @@ function toggleThreadMenu() {
     return;
   }
   closeModelPicker();
+  closeDrawerThreadMenu();
   threadMenuOpen.value = !threadMenuOpen.value;
+}
+
+function toggleDrawerThreadMenu(threadId: string) {
+  closeModelPicker();
+  closeThreadMenu();
+  drawerThreadMenuOpenId.value = drawerThreadMenuOpenId.value === threadId ? null : threadId;
+}
+
+function setDrawerThreadMenuEl(threadId: string, element: Element | null) {
+  if (drawerThreadMenuOpenId.value === threadId) {
+    drawerThreadMenuEl.value = element instanceof HTMLElement ? element : null;
+  }
 }
 
 function handleDocumentPointerDown(event: PointerEvent) {
@@ -2311,14 +2350,19 @@ function handleDocumentPointerDown(event: PointerEvent) {
   if (threadMenuOpen.value && threadMenuEl.value?.contains(target)) {
     return;
   }
+  if (drawerThreadMenuOpenId.value && drawerThreadMenuEl.value?.contains(target)) {
+    return;
+  }
   closeModelPicker();
   closeThreadMenu();
+  closeDrawerThreadMenu();
 }
 
 function handleDocumentKeyDown(event: KeyboardEvent) {
   if (event.key === "Escape") {
     closeModelPicker();
     closeThreadMenu();
+    closeDrawerThreadMenu();
   }
 }
 
@@ -2340,12 +2384,14 @@ function openSidebar() {
   clearPendingDrawerThreadNavigation();
   closeModelPicker();
   closeThreadMenu();
+  closeDrawerThreadMenu();
   state.ui.sidebarOpen = true;
 }
 
 function closeSidebar() {
   closeModelPicker();
   closeThreadMenu();
+  closeDrawerThreadMenu();
   state.ui.sidebarOpen = false;
 }
 
@@ -2490,9 +2536,19 @@ function handleSend() {
 }
 
 function handleRenameThread(threadId: string, currentTitle: string) {
+  closeDrawerThreadMenu();
   dialogInput.value = currentTitle;
   dialogState.value = {
     kind: "rename-thread",
+    threadId,
+    title: currentTitle,
+  };
+}
+
+function handleDeleteThread(threadId: string, currentTitle: string) {
+  closeDrawerThreadMenu();
+  dialogState.value = {
+    kind: "delete-thread",
     threadId,
     title: currentTitle,
   };
@@ -2608,6 +2664,7 @@ function navigateHome() {
 function closePanel() {
   closeModelPicker();
   closeThreadMenu();
+  closeDrawerThreadMenu();
   if (shellPageStack.value.length > 1) {
     shellPageStack.value = shellPageStack.value.slice(0, -1);
     return;
@@ -2619,6 +2676,7 @@ function closePanel() {
 function closeDialog() {
   closeModelPicker();
   closeThreadMenu();
+  closeDrawerThreadMenu();
   resetProjectBrowserState();
   resetProjectDiffState();
   dialogState.value = null;
@@ -2659,6 +2717,12 @@ function confirmDialogAction() {
     if (nextTitle) {
       client.renameThread(dialogState.value.threadId, nextTitle);
     }
+    closeDialog();
+    return;
+  }
+
+  if (dialogState.value.kind === "delete-thread") {
+    client.deleteThread(dialogState.value.threadId);
     closeDialog();
     return;
   }
@@ -3549,7 +3613,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           </div>
 
                           <div v-if="isDrawerGroupExpanded(group.label)" class="drawer-group__threads">
-                            <button
+                            <article
                               v-for="thread in visibleDrawerThreads(group)"
                               :key="thread.id"
                               class="drawer-thread"
@@ -3557,7 +3621,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 'drawer-thread--selected': currentThread?.id === thread.id,
                                 'drawer-thread--archived': thread.state === 'archived',
                               }"
+                              role="button"
+                              tabindex="0"
                               @click="handleDrawerThreadClick(thread.id)"
+                              @keydown.enter.prevent="handleDrawerThreadClick(thread.id)"
+                              @keydown.space.prevent="handleDrawerThreadClick(thread.id)"
                             >
                               <div class="drawer-thread__indicator">
                                 <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
@@ -3582,22 +3650,51 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               </div>
 
                               <div class="drawer-thread__actions">
-                                <button
-                                  class="icon-button icon-button--tiny"
-                                  aria-label="Rename chat"
-                                  @click.stop="handleRenameThread(thread.id, thread.title)"
+                                <div
+                                  :ref="(el) => setDrawerThreadMenuEl(thread.id, el)"
+                                  class="drawer-thread-menu"
                                 >
-                                  <AppIcon name="edit" />
-                                </button>
-                                <button
-                                  class="icon-button icon-button--tiny"
-                                  :aria-label="thread.state === 'archived' ? 'Restore chat' : 'Archive chat'"
-                                  @click.stop="client.toggleArchiveThread(thread)"
-                                >
-                                  <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
-                                </button>
+                                  <button
+                                    class="icon-button icon-button--tiny drawer-thread-menu__trigger"
+                                    type="button"
+                                    aria-label="More chat actions"
+                                    :aria-expanded="drawerThreadMenuOpenId === thread.id"
+                                    aria-haspopup="menu"
+                                    @click.stop="toggleDrawerThreadMenu(thread.id)"
+                                  >
+                                    <AppIcon name="more-horizontal" />
+                                  </button>
+
+                                  <transition name="composer-picker">
+                                    <div
+                                      v-if="drawerThreadMenuOpenId === thread.id"
+                                      class="drawer-thread-menu__panel"
+                                      role="menu"
+                                      aria-label="Chat actions"
+                                      @click.stop
+                                    >
+                                      <button class="drawer-thread-menu__action" type="button" role="menuitem" @click="handleRenameThread(thread.id, thread.title)">
+                                        <AppIcon name="edit" />
+                                        <span>Edit</span>
+                                      </button>
+                                      <button class="drawer-thread-menu__action" type="button" role="menuitem" @click="client.toggleArchiveThread(thread); closeDrawerThreadMenu()">
+                                        <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
+                                        <span>{{ thread.state === "archived" ? "Restore" : "Archive" }}</span>
+                                      </button>
+                                      <button
+                                        class="drawer-thread-menu__action drawer-thread-menu__action--danger"
+                                        type="button"
+                                        role="menuitem"
+                                        @click="handleDeleteThread(thread.id, thread.title)"
+                                      >
+                                        <AppIcon name="trash" />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  </transition>
+                                </div>
                               </div>
-                            </button>
+                            </article>
                             <button
                               v-if="hiddenDrawerThreadCount(group) > 0"
                               class="drawer-thread-more"
@@ -4446,7 +4543,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 ? "Project"
                                 : dialogState.kind === "project-diff"
                                   ? "Diff"
-                                  : "Confirm"
+                                  : dialogState.kind === "delete-thread"
+                                    ? "Delete"
+                                    : "Confirm"
                         }}
                       </span>
                       <h3>{{ dialogTitle }}</h3>
@@ -4700,6 +4799,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       placeholder="Conversation title"
                     />
 
+                    <div v-else-if="dialogState.kind === 'delete-thread'" class="app-dialog-card__danger-copy">
+                      <strong>{{ dialogState.title }}</strong>
+                      <span>Use archive if you only want to hide this chat from the main list.</span>
+                    </div>
+
                     <div
                       class="alert-card__actions app-dialog-card__footer"
                       :class="{
@@ -4714,7 +4818,12 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </template>
                       <template v-else>
                         <button class="ghost-cta ghost-cta--compact" @click="closeDialog">Cancel</button>
-                        <button class="primary-cta primary-cta--compact" :disabled="dialogConfirmDisabled" @click="confirmDialogAction">
+                        <button
+                          class="primary-cta primary-cta--compact"
+                          :class="{ 'primary-cta--danger': dialogState.kind === 'delete-thread' }"
+                          :disabled="dialogConfirmDisabled"
+                          @click="confirmDialogAction"
+                        >
                           {{ dialogConfirmLabel }}
                         </button>
                       </template>
