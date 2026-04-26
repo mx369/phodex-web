@@ -3562,35 +3562,15 @@ button {
 
 .drawer-new-chat {
   flex: 0 0 auto;
-  width: 42px;
-  min-width: 42px;
-  min-height: 42px;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
   margin-top: 0;
-  padding: 0;
-  border: 0;
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--muted-strong);
-  box-shadow: none;
 }
 
 .drawer-new-chat:hover,
 .drawer-new-chat:focus-visible {
-  background: rgba(255, 255, 255, 0.88);
   outline: none;
-}
-
-.drawer-new-chat__icon {
-  display: inline-grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  background: transparent;
-}
-
-.drawer-new-chat__icon .app-icon {
-  width: 13px;
-  height: 13px;
 }
 
 .drawer-toolbar-pill {
