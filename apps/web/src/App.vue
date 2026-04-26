@@ -1304,7 +1304,7 @@ watch(
 );
 
 watch(
-  [isAuthenticated, rootFlow, activePanel, () => currentThread.value?.id ?? null],
+  [isAuthenticated, rootFlow, activePanel],
   () => {
     syncRouteFromState();
   },
@@ -2330,6 +2330,27 @@ function openPanel(panel: ShellPageState, replace = false) {
   state.ui.sidebarOpen = false;
 }
 
+function navigateToThread(threadId: string) {
+  const machineId = currentRouteMachineId();
+  if (!machineId) {
+    client.selectThread(threadId);
+    return;
+  }
+
+  void router.push({
+    name: "thread",
+    params: { machineId, threadId },
+    query: preservedRouteQuery(),
+  });
+}
+
+function navigateHome() {
+  void router.push({
+    name: "home",
+    query: preservedRouteQuery(),
+  });
+}
+
 function closePanel() {
   closeModelPicker();
   closeThreadMenu();
@@ -3226,7 +3247,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <button
                             v-if="currentThread"
                             class="drawer-toolbar-pill"
-                            @click="client.clearThreadSelection()"
+                            @click="navigateHome()"
                           >
                             <AppIcon name="home" />
                             <span>Home</span>
@@ -3280,7 +3301,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 'drawer-thread--archived': thread.state === 'archived',
                               }"
                               @click="
-                                client.selectThread(thread.id);
+                                navigateToThread(thread.id);
                                 closeSidebar();
                               "
                             >
