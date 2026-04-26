@@ -2403,7 +2403,7 @@ button {
   padding: 12px;
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: 16px;
-  background: rgba(18, 18, 18, 0.035);
+  background: rgba(255, 255, 255, 0.56);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -2411,8 +2411,11 @@ button {
 }
 
 .home-empty-state__device-card--active {
-  border-color: rgba(38, 162, 105, 0.16);
-  background: rgba(238, 248, 242, 0.72);
+  border-color: rgba(38, 162, 105, 0.22);
+  background:
+    linear-gradient(180deg, rgba(239, 250, 245, 0.9), rgba(239, 250, 245, 0.62)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(38, 162, 105, 0.08);
 }
 
 .home-empty-state__device-card--selectable {
@@ -2421,8 +2424,8 @@ button {
 
 .home-empty-state__device-card--selectable:hover,
 .home-empty-state__device-card--selectable:focus-visible {
-  border-color: rgba(18, 18, 18, 0.12);
-  background: rgba(18, 18, 18, 0.05);
+  border-color: rgba(38, 162, 105, 0.16);
+  background: rgba(249, 253, 251, 0.88);
   outline: none;
 }
 
@@ -2434,6 +2437,7 @@ button {
 
 .home-empty-state__device-card--disabled {
   cursor: default;
+  opacity: 0.68;
 }
 
 .home-empty-state__trusted-row {
@@ -2499,19 +2503,14 @@ button {
   color: var(--muted-strong);
 }
 
-.home-empty-state__device-chip--green {
+.home-empty-state__device-card--selectable .home-empty-state__device-chip {
+  background: rgba(18, 18, 18, 0.06);
+  color: var(--muted-strong);
+}
+
+.home-empty-state__device-chip--current {
   background: rgba(38, 162, 105, 0.14);
   color: #21714c;
-}
-
-.home-empty-state__device-chip--amber {
-  background: rgba(239, 142, 85, 0.14);
-  color: #9a572b;
-}
-
-.home-empty-state__device-chip--slate {
-  background: rgba(18, 18, 18, 0.08);
-  color: var(--muted-strong);
 }
 
 .home-empty-state__install-card {

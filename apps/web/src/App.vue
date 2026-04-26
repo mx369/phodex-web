@@ -1040,24 +1040,14 @@ function bridgeDeviceLabel(device: BridgeDeviceSummary) {
   return device.macLabel?.trim() || "Awaiting first check-in";
 }
 
-function bridgeDeviceTone(device: BridgeDeviceSummary) {
-  if (device.state === "connected") {
-    return "green";
-  }
-  if (device.bridgeOnline || device.state === "connecting") {
-    return "amber";
-  }
-  return "slate";
-}
-
 function bridgeDeviceStateLabel(device: BridgeDeviceSummary) {
-  if (device.state === "connected") {
-    return isActiveBridgeDevice(device) ? "Active" : "Connected";
+  if (isActiveBridgeDevice(device)) {
+    return "Current";
   }
-  if (device.bridgeOnline || device.state === "connecting") {
-    return "Linking";
+  if (canSelectBridgeDevice(device)) {
+    return "Available";
   }
-  return "Saved";
+  return "";
 }
 
 function bridgeDeviceMeta(device: BridgeDeviceSummary) {
@@ -4046,7 +4036,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           </div>
                         </div>
                         <div v-if="homeBridgeDevices.length" class="home-empty-state__device-list">
-                          <span class="section-label">{{ homeBridgeDevices.length > 1 ? "Registered Macs" : "Connected To Mac" }}</span>
+                          <span class="section-label">{{ homeBridgeDevices.length > 1 ? "Devices" : "Device" }}</span>
                           <div class="home-empty-state__device-stack">
                             <article
                               v-for="device in homeBridgeDevices"
@@ -4073,8 +4063,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   <p>{{ bridgeDeviceMeta(device) }}</p>
                                 </div>
                                 <span
+                                  v-if="bridgeDeviceStateLabel(device)"
                                   class="home-empty-state__device-chip"
-                                  :class="`home-empty-state__device-chip--${bridgeDeviceTone(device)}`"
+                                  :class="{ 'home-empty-state__device-chip--current': isActiveBridgeDevice(device) }"
                                 >
                                   {{ bridgeDeviceStateLabel(device) }}
                                 </span>
