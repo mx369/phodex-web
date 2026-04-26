@@ -8,14 +8,12 @@ import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
 import type {
   AppSettings,
   AppSnapshot,
-  AuthSession,
   BridgeProjectRequest,
   BridgeCommand,
   BridgeDispatchEvent,
   BridgeEvent,
   ClientEvent,
   CompletionBanner,
-  DeliveryMode,
   DiffStats,
   FileChangeSummary,
   ImageMessageCard,
@@ -28,12 +26,10 @@ import type {
   ProjectTreePayload,
   QueuedDraft,
   RelayConnection,
-  RequestCodeResponse,
   ServerEvent,
   ThreadMessage,
   ThreadRecord,
   UserSummary,
-  VerifyCodeResponse,
 } from "@phodex/shared";
 
 type PersistedUser = {
@@ -48,12 +44,6 @@ type SessionRecord = {
   expiresAt: string;
 };
 
-type OtpRecord = {
-  code: string;
-  expiresAt: string;
-  delivery: DeliveryMode;
-};
-
 type ThreadLocalState = {
   customTitle?: string;
   queuedDrafts: QueuedDraft[];
@@ -63,7 +53,6 @@ type ThreadLocalState = {
 type PersistedState = {
   users: Record<string, PersistedUser>;
   sessions: Record<string, SessionRecord>;
-  otpCodes: Record<string, OtpRecord>;
   threadLocal: Record<string, ThreadLocalState>;
 };
 
@@ -111,12 +100,6 @@ type SessionHistoryFallback = {
   totalDiff: DiffStats;
 };
 
-type OtpMailConfig = {
-  resendApiKey: string;
-  authEmailFrom: string;
-  sourceLabel: string;
-};
-
 type ThreadCreateRequest = Extract<ClientEvent, { type: "thread:create" }>;
 type MessageSendResult = "queued" | "started" | "failed";
 
@@ -147,16 +130,12 @@ const distDir = resolve(appRoot, "apps/web/dist");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
-const OTP_TTL_MS = 5 * 60 * 1000;
-const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const PUBLIC_RELAY_URL = process.env.PHODEX_RELAY_URL ?? "ws://127.0.0.1:3443";
 const BRIDGE_TOKEN = process.env.PHODEX_BRIDGE_TOKEN?.trim() ?? "";
 const LEGACY_BRIDGE_SECRET = process.env.PHODEX_BRIDGE_SECRET?.trim() ?? "";
 const BRIDGE_RECONNECT_MS = Number(process.env.PHODEX_BRIDGE_RECONNECT_MS ?? "1500");
-const AUTH_ENV_FALLBACK_FILE =
-  process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEFAULT_THREAD_CWD = process.env.PHODEX_DEFAULT_CWD ?? appRoot;
 const PROJECTS_ROOT = process.env.PHODEX_PROJECTS_ROOT ?? resolve(homedir(), ".phodex-web/projects");
 const WORKTREE_ROOT = process.env.PHODEX_WORKTREE_ROOT ?? resolve(homedir(), ".codex/worktrees");
@@ -166,7 +145,6 @@ const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const ACTIVE_TURN_STALE_MS = Math.max(60_000, Number(process.env.PHODEX_ACTIVE_TURN_STALE_MS ?? "600000"));
 const CODEX_BIN = resolveCodexBinary();
-const OTP_MAIL_CONFIG = resolveOtpMailConfig();
 const FLOW_TRACE_ENABLED = /^(1|true)$/i.test(process.env.PHODEX_FLOW_TRACE ?? "");
 const DEV_ORIGINS = new Set([
   "http://localhost:5173",
@@ -179,7 +157,6 @@ const DEV_ORIGINS = new Set([
 
 let persisted = loadState();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
-const legacyOtpCodesPruned = pruneLegacyOtpCodes();
 const clientsByUserId = new Map<string, Set<ServerWebSocket<SocketData>>>();
 const bridgeUsers = new Map<string, PersistedUser>();
 const threadCache = new Map<string, ThreadRecord>();
@@ -231,10 +208,6 @@ if (MANAGE_CODEX) {
 } else {
   console.log(`[phodex-bridge] Reusing external Codex app-server ${CODEX_WS_URL} with managed fallback disabled.`);
 }
-if (legacyOtpCodesPruned) {
-  schedulePersist();
-}
-
 process.on("SIGINT", shutdownCodexBridge);
 process.on("SIGTERM", shutdownCodexBridge);
 
@@ -513,84 +486,6 @@ function clearRelayReconnectTimer() {
   }
   clearTimeout(relayReconnectTimer);
   relayReconnectTimer = null;
-}
-
-async function handleRequestCode(req: Request) {
-  const body = await safeJson(req);
-  const email = normalizeEmail(body?.email);
-  if (!email) {
-    return json({ ok: false, error: "A valid email is required." }, 400);
-  }
-
-  if (!OTP_MAIL_CONFIG) {
-    return json({ ok: false, error: "OTP email delivery is not configured on this relay." }, 503);
-  }
-
-  const user = ensureUser(email);
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
-  const delivery: DeliveryMode = "resend";
-
-  try {
-    await deliverCode(email, code);
-  } catch (error) {
-    console.error(`[phodex] failed to deliver OTP for ${email}`, error);
-    return json({ ok: false, error: "Unable to send verification code right now." }, 502);
-  }
-
-  persisted.otpCodes[email] = {
-    code,
-    expiresAt,
-    delivery,
-  };
-  schedulePersist();
-
-  const response: RequestCodeResponse = {
-    ok: true,
-    delivery,
-    expiresInMs: OTP_TTL_MS,
-  };
-
-  console.log(`[phodex] issued OTP for ${user.profile.email} delivery=${delivery} expiresAt=${expiresAt}`);
-  return json(response);
-}
-
-async function handleVerifyCode(req: Request) {
-  const body = await safeJson(req);
-  const email = normalizeEmail(body?.email);
-  const code = String(body?.code ?? "").trim();
-  if (!email || !code) {
-    return json({ ok: false, error: "Email and verification code are required." }, 400);
-  }
-
-  const record = persisted.otpCodes[email];
-  const validDynamicCode = record && record.delivery === "resend" && !otpExpired(record.expiresAt) && record.code === code;
-
-  if (!validDynamicCode) {
-    return json({ ok: false, error: "Invalid or expired code." }, 401);
-  }
-
-  const user = ensureUser(email);
-  const token = randomUUID();
-  const session: AuthSession = {
-    token,
-    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-    user: user.profile,
-  };
-
-  persisted.sessions[token] = {
-    userId: user.profile.id,
-    expiresAt: session.expiresAt,
-  };
-  delete persisted.otpCodes[email];
-  schedulePersist();
-
-  const response: VerifyCodeResponse = {
-    ok: true,
-    session,
-    snapshot: snapshotForUser(user.profile.id),
-  };
-  return json(response);
 }
 
 function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) {
@@ -3768,202 +3663,6 @@ function serveStatic(pathname: string) {
   );
 }
 
-function normalizeEmail(value: unknown) {
-  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
-}
-
-async function deliverCode(email: string, code: string): Promise<DeliveryMode> {
-  if (!OTP_MAIL_CONFIG) {
-    throw new Error("OTP email delivery is not configured on this relay.");
-  }
-
-  const payload = renderOtpEmail(code);
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${OTP_MAIL_CONFIG.resendApiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from: OTP_MAIL_CONFIG.authEmailFrom,
-      to: [email],
-      subject: payload.subject,
-      text: payload.text,
-      html: payload.html,
-    }),
-  });
-
-  if (!response.ok) {
-    const detail = (await response.text()).trim();
-    throw new Error(
-      `Resend rejected OTP email (${response.status})${detail ? `: ${detail.slice(0, 240)}` : ""}`
-    );
-  }
-
-  return "resend";
-}
-
-function pruneLegacyOtpCodes() {
-  let changed = false;
-  for (const [email, record] of Object.entries(persisted.otpCodes)) {
-    if (record.delivery !== "resend" || otpExpired(record.expiresAt)) {
-      delete persisted.otpCodes[email];
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function resolveOtpMailConfig(): OtpMailConfig | null {
-  const fallbackEnv = readOptionalEnvFile(AUTH_ENV_FALLBACK_FILE);
-  const resendApiKey =
-    readConfigValue(process.env.PHODEX_RESEND_API_KEY) ||
-    readConfigValue(process.env.RESEND_API_KEY) ||
-    fallbackEnv.RESEND_API_KEY ||
-    "";
-  const authEmailFrom =
-    readConfigValue(process.env.PHODEX_AUTH_EMAIL_FROM) ||
-    readConfigValue(process.env.AUTH_EMAIL_FROM) ||
-    fallbackEnv.AUTH_EMAIL_FROM ||
-    "";
-
-  if (!resendApiKey || !authEmailFrom) {
-    return null;
-  }
-
-  const sourceLabel =
-    readConfigValue(process.env.PHODEX_RESEND_API_KEY) || readConfigValue(process.env.RESEND_API_KEY)
-      ? readConfigValue(process.env.PHODEX_AUTH_EMAIL_FROM) || readConfigValue(process.env.AUTH_EMAIL_FROM)
-        ? "process env"
-        : "mixed env + fallback file"
-      : `fallback file ${AUTH_ENV_FALLBACK_FILE}`;
-
-  return {
-    resendApiKey,
-    authEmailFrom,
-    sourceLabel,
-  };
-}
-
-function readOptionalEnvFile(filePath: string) {
-  if (!existsSync(filePath)) {
-    return {} as Record<string, string>;
-  }
-
-  const values: Record<string, string> = {};
-  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) {
-      continue;
-    }
-
-    const [, key, rawValue] = match;
-    const value = readConfigValue(rawValue);
-    if (value) {
-      values[key] = value;
-    }
-  }
-
-  return values;
-}
-
-function readConfigValue(value: string | undefined) {
-  if (!value) {
-    return "";
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-
-  return trimmed;
-}
-
-function renderOtpEmail(code: string) {
-  const title = "Continue with email verification.";
-  const subtitle =
-    "Use this one-time verification code to connect your phone to the relay session running on your Mac.";
-  const expiresLabel = `${Math.round(OTP_TTL_MS / 60_000)} minutes`;
-  const subject = "Your Phodex verification code";
-
-  return {
-    subject,
-    text: [
-      "Phodex",
-      "",
-      title,
-      subtitle,
-      "",
-      `Verification code: ${code}`,
-      `Expires in ${expiresLabel}.`,
-      "",
-      "If you did not request this code, you can ignore this email.",
-    ].join("\n"),
-    html: `<!doctype html>
-<html lang="en">
-  <body style="margin:0;background:#050505;color:#f5f7fb;font-family:Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-    <div style="padding:32px 18px;background:
-      radial-gradient(circle at top, rgba(92,109,255,0.24), transparent 34%),
-      radial-gradient(circle at bottom, rgba(239,142,85,0.18), transparent 28%),
-      #050505;">
-      <div style="max-width:540px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.1);border-radius:28px;background:rgba(14,14,18,0.92);box-shadow:0 28px 60px rgba(0,0,0,0.34);">
-        <div style="display:inline-flex;align-items:center;min-height:28px;padding:0 12px;border:1px solid rgba(255,255,255,0.1);border-radius:999px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.66);font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">Email OTP</div>
-        <div style="margin-top:18px;display:grid;gap:14px;">
-          <div style="width:64px;height:64px;border-radius:18px;background:
-            radial-gradient(circle at 35% 30%, rgba(255,255,255,0.26), transparent 36%),
-            linear-gradient(180deg, rgba(92,109,255,0.98), rgba(58,66,195,0.98));box-shadow:0 18px 42px rgba(92,109,255,0.28);color:#ffffff;font-size:24px;font-weight:800;line-height:64px;text-align:center;">P</div>
-          <div>
-            <h1 style="margin:0;font-size:32px;line-height:1.02;letter-spacing:-0.05em;color:#ffffff;">${escapeHtml(title)}</h1>
-            <p style="margin:10px 0 0;color:rgba(255,255,255,0.64);font-size:15px;line-height:1.7;">${escapeHtml(subtitle)}</p>
-          </div>
-        </div>
-        <div style="margin-top:24px;padding:18px;border:1px solid rgba(255,255,255,0.08);border-radius:24px;background:
-          linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));">
-          <div style="color:rgba(255,255,255,0.56);font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">Verification code</div>
-          <div style="margin-top:12px;padding:18px 20px;border-radius:20px;background:rgba(255,255,255,0.06);color:#ffffff;font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace;font-size:34px;font-weight:700;letter-spacing:0.22em;text-align:center;">${escapeHtml(code)}</div>
-          <p style="margin:12px 0 0;color:rgba(255,255,255,0.62);font-size:13px;line-height:1.6;">This code expires in ${escapeHtml(expiresLabel)}.</p>
-        </div>
-        <div style="margin-top:18px;padding:14px 16px;border:1px solid rgba(255,255,255,0.06);border-radius:20px;background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:13px;line-height:1.7;">
-          If you did not request this code, you can ignore this email.
-        </div>
-      </div>
-    </div>
-  </body>
-</html>`,
-  };
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function safeJson(req: Request) {
-  return req.json().catch(() => ({}));
-}
-
-function otpExpired(expiresAt: string) {
-  return Date.parse(expiresAt) <= Date.now();
-}
-
 function sessionExpired(expiresAt: string) {
   return Date.parse(expiresAt) <= Date.now();
 }
@@ -3986,7 +3685,6 @@ function loadState(): PersistedState {
       return {
         users: {},
         sessions: {},
-        otpCodes: {},
         threadLocal: {},
       };
     }
@@ -3995,14 +3693,12 @@ function loadState(): PersistedState {
     return {
       users: parsed.users ?? {},
       sessions: parsed.sessions ?? {},
-      otpCodes: parsed.otpCodes ?? {},
       threadLocal: parsed.threadLocal ?? {},
     };
   } catch {
     return {
       users: {},
       sessions: {},
-      otpCodes: {},
       threadLocal: {},
     };
   }

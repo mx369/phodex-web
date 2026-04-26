@@ -310,8 +310,8 @@ write_env_file() {
 
   if [[ -n $CODEX_WS_URL ]]; then
     write_env_value PHODEX_CODEX_WS_URL "$CODEX_WS_URL"
-    write_env_value PHODEX_MANAGE_CODEX false
   fi
+  write_env_value PHODEX_MANAGE_CODEX false
 
   persist_runtime_env
 

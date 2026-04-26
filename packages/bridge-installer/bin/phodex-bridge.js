@@ -114,8 +114,8 @@ async function main() {
 
   if (detectedCodexWsUrl) {
     persistedEnv.PHODEX_CODEX_WS_URL = detectedCodexWsUrl;
-    persistedEnv.PHODEX_MANAGE_CODEX = "false";
   }
+  persistedEnv.PHODEX_MANAGE_CODEX = "false";
 
   appendPersistedRuntimeEnv(persistedEnv, process.env);
   persistedEnv.PHODEX_LOGIN_SHELL = resolveLoginShell(persistedEnv.SHELL);
