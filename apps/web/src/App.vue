@@ -60,6 +60,14 @@ type DrawerProjectTarget = {
   isCurrent: boolean;
 };
 
+type DrawerThreadGroup = {
+  label: string;
+  threads: ThreadRecord[];
+  liveCount: number;
+  cwd: string | null;
+  hasWorktree: boolean;
+};
+
 type InstallManifest = {
   version: string;
   relayOrigin: string;
@@ -366,6 +374,7 @@ const TURN_BOTTOM_THRESHOLD = 24;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
 const DRAWER_THREAD_SYNC_HINT_MS = 8_000;
+const DRAWER_THREAD_BATCH_SIZE = 16;
 const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
 const ACCESS_MODE_COMPACT_LABELS: Record<AccessMode, string> = {
   "read-only": "Read",
@@ -384,6 +393,7 @@ const installManifestLoading = ref(false);
 const installCommandCopyState = ref<"idle" | "copied" | "failed">("idle");
 const installCommandPlatform = ref<InstallCommandPlatform>("shell");
 const expandedDrawerGroups = ref<string[]>([]);
+const expandedDrawerThreadLimits = ref<Record<string, number>>({});
 const drawerThreadSyncing = ref(false);
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
@@ -688,7 +698,7 @@ const currentPendingRunFeedback = computed(() => {
   }
   return pending;
 });
-const threadGroups = computed(() => {
+const threadGroups = computed<DrawerThreadGroup[]>(() => {
   const groups = new Map<string, ThreadRecord[]>();
   const search = state.ui.search.trim().toLowerCase();
   const threads = [...liveThreads.value]
@@ -1426,6 +1436,15 @@ const createThreadHintCopy = computed(() => {
     ? "Absolute paths are used as-is. Folder names resolve inside the default Phodex projects directory, but worktree mode still needs the resolved path to belong to an existing git project."
     : "Paste an absolute path to use it directly, or just type a folder name to create it inside the default Phodex projects directory.";
 });
+const createThreadBlockedReason = computed(() => {
+  if (dialogState.value?.kind !== "create-thread") {
+    return "";
+  }
+  if (state.snapshot?.connection.state === "connected") {
+    return "";
+  }
+  return "Your Mac bridge is offline. Reconnect the bridge before starting a new chat.";
+});
 const dialogConfirmDisabled = computed(() => {
   if (!dialogState.value) {
     return false;
@@ -1434,6 +1453,9 @@ const dialogConfirmDisabled = computed(() => {
     return !dialogInput.value.trim();
   }
   if (dialogState.value.kind === "create-thread") {
+    if (createThreadBlockedReason.value) {
+      return true;
+    }
     if (!dialogState.value.useCustomCwd) {
       return false;
     }
@@ -2239,6 +2261,39 @@ function isDrawerGroupExpanded(label: string) {
   return expandedDrawerGroups.value.includes(label);
 }
 
+function drawerThreadLimit(label: string) {
+  return expandedDrawerThreadLimits.value[label] ?? DRAWER_THREAD_BATCH_SIZE;
+}
+
+function visibleDrawerThreads(group: DrawerThreadGroup) {
+  const limit = drawerThreadLimit(group.label);
+  const visible = group.threads.slice(0, limit);
+  const selectedThread = currentThread.value
+    ? group.threads.find((thread) => thread.id === currentThread.value?.id)
+    : null;
+
+  if (!selectedThread || visible.some((thread) => thread.id === selectedThread.id)) {
+    return visible;
+  }
+
+  if (visible.length < limit) {
+    return [...visible, selectedThread];
+  }
+
+  return [...visible.slice(0, Math.max(0, limit - 1)), selectedThread];
+}
+
+function hiddenDrawerThreadCount(group: DrawerThreadGroup) {
+  return Math.max(0, group.threads.length - visibleDrawerThreads(group).length);
+}
+
+function showMoreDrawerThreads(group: DrawerThreadGroup) {
+  expandedDrawerThreadLimits.value = {
+    ...expandedDrawerThreadLimits.value,
+    [group.label]: drawerThreadLimit(group.label) + DRAWER_THREAD_BATCH_SIZE,
+  };
+}
+
 function toggleDrawerGroup(label: string) {
   if (state.ui.search.trim()) {
     return;
@@ -2453,6 +2508,10 @@ function confirmDialogAction() {
   }
 
   if (dialogState.value.kind === "create-thread") {
+    if (createThreadBlockedReason.value) {
+      pushUiToast("error", createThreadBlockedReason.value);
+      return;
+    }
     const nextSelection = createThreadSelection.value;
     if (!nextSelection?.cwd && nextSelection?.isCustom) {
       return;
@@ -2579,7 +2638,13 @@ function currentRouteMachineId() {
       return routeMachineId;
     }
   }
-  return state.snapshot?.activeBridgeId ?? null;
+  return (
+    state.snapshot?.activeBridgeId ??
+    state.snapshot?.bridgeDevices.find((device) => device.state === "connected")?.id ??
+    state.snapshot?.bridgeDevices.find((device) => device.bridgeOnline)?.id ??
+    state.snapshot?.bridgeDevices[0]?.id ??
+    null
+  );
 }
 
 function routeLocationForState(): RouteLocationRaw {
@@ -3384,7 +3449,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                           <div v-if="isDrawerGroupExpanded(group.label)" class="drawer-group__threads">
                             <button
-                              v-for="thread in group.threads"
+                              v-for="thread in visibleDrawerThreads(group)"
                               :key="thread.id"
                               class="drawer-thread"
                               :class="{
@@ -3436,6 +3501,14 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
                                 </button>
                               </div>
+                            </button>
+                            <button
+                              v-if="hiddenDrawerThreadCount(group) > 0"
+                              class="drawer-thread-more"
+                              type="button"
+                              @click="showMoreDrawerThreads(group)"
+                            >
+                              Show {{ Math.min(DRAWER_THREAD_BATCH_SIZE, hiddenDrawerThreadCount(group)) }} more
                             </button>
                           </div>
                         </section>
@@ -4284,6 +4357,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </span>
                       <h3>{{ dialogTitle }}</h3>
                       <p>{{ dialogBody }}</p>
+                      <p v-if="createThreadBlockedReason" class="app-dialog-card__warning">
+                        {{ createThreadBlockedReason }}
+                      </p>
                     </div>
 
                     <template v-if="dialogState.kind === 'create-thread'">
