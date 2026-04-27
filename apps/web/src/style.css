@@ -3604,7 +3604,7 @@ button {
 .phone-drawer__toolbar {
   display: grid;
   gap: 10px;
-  padding: 2px 40px 0 0;
+  padding: 2px 0 0;
 }
 
 .phone-drawer__toolbar-copy {
@@ -3612,6 +3612,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-right: 92px;
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-weight: 700;
@@ -3620,12 +3621,14 @@ button {
 .drawer-search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
 }
 
 .drawer-search {
-  flex: 1;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   min-height: 42px;
   margin-top: 0;
@@ -3647,10 +3650,11 @@ button {
 }
 
 .drawer-new-chat {
-  flex: 0 0 auto;
-  width: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  flex: 0 0 42px;
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  margin-left: auto;
   margin-top: 0;
 }
 
