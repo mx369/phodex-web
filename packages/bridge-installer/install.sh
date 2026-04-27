@@ -208,12 +208,39 @@ codex_ready_url() {
   printf '%s/readyz\n' "$ws_url"
 }
 
+codex_ws_port() {
+  local ws_url=$1
+  local without_scheme
+  without_scheme="${ws_url#ws://}"
+  without_scheme="${without_scheme#wss://}"
+  without_scheme="${without_scheme%%/*}"
+  if [[ $without_scheme == *:* ]]; then
+    printf '%s\n' "${without_scheme##*:}"
+    return
+  fi
+  printf '\n'
+}
+
+codex_ws_with_port() {
+  local port=$1
+  printf 'ws://127.0.0.1:%s\n' "$port"
+}
+
 probe_existing_codex_ready() {
   local ws_url=$1
   local ready_url
   ready_url="$(codex_ready_url "$ws_url")"
   http_request --silent --show-error --location --max-time 1.5 "$ready_url"
   [[ $RESPONSE_STATUS == 200 ]]
+}
+
+port_listener_pids() {
+  local port=$1
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u
+    return
+  fi
+  return 0
 }
 
 choose_ca_bundle() {
@@ -353,6 +380,28 @@ stop_codex_launch_agent() {
   plist_path="$(launch_agent_plist_path "$label")"
   launchctl bootout "$(launch_agent_domain "$label")" >/dev/null 2>&1 || true
   rm -f "$plist_path"
+}
+
+stop_manual_codex_listener() {
+  local ws_url=$1
+  local port
+  local pids
+  port="$(codex_ws_port "$ws_url")"
+  [[ $port =~ ^[0-9]+$ ]] || return
+
+  pids="$(port_listener_pids "$port" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  [[ -n $pids ]] || return
+
+  info "Stopping existing process on Codex app-server port $port: $pids"
+  kill $pids 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    if [[ -z $(port_listener_pids "$port") ]]; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  kill -9 $pids 2>/dev/null || true
 }
 
 stop_existing_bridge() {
@@ -557,25 +606,57 @@ start_codex_process() {
 }
 
 ensure_external_codex_app_server() {
-  [[ -n $CODEX_WS_URL ]] || CODEX_WS_URL="$DEFAULT_CODEX_WS_URL"
-
-  if probe_existing_codex_ready "$CODEX_WS_URL"; then
-    info "Reusing Codex app-server at $CODEX_WS_URL"
-    return
-  fi
-
   resolve_codex
-  info "Starting Codex app-server at $CODEX_WS_URL"
-  write_codex_start_script
+  local preferred_url
+  local preferred_port
+  local port
+  local candidate_url
+  local port_source
+  preferred_url="${CODEX_WS_URL:-$DEFAULT_CODEX_WS_URL}"
+  preferred_port="$(codex_ws_port "$preferred_url")"
 
   if [[ $(uname -s) == Darwin ]]; then
     stop_codex_launch_agent
-    start_codex_launch_agent || error "Failed to register Codex app-server launch agent. Check $(tildify "$CODEX_LOG_FILE")"
-  else
-    start_codex_process
+    stop_manual_codex_listener "$preferred_url"
   fi
 
-  wait_for_codex_ready || error "Codex app-server did not become ready at $CODEX_WS_URL. Check $(tildify "$CODEX_LOG_FILE")"
+  for port in "$preferred_port" 8766 8767 8768 8769 8770 8771 8772 8773 8774 8775; do
+    [[ $port =~ ^[0-9]+$ ]] || continue
+    candidate_url="$(codex_ws_with_port "$port")"
+    CODEX_WS_URL="$candidate_url"
+
+    if [[ -n $(port_listener_pids "$port") ]]; then
+      info "Codex app-server port $port is still occupied; trying another port."
+      continue
+    fi
+
+    info "Starting Codex app-server at $CODEX_WS_URL"
+    write_codex_start_script
+
+    if [[ $(uname -s) == Darwin ]]; then
+      if ! start_codex_launch_agent; then
+        info "Codex app-server launch agent failed on port $port; trying another port."
+        continue
+      fi
+    else
+      start_codex_process
+    fi
+
+    if wait_for_codex_ready; then
+      if [[ $CODEX_WS_URL != "$preferred_url" ]]; then
+        info_bold "Codex app-server port $preferred_port was unavailable; Phodex will use $CODEX_WS_URL instead."
+      fi
+      return
+    fi
+
+    info "Codex app-server did not become ready on port $port; trying another port."
+    if [[ $(uname -s) == Darwin ]]; then
+      stop_codex_launch_agent
+    fi
+  done
+
+  port_source="${preferred_port:-8765}"
+  error "Codex app-server did not become ready. Tried $port_source and fallback ports 8766-8775. Check $(tildify "$CODEX_LOG_FILE")"
 }
 
 wait_for_bridge_health() {
