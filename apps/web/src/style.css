@@ -2364,7 +2364,8 @@ button {
   gap: 14px;
   place-content: start center;
   min-height: 100%;
-  width: min(100%, 430px);
+  width: 100%;
+  max-width: 430px;
   margin: 0 auto;
   justify-items: stretch;
   padding: 0 0 32px;
@@ -2375,6 +2376,9 @@ button {
   display: grid;
   gap: 8px;
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
   padding: 0;
   background: transparent;
   box-shadow: none;
@@ -2384,8 +2388,9 @@ button {
   box-sizing: border-box;
   display: grid;
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
   justify-self: stretch;
-  min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 8px;
@@ -2396,10 +2401,9 @@ button {
 
 .home-install-compact__bar {
   display: grid;
-  grid-template-columns: minmax(0, max-content) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   min-width: 0;
-  justify-content: space-between;
   gap: 8px;
 }
 
@@ -2426,6 +2430,9 @@ button {
   display: grid;
   gap: 8px;
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
 }
 
 .home-empty-state__device-stack {
@@ -2777,6 +2784,9 @@ button {
 
 .home-empty-state__primary {
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
 }
 
 .home-empty-state__secondary {
