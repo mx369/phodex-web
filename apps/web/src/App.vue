@@ -30,6 +30,7 @@ type AppIconName =
   | "chevron-left"
   | "chevron-down"
   | "close"
+  | "copy"
   | "edit"
   | "file"
   | "folder"
@@ -140,6 +141,12 @@ const APP_ICON_SPECS: Record<AppIconName, AppIconSpec> = {
     lines: [
       { x1: 7, y1: 7, x2: 17, y2: 17 },
       { x1: 17, y1: 7, x2: 7, y2: 17 },
+    ],
+  },
+  copy: {
+    paths: [
+      "M8.5 7.25h8.25A1.25 1.25 0 0 1 18 8.5v8.25A1.25 1.25 0 0 1 16.75 18H8.5a1.25 1.25 0 0 1-1.25-1.25V8.5A1.25 1.25 0 0 1 8.5 7.25z",
+      "M5.75 14.75H5A1.25 1.25 0 0 1 3.75 13.5V5A1.25 1.25 0 0 1 5 3.75h8.5A1.25 1.25 0 0 1 14.75 5v.75",
     ],
   },
   edit: {
@@ -575,9 +582,6 @@ const isAuthenticated = computed(() => Boolean(state.session && state.snapshot))
 const onboardingBridgeCommand = computed(
   () => "Sign in with email first. The app will mint a short-lived install command that only this account can claim."
 );
-const bridgeInstallRunHint = computed(() =>
-  installCommandPlatform.value === "powershell" ? "Run in PowerShell" : "Run in Terminal"
-);
 const bridgeInstallCommand = computed(() => {
   const manifest = installManifest.value;
   if (!manifest) {
@@ -592,19 +596,6 @@ const showBridgeInstallCard = computed(() => isAuthenticated.value);
 const showBridgeLinkedWarning = computed(
   () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
 );
-const bridgeInstallTitle = computed(() => {
-  if (state.snapshot?.connection.bridgeOnline) {
-    return "Add Mac command";
-  }
-  return "Install command";
-});
-const bridgeInstallCopy = computed(() =>
-  installManifest.value?.command
-    ? state.snapshot?.connection.bridgeOnline
-      ? `Run this on another Mac to add it to ${state.snapshot?.user.email ?? "this account"}.`
-      : `Run this on the Mac you want to control from this phone.`
-    : "Preparing a short-lived install command…"
-);
 const bridgeInstallCopyLabel = computed(() => {
   switch (installCommandCopyState.value) {
     case "copied":
@@ -615,13 +606,6 @@ const bridgeInstallCopyLabel = computed(() => {
       return "Copy";
   }
 });
-const bridgeInstallRefreshLabel = computed(() => {
-  if (installManifestLoading.value) {
-    return "Refreshing…";
-  }
-  return installManifest.value?.command ? "New command" : "Retry";
-});
-const bridgeInstallExpandLabel = computed(() => (installCommandExpanded.value ? "Hide" : "Show"));
 const rootFlow = computed<RootFlowState>(() => {
   if (rootFlowState.value !== "auto") {
     return rootFlowState.value;
@@ -930,42 +914,6 @@ const composerRuntimeState = computed(() => {
     detail: connection?.state === "connected" ? `On ${macLabel}` : null,
     tone: "amber",
   } as const;
-});
-const homeStatusLabel = computed(() => {
-  if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
-    return "Mac linked";
-  }
-  switch (state.snapshot?.connection.state) {
-    case "connected":
-      return "Connected";
-    case "connecting":
-      return "Connecting";
-    case "disconnected":
-      return "Offline";
-    default:
-      return "Awaiting relay";
-  }
-});
-const homeStatusTone = computed(() => {
-  if (state.snapshot?.connection.bridgeOnline && state.snapshot.connection.state !== "connected") {
-    return "amber";
-  }
-  switch (state.snapshot?.connection.state) {
-    case "connected":
-      return "green";
-    case "connecting":
-      return "amber";
-    default:
-      return "slate";
-  }
-});
-const homeStatusDeviceLabel = computed(() => {
-  const activeDevice =
-    homeBridgeDevices.value.find((device) => isActiveBridgeDevice(device)) ??
-    homeBridgeDevices.value.find((device) => device.state === "connected") ??
-    null;
-
-  return activeDevice ? bridgeDeviceLabel(activeDevice) : null;
 });
 const homePrimaryLabel = computed(() => {
   switch (state.snapshot?.connection.state) {
@@ -2780,10 +2728,6 @@ function handleHomeSecondaryAction() {
   restartOnboarding();
 }
 
-function refreshInstallCommand() {
-  void loadInstallManifest();
-}
-
 function switchRootFlow(nextFlow: RootFlowState) {
   rootFlowState.value = nextFlow;
   if (nextFlow === "auto") {
@@ -3979,77 +3923,55 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                       <div v-else class="home-empty-state">
                         <div class="home-connection-panel">
-                          <div class="home-status-row">
-                            <div class="home-status-badge">
-                              <strong :class="`home-status-badge__label home-status-badge__label--${homeStatusTone}`">
-                                {{ homeStatusLabel }}
-                              </strong>
-                              <span v-if="homeStatusDeviceLabel" class="home-status-badge__detail">
-                                On {{ homeStatusDeviceLabel }}
-                              </span>
-                            </div>
-                          </div>
                           <div v-if="showBridgeInstallCard" class="home-install-compact">
-                            <div class="home-install-compact__summary">
-                              <div class="home-install-compact__heading">
-                                <strong>{{ bridgeInstallTitle }}</strong>
-                                <span>{{ installCommandExpanded ? bridgeInstallRunHint : "Copy a short-lived command when needed" }}</span>
+                            <div class="home-install-compact__bar">
+                              <div class="home-empty-state__install-platforms" role="tablist" aria-label="Install command platform">
+                                <button
+                                  class="home-empty-state__install-platform"
+                                  :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'powershell' }"
+                                  type="button"
+                                  role="tab"
+                                  :aria-selected="installCommandPlatform === 'powershell'"
+                                  @click="installCommandPlatform = 'powershell'"
+                                >
+                                  Windows
+                                </button>
+                                <button
+                                  class="home-empty-state__install-platform"
+                                  :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'shell' }"
+                                  type="button"
+                                  role="tab"
+                                  :aria-selected="installCommandPlatform === 'shell'"
+                                  @click="installCommandPlatform = 'shell'"
+                                >
+                                  Mac
+                                </button>
                               </div>
                               <button
-                                class="ghost-cta ghost-cta--compact home-empty-state__install-toggle"
+                                class="home-empty-state__install-copy"
+                                :class="{
+                                  'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
+                                  'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
+                                }"
                                 type="button"
+                                :disabled="!installManifest?.command"
+                                @click="copyInstallCommand"
+                              >
+                                <AppIcon :name="installCommandCopyState === 'copied' ? 'check' : 'copy'" aria-hidden="true" />
+                                <span>{{ bridgeInstallCopyLabel }}</span>
+                              </button>
+                              <button
+                                class="home-empty-state__install-toggle"
+                                :class="{ 'home-empty-state__install-toggle--expanded': installCommandExpanded }"
+                                type="button"
+                                aria-label="Toggle install command"
                                 :aria-expanded="installCommandExpanded"
                                 @click="installCommandExpanded = !installCommandExpanded"
                               >
-                                {{ bridgeInstallExpandLabel }}
+                                <AppIcon name="chevron-down" aria-hidden="true" />
                               </button>
                             </div>
                             <div v-if="installCommandExpanded" class="home-empty-state__install-code-shell">
-                              <div class="home-empty-state__install-code-top">
-                                <div class="home-empty-state__install-platforms" role="tablist" aria-label="Install command platform">
-                                  <button
-                                    class="home-empty-state__install-platform"
-                                    :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'shell' }"
-                                    type="button"
-                                    role="tab"
-                                    :aria-selected="installCommandPlatform === 'shell'"
-                                    @click="installCommandPlatform = 'shell'"
-                                  >
-                                    Mac
-                                  </button>
-                                  <button
-                                    class="home-empty-state__install-platform"
-                                    :class="{ 'home-empty-state__install-platform--active': installCommandPlatform === 'powershell' }"
-                                    type="button"
-                                    role="tab"
-                                    :aria-selected="installCommandPlatform === 'powershell'"
-                                    @click="installCommandPlatform = 'powershell'"
-                                  >
-                                    Win
-                                  </button>
-                                </div>
-                                <button
-                                  class="ghost-cta ghost-cta--compact home-empty-state__install-copy"
-                                  :class="{
-                                    'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
-                                    'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
-                                  }"
-                                  type="button"
-                                  :disabled="!installManifest?.command"
-                                  @click="copyInstallCommand"
-                                >
-                                  {{ bridgeInstallCopyLabel }}
-                                </button>
-                                <button
-                                  class="ghost-cta ghost-cta--compact home-empty-state__install-refresh"
-                                  type="button"
-                                  :disabled="installManifestLoading"
-                                  @click="refreshInstallCommand"
-                                >
-                                  {{ bridgeInstallRefreshLabel }}
-                                </button>
-                              </div>
-                              <p class="home-install-compact__copy">{{ bridgeInstallCopy }}</p>
                               <pre
                                 class="home-empty-state__install-code"
                                 :class="{ 'home-empty-state__install-code--pending': !bridgeInstallCommand.trim() }"

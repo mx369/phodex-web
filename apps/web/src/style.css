@@ -2333,53 +2333,6 @@ button {
   text-align: center;
 }
 
-.home-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 30px;
-  padding: 3px 10px 3px 3px;
-  border: 1px solid rgba(18, 18, 18, 0.05);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.home-status-badge__label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.home-status-badge__label--green {
-  color: #1f7b55;
-  background: rgba(38, 162, 105, 0.1);
-}
-
-.home-status-badge__label--amber {
-  color: #ad6438;
-  background: rgba(239, 142, 85, 0.12);
-}
-
-.home-status-badge__label--slate {
-  color: var(--text-secondary);
-  background: rgba(18, 18, 18, 0.05);
-}
-
-.home-status-badge__detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 .home-connection-panel {
   display: grid;
   gap: 8px;
@@ -2389,75 +2342,26 @@ button {
   box-shadow: none;
 }
 
-.home-status-row,
 .home-install-compact {
   display: flex;
   align-items: center;
-  gap: 10px;
   width: 100%;
-  min-height: 42px;
-  padding: 6px 8px;
-  border: 1px solid rgba(18, 18, 18, 0.06);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.home-status-row {
-  justify-content: flex-start;
-}
-
-.home-install-compact {
-  justify-content: space-between;
-}
-
-.home-install-compact__summary {
-  display: contents;
-}
-
-.home-install-compact__heading {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  flex: 1 1 auto;
-  text-align: left;
-}
-
-.home-install-compact__heading strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  letter-spacing: -0.02em;
-}
-
-.home-install-compact__heading span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.home-install-compact:has(.home-empty-state__install-code-shell) {
-  display: grid;
   gap: 8px;
   padding: 8px;
+  border: 1px solid rgba(18, 18, 18, 0.07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
 }
 
-.home-install-compact:has(.home-empty-state__install-code-shell) .home-install-compact__summary {
+.home-install-compact {
+  display: grid;
+}
+
+.home-install-compact__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-}
-
-.home-install-compact__copy {
-  margin: 0;
-  color: var(--muted-strong);
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: left;
+  gap: 8px;
 }
 
 .home-empty-state__trusted-card {
@@ -2627,14 +2531,40 @@ button {
 }
 
 .home-empty-state__install-copy {
-  min-width: 74px;
-  min-height: var(--control-h-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
   padding: 0 12px;
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
   box-shadow: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.home-empty-state__install-copy .app-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.home-empty-state__install-copy:hover:not(:disabled),
+.home-empty-state__install-copy:focus-visible {
+  background: rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.home-empty-state__install-copy:disabled {
+  cursor: wait;
+  opacity: 0.56;
 }
 
 .home-empty-state__install-copy--copied {
@@ -2649,42 +2579,42 @@ button {
   border-color: rgba(201, 72, 72, 0.18);
 }
 
-.home-empty-state__install-toggle,
-.home-empty-state__install-refresh {
-  min-height: var(--control-h-secondary);
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 600;
+.home-empty-state__install-toggle {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
   background: rgba(18, 18, 18, 0.04);
+  color: var(--muted-strong);
   box-shadow: none;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.home-empty-state__install-toggle .app-icon {
+  width: 15px;
+  height: 15px;
+  transition: transform 160ms ease;
+}
+
+.home-empty-state__install-toggle:hover,
+.home-empty-state__install-toggle:focus-visible {
+  background: rgba(18, 18, 18, 0.07);
+  color: var(--text);
+  outline: none;
+}
+
+.home-empty-state__install-toggle--expanded .app-icon {
+  transform: rotate(180deg);
 }
 
 .home-empty-state__install-code-shell {
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: var(--radius-2);
-  border: 1px solid rgba(18, 18, 18, 0.06);
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.home-empty-state__install-code-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.home-empty-state__install-code-heading {
-  display: grid;
-  gap: 4px;
-}
-
-.home-empty-state__install-code-hint {
-  color: var(--muted);
-  font-size: var(--font-size-meta);
-  font-weight: 600;
-  line-height: 1.2;
+  padding-top: 4px;
 }
 
 .home-empty-state__install-platforms {
@@ -2692,7 +2622,8 @@ button {
   align-items: center;
   gap: 4px;
   justify-content: flex-start;
-  min-height: var(--control-h-secondary);
+  flex: 1 1 auto;
+  min-height: 34px;
   padding: 3px;
   border-radius: var(--radius-pill);
   background: rgba(18, 18, 18, 0.045);
@@ -2702,8 +2633,8 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
@@ -2732,13 +2663,13 @@ button {
 .home-empty-state__install-code {
   margin: 0;
   overflow-x: auto;
-  padding: 12px 14px;
-  border-radius: var(--radius-2);
+  padding: 10px 12px;
+  border-radius: 16px;
   background: rgba(18, 18, 18, 0.94);
   color: rgba(255, 255, 255, 0.92);
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.4;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
@@ -2757,17 +2688,12 @@ button {
     width: min(100%, 300px);
   }
 
-  .home-status-row {
-    align-items: center;
-  }
-
   .home-empty-state__install-platforms {
     flex: 1 1 auto;
   }
 
-  .home-empty-state__install-copy,
-  .home-empty-state__install-toggle {
-    justify-content: center;
+  .home-empty-state__install-copy span {
+    display: none;
   }
 }
 
