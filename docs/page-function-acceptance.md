@@ -53,7 +53,7 @@ Browser harness: Electron CDP hidden sessions via the local `electron-cdp-automa
 
 | Page | Entry path | Function points checked in this pass | Result | Evidence |
 | --- | --- | --- | --- | --- |
-| Home Empty | fresh OTP login after source-parity pass | connected state, source-closer header chips, trusted Mac card, `Open chats`, full-page shell render | pass | `.artifacts/qa-52-home-page-parity.png` |
+| Home Empty | fresh OTP login after source-parity pass | connected state, source-closer header chips, trusted computer card, `Open chats`, full-page shell render | pass | `.artifacts/qa-52-home-page-parity.png` |
 | Turn Empty | clean authenticated chat after empty-state parity, typography-tightening, and brandless-shell passes | embedded empty-timeline block, source-closer guidance copy, composer visible, no voice/attachment/Fast/Plan placeholders, a reduced prompt scale that no longer dominates the working surface, and a topbar without redundant brand text | pass | `.artifacts/qa-71-turn-empty-timeline-block.png`, `.artifacts/qa-cdp/qa-104-turn-empty-final-typography-tightened.png`, `.artifacts/qa-cdp/qa-109-home-shell-brandless.png` |
 | About | authenticated `?page=about` after shell pass | full-page mobile page render, updated architecture and sign-in copy | pass | `.artifacts/qa-49-about-mobile-page.png` |
 | Paywall | authenticated `?page=paywall` after preview-only and typography-tightening passes | full-page mobile page render, preview-only purchase controls, updated feature copy, and reduced in-product prompt scale | pass | `.artifacts/qa-60-paywall-preview-only.png`, `.artifacts/qa-cdp/qa-105-paywall-typography-tightened.png` |

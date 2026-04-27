@@ -78,7 +78,7 @@ login() {
   ecdpcmd wait-for-text "Continue into relay" --timeout 10000 >/dev/null
   ecdpcmd evaluate "(() => { const input = document.querySelector('#code'); if (!input) throw new Error('code input missing'); input.focus(); input.value = '$CODE'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); })()" >/dev/null
   ecdpcmd evaluate "(() => { const button = [...document.querySelectorAll('button')].find((item) => /Continue into relay/i.test(item.textContent || '')); if (!button) throw new Error('continue button missing'); button.click(); })()" >/dev/null
-  ecdpcmd wait-for-text "Trusted Mac" --timeout 10000 >/dev/null
+  ecdpcmd wait-for-text "Trusted Computer" --timeout 10000 >/dev/null
 }
 
 snapshot() {

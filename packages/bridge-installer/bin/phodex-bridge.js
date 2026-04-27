@@ -83,7 +83,7 @@ async function main() {
   const relayOrigin = resolveRelayOrigin(installDir, args.options.relay);
   const setup = await resolveInstallSetup(relayOrigin, args.options.token, args.options.secret);
   const bunBin = resolveBunBinary();
-  const macLabel = args.options["mac-label"] || hostname();
+  const deviceLabel = args.options["device-label"] || args.options["mac-label"] || hostname();
   const explicitCodexWsUrl = normalizeCodexWsUrl(args.options["codex-ws-url"]);
   const detectedCodexWsUrl = explicitCodexWsUrl || (await detectExistingCodexWsUrl());
 
@@ -104,7 +104,7 @@ async function main() {
     PHODEX_RELAY_URL: setup.relayOrigin,
     PHODEX_BRIDGE_TOKEN: setup.bridgeToken,
     PHODEX_RELAY_LABEL: setup.relayLabel,
-    PHODEX_MAC_LABEL: macLabel,
+    PHODEX_DEVICE_LABEL: deviceLabel,
     PHODEX_STATE_FILE: resolve(installDir, "data", "bridge-state.json"),
   };
 
@@ -219,8 +219,8 @@ function printUsage() {
   console.log(
     [
       "Usage:",
-      "  phodex-bridge install --relay <origin> [--token <setup-token>] [--dir <path>] [--mac-label <label>]",
-      "  phodex-bridge start --relay <origin> [--token <setup-token>] [--dir <path>] [--mac-label <label>]",
+      "  phodex-bridge install --relay <origin> [--token <setup-token>] [--dir <path>] [--device-label <label>]",
+      "  phodex-bridge start --relay <origin> [--token <setup-token>] [--dir <path>] [--device-label <label>]",
       "  phodex-bridge stop [--dir <path>]",
       "  phodex-bridge status [--dir <path>] [--relay <origin>]",
     ].join("\n")

@@ -371,8 +371,8 @@ export function createAppClient() {
 
   function createThread(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
     if (pendingThreadCreate) {
-      pushToast("info", "A new chat is already starting on your Mac.");
-      return Promise.reject(new Error("A new chat is already starting on your Mac."));
+      pushToast("info", "A new chat is already starting on your computer.");
+      return Promise.reject(new Error("A new chat is already starting on your computer."));
     }
 
     const requestId = createClientId();
@@ -871,7 +871,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
   const tempThread: ThreadRecord = {
     id: tempId,
     title: projectLabel,
-    preview: mode === "worktree" ? "Starting a worktree chat on your Mac…" : "Starting a new chat on your Mac…",
+    preview: mode === "worktree" ? "Starting a worktree chat on your computer…" : "Starting a new chat on your computer…",
     projectLabel,
     repoLabel: seedThread?.repoLabel ?? "",
     branch: seedThread?.branch ?? "main",
@@ -1064,12 +1064,12 @@ function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
   if (thread) {
     thread.preview =
       mode === "worktree"
-        ? "Still creating your worktree chat on the Mac…"
-        : "Still starting the new chat on the Mac…";
+        ? "Still creating your worktree chat on the computer…"
+        : "Still starting the new chat on the computer…";
     thread.lastActivityAt = new Date().toISOString();
   }
 
-  pushToast("error", "Starting the new chat is taking longer than usual. Still waiting on your Mac.");
+  pushToast("error", "Starting the new chat is taking longer than usual. Still waiting on your computer.");
   pendingThreadCreate.failureTimerId = window.setTimeout(() => {
     failPendingThreadCreate("Starting the new chat failed. Try again.");
   }, Math.max(PENDING_THREAD_FAILURE_MS - PENDING_THREAD_SLOW_MS, 0));
@@ -1229,7 +1229,7 @@ function findThread(threadId: string) {
 
 function flushComposer(threadId: string) {
   if (threadId.startsWith(PENDING_THREAD_PREFIX)) {
-    pushToast("info", "The new chat is still starting on your Mac.");
+    pushToast("info", "The new chat is still starting on your computer.");
     return false;
   }
 

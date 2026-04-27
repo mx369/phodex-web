@@ -443,7 +443,7 @@ write_env_file() {
   write_env_value PHODEX_RELAY_URL "$RELAY_ORIGIN"
   write_env_value PHODEX_BRIDGE_TOKEN "$BRIDGE_TOKEN"
   write_env_value PHODEX_RELAY_LABEL "$RELAY_LABEL"
-  write_env_value PHODEX_MAC_LABEL "$MAC_LABEL"
+  write_env_value PHODEX_DEVICE_LABEL "$DEVICE_LABEL"
   write_env_value PHODEX_STATE_FILE "$STATE_FILE"
   write_env_value PHODEX_LOGIN_SHELL "$LOGIN_SHELL"
 
@@ -685,7 +685,7 @@ INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 RELAY_ORIGIN=""
 SETUP_TOKEN=""
 BRIDGE_SECRET=""
-MAC_LABEL="$(hostname)"
+DEVICE_LABEL="$(hostname)"
 CODEX_BIN=""
 CODEX_WS_URL=""
 
@@ -711,9 +711,14 @@ while [[ $# -gt 0 ]]; do
       INSTALL_DIR="$2"
       shift 2
       ;;
+    --device-label)
+      [[ $# -ge 2 ]] || error "--device-label requires a value"
+      DEVICE_LABEL="$2"
+      shift 2
+      ;;
     --mac-label)
       [[ $# -ge 2 ]] || error "--mac-label requires a value"
-      MAC_LABEL="$2"
+      DEVICE_LABEL="$2"
       shift 2
       ;;
     --codex-bin)
@@ -732,7 +737,7 @@ Usage:
   curl -fsSL <relay>/install | bash -s -- --relay <origin> --token <setup-token>
 Optional flags:
   --dir <path>
-  --mac-label <label>
+  --device-label <label>
   --codex-bin <path>
   --codex-ws-url <ws-url>
   --secret <bridge-token>

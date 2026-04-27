@@ -228,7 +228,7 @@ export interface RelayConnection {
   bridgeOnline: boolean;
   state: "connecting" | "connected" | "disconnected";
   relayLabel: string;
-  macLabel: string;
+  deviceLabel: string;
   latencyMs: number;
   lastSyncAt: string | null;
   rateLimits: CodexRateLimitSnapshot | null;
@@ -236,7 +236,7 @@ export interface RelayConnection {
 
 export interface BridgeDeviceSummary {
   id: string;
-  macLabel: string;
+  deviceLabel: string;
   bridgeOnline: boolean;
   state: RelayConnection["state"];
   lastConnectedAt: string | null;

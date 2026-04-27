@@ -441,13 +441,13 @@ const onboardingScreens = [
   {
     kind: "welcome",
     title: "Remodex",
-    subtitle: "Control Codex from your iPhone.",
-    badge: "Runs on your Mac",
+    subtitle: "Control Codex from your phone.",
+    badge: "Runs on your computer",
   },
   {
     kind: "features",
     title: "What you get",
-    subtitle: "Everything runs on your Mac. Your phone is the remote.",
+    subtitle: "Everything runs on your computer. Your phone is the remote.",
     features: [
       {
         icon: "bolt",
@@ -803,7 +803,7 @@ const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
       label: "Phodex Web",
       cwd: null,
       repoName: "Default workspace",
-      detail: "Uses the relay default project root on your Mac.",
+      detail: "Uses the relay default project root on your computer.",
       liveCount: 0,
       hasWorktree: false,
       isCurrent: true,
@@ -845,7 +845,7 @@ const drawerVisibleRateLimitRows = computed(() =>
 );
 const composerPlaceholder = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
-    return "Starting a new chat on your Mac…";
+    return "Starting a new chat on your computer…";
   }
   return currentThread.value?.state === "running"
     ? "Write a follow-up while this run is still streaming..."
@@ -875,12 +875,12 @@ const composerRuntimeLabel = computed(
 );
 const composerRuntimeState = computed(() => {
   const connection = state.snapshot?.connection;
-  const macLabel = connection?.macLabel?.trim() || "your Mac";
+  const deviceLabel = connection?.deviceLabel?.trim() || "your computer";
 
   if (isCurrentThreadPendingCreate.value) {
     return {
       label: "Starting",
-      detail: "Creating a fresh chat on your Mac",
+      detail: "Creating a fresh chat on your computer",
       tone: "amber",
     } as const;
   }
@@ -888,7 +888,7 @@ const composerRuntimeState = computed(() => {
   if (connection?.state === "disconnected") {
     return {
       label: "Offline",
-      detail: `Reconnect ${macLabel}`,
+      detail: `Reconnect ${deviceLabel}`,
       tone: "slate",
     } as const;
   }
@@ -896,7 +896,7 @@ const composerRuntimeState = computed(() => {
   if (connection?.bridgeOnline && connection.state !== "connected") {
     return {
       label: "Syncing",
-      detail: `Rehydrating ${macLabel}`,
+      detail: `Rehydrating ${deviceLabel}`,
       tone: "amber",
     } as const;
   }
@@ -906,7 +906,7 @@ const composerRuntimeState = computed(() => {
       label: "Running",
       detail: currentThread.value.queuedDrafts.length
         ? `${currentThread.value.queuedDrafts.length} queued next`
-        : `Working on ${macLabel}`,
+        : `Working on ${deviceLabel}`,
       tone: "blue",
     } as const;
   }
@@ -929,7 +929,7 @@ const composerRuntimeState = computed(() => {
 
   return {
     label: "Ready",
-    detail: connection?.state === "connected" ? `On ${macLabel}` : null,
+    detail: connection?.state === "connected" ? `On ${deviceLabel}` : null,
     tone: "amber",
   } as const;
 });
@@ -949,6 +949,7 @@ const homeSecondaryLabel = computed(() =>
   state.snapshot?.connection.state === "connected" ? "Open chats" : "Replay onboarding"
 );
 const homeBridgeDevices = computed(() => dedupeHomeBridgeDevices(state.snapshot?.bridgeDevices ?? []));
+const currentBridgeDeviceLabel = computed(() => state.snapshot?.connection.deviceLabel?.trim() || "Awaiting first check-in");
 
 function createUiId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -962,7 +963,7 @@ function isActiveBridgeDevice(device: BridgeDeviceSummary) {
 }
 
 function homeBridgeDeviceKey(device: BridgeDeviceSummary) {
-  const label = device.macLabel?.trim().toLowerCase();
+  const label = device.deviceLabel?.trim().toLowerCase();
   return label || device.id;
 }
 
@@ -996,7 +997,7 @@ function canSelectBridgeDevice(device: BridgeDeviceSummary) {
 }
 
 function bridgeDeviceLabel(device: BridgeDeviceSummary) {
-  return device.macLabel?.trim() || "Awaiting first check-in";
+  return device.deviceLabel?.trim() || "Awaiting first check-in";
 }
 
 function bridgeDeviceStateLabel(device: BridgeDeviceSummary) {
@@ -1052,7 +1053,7 @@ function pathTail(value: string | null | undefined, depth = 2) {
 
 function describeTargetPath(cwd: string | null, hasWorktree: boolean) {
   if (!cwd) {
-    return "Uses the relay default project root on your Mac.";
+    return "Uses the relay default project root on your computer.";
   }
   return hasWorktree ? `Project root ${pathTail(cwd, 2)} with worktree support` : `Project root ${pathTail(cwd, 2)}`;
 }
@@ -1255,7 +1256,7 @@ const dialogBody = computed(() => {
     case "create-thread":
       return dialogState.value.mode === "worktree"
         ? "Pick an existing project or enter a git-backed path. Phodex creates a fresh worktree before the chat starts."
-        : "Pick an existing project or enter a new path for the next local chat on your Mac.";
+        : "Pick an existing project or enter a new path for the next local chat on your computer.";
     case "project-browser":
       return `Browse ${dialogState.value.title} and lazily preview a file when you tap it.`;
     case "project-diff":
@@ -1384,7 +1385,7 @@ const createThreadBlockedReason = computed(() => {
   if (state.snapshot?.connection.state === "connected") {
     return "";
   }
-  return "Your Mac bridge is offline. Reconnect the bridge before starting a new chat.";
+  return "Your computer bridge is offline. Reconnect the bridge before starting a new chat.";
 });
 const dialogConfirmDisabled = computed(() => {
   if (!dialogState.value) {
@@ -3240,7 +3241,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                   <div class="root-auth-screen__head">
                     <img :src="remodexAppLogo" alt="" class="root-auth-screen__logo" />
                     <span class="section-label section-label--light">Subscription Gate</span>
-                    <h2>Unlock the app to connect your iPhone to Codex running on your Mac.</h2>
+                    <h2>Unlock the app to connect your phone to Codex running on your computer.</h2>
                     <p>Purchase and restore are preview-only in this local build. Continue with email to keep testing the relay flow.</p>
                   </div>
 
@@ -3291,7 +3292,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     <img :src="remodexAppLogo" alt="" class="root-auth-screen__logo" />
                     <span class="section-label section-label--light">Email OTP</span>
                     <h2>Continue with email verification.</h2>
-                    <p>Use a one-time verification code to connect this phone to the relay session running on your Mac.</p>
+                    <p>Use a one-time verification code to connect this phone to the relay session running on your computer.</p>
                   </div>
 
                   <label class="input-label input-label--dark" for="email">Email</label>
@@ -3385,7 +3386,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <img :src="remodexAppLogo" alt="" class="paywall-header__logo" />
                           <span class="section-label">Remodex Pro</span>
                           <h2 class="mobile-page-hero-title">Unlock Remodex Pro</h2>
-                          <p class="mobile-page-copy">Everything runs on your Mac. Your phone is the remote.</p>
+                          <p class="mobile-page-copy">Everything runs on your computer. Your phone is the remote.</p>
                         </div>
 
                         <div class="paywall-feature-list">
@@ -3591,14 +3592,14 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <span class="drawer-status__label">
                             {{
                               state.snapshot?.connection.state === "connected"
-                                ? "Connected to Mac"
+                                ? "Connected to Computer"
                                 : state.snapshot?.connection.bridgeOnline
-                                  ? "Linked Mac"
-                                  : "Trusted Mac"
+                                  ? "Linked Computer"
+                                  : "Trusted Computer"
                             }}
                           </span>
                           <div class="drawer-status">
-                            <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                            <strong>{{ currentBridgeDeviceLabel }}</strong>
                             <span class="drawer-status__meta">
                               {{ state.snapshot?.connection.relayLabel }}
                               <template v-if="state.snapshot?.connection.state === 'connected'">
@@ -3720,7 +3721,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                   <div v-if="isCurrentThreadPendingCreate" class="thread-create-notice" role="status" aria-live="polite">
                     <span class="thread-create-notice__dot" aria-hidden="true"></span>
-                    <span>Creating this chat on your Mac. The URL will update when it is ready.</span>
+                    <span>Creating this chat on your computer. The URL will update when it is ready.</span>
                   </div>
 
                   <div v-if="floatingToasts.length" class="toast-stack">
@@ -4020,7 +4021,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   :aria-selected="installCommandPlatform === 'shell'"
                                   @click="installCommandPlatform = 'shell'"
                                 >
-                                  Mac
+                                  Mac/Linux
                                 </button>
                               </div>
                               <div class="home-install-compact__actions">
@@ -4097,11 +4098,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           </div>
                         </div>
                         <div v-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
-                          <span class="section-label">Mac Linked</span>
-                          <strong>{{ state.snapshot?.connection.macLabel }}</strong>
+                          <span class="section-label">Computer Linked</span>
+                          <strong>{{ currentBridgeDeviceLabel }}</strong>
                           <p>
                             The bridge is already bound to this account. This screen stays offline because the local Codex
-                            app-server has not finished initializing on your Mac yet.
+                            app-server has not finished initializing on your computer yet.
                           </p>
                         </div>
                         <button
@@ -4187,7 +4188,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                       <div v-else-if="showPendingThreadRail" class="empty-thread-rail empty-thread-rail--status">
                         <span class="section-label">Starting Chat</span>
-                        <p>The relay is creating a fresh thread on your Mac.</p>
+                        <p>The relay is creating a fresh thread on your computer.</p>
                       </div>
 
                       <div v-else-if="showTurnStarterRail" class="empty-thread-rail">
@@ -4650,7 +4651,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 <span>{{ projectFile.fileKind === "text" ? projectFile.mimeType : "Binary file" }}</span>
                               </div>
                               <pre v-if="projectFile.fileKind === 'text'" class="project-preview__code"><code>{{ projectFile.content ?? "" }}</code></pre>
-                              <div v-else class="project-preview__empty">Binary previews stay lazy. Open this file on your Mac for the full view.</div>
+                              <div v-else class="project-preview__empty">Binary previews stay lazy. Open this file on your computer for the full view.</div>
                               <p v-if="projectFile.truncated" class="project-preview__note">Preview truncated at 256 KB.</p>
                             </template>
                             <div v-else-if="projectFileError" class="project-preview__empty">{{ projectFileError }}</div>

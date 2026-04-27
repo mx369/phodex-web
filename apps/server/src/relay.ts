@@ -41,7 +41,8 @@ type PersistedBridgeDevice = {
   tokenHash: string;
   issuedAt: string;
   lastConnectedAt: string | null;
-  macLabel: string | null;
+  deviceLabel: string | null;
+  macLabel?: string | null;
 };
 
 type LegacyBridgeAuth = {
@@ -137,7 +138,7 @@ const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
-const DEFAULT_MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
+const DEFAULT_DEVICE_LABEL = process.env.PHODEX_DEVICE_LABEL ?? process.env.PHODEX_MAC_LABEL ?? hostname();
 const AUTH_ENV_FALLBACK_FILE =
   process.env.PHODEX_AUTH_ENV_FILE ?? "/Users/young/mx/tmp/remote-terminal/.env.cloudflare";
 const DEV_ORIGINS = new Set([
@@ -637,11 +638,11 @@ function trackThreadCreateDispatch(userId: string, requestId: string) {
     requestId,
     timer: setTimeout(() => {
       pendingThreadCreateDispatches.delete(key);
-      sendToast(userId, "error", "The Mac did not acknowledge the new chat request. Restart the bridge and try again.");
+      sendToast(userId, "error", "The computer did not acknowledge the new chat request. Restart the bridge and try again.");
       broadcast(userId, {
         type: "thread:create-failed",
         requestId,
-        message: "The Mac did not acknowledge the new chat request. Restart the bridge and try again.",
+        message: "The computer did not acknowledge the new chat request. Restart the bridge and try again.",
       });
     }, 22_000),
   });
@@ -678,12 +679,12 @@ function acknowledgePendingThreadCreateFromMirror(userId: string, threadId: stri
 
 function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
   if (!user.bridgeDevices[bridgeId]) {
-    sendToast(user.profile.id, "error", "That Mac is no longer registered to this account.");
+    sendToast(user.profile.id, "error", "That device is no longer registered to this account.");
     return false;
   }
 
   if (!hasBridgeSocket(user.profile.id, bridgeId)) {
-    sendToast(user.profile.id, "error", "That Mac is offline right now.");
+    sendToast(user.profile.id, "error", "That device is offline right now.");
     return false;
   }
 
@@ -691,7 +692,7 @@ function selectBridgeForUser(user: PersistedUser, bridgeId: string) {
   if (nextConnection.state !== "connected") {
     sendBridgeCommand(user.profile.id, { type: "bridge:sync-all" }, bridgeId);
     broadcastPresence(user.profile.id);
-    sendToast(user.profile.id, "info", "That Mac is still starting. Wait for it to finish connecting before switching.");
+    sendToast(user.profile.id, "info", "That device is still starting. Wait for it to finish connecting before switching.");
     return false;
   }
 
@@ -751,11 +752,12 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       break;
     }
     case "bridge:state": {
+      const connection = normalizeBridgeConnection(event.connection);
       getBridgeConnectionMap(bridgeUserId).set(bridgeId, {
-        ...event.connection,
+        ...connection,
         bridgeOnline: true,
       });
-      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, event.connection);
+      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, connection);
       const promoted = maybePromoteBridge(bridgeUserId, bridgeId);
       if (!promoted && getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
@@ -870,17 +872,19 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
         broadcastThreadToUser(bridgeUserId, event.threadId);
       }
       break;
-    case "bridge:presence":
+    case "bridge:presence": {
+      const connection = normalizeBridgeConnection(event.connection);
       getBridgeConnectionMap(bridgeUserId).set(bridgeId, {
-        ...event.connection,
+        ...connection,
         bridgeOnline: true,
       });
-      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, event.connection);
+      updatePersistedBridgeDeviceMeta(bridgeUserId, bridgeId, connection);
       maybePromoteBridge(bridgeUserId, bridgeId);
       if (getActiveBridgeId(bridgeUserId) === bridgeId) {
         broadcastPresence(bridgeUserId);
       }
       break;
+    }
     case "bridge:banner":
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
@@ -1178,12 +1182,32 @@ function getThreadMirror(userId: string) {
   return mirror;
 }
 
-function disconnectedBridgeConnection(macLabel = DEFAULT_MAC_LABEL): RelayConnection {
+type LegacyRelayConnection = Partial<RelayConnection> & {
+  macLabel?: string | null;
+};
+
+function readConnectionDeviceLabel(connection: LegacyRelayConnection | null | undefined) {
+  return connection?.deviceLabel?.trim() || connection?.macLabel?.trim() || DEFAULT_DEVICE_LABEL;
+}
+
+function normalizeBridgeConnection(connection: LegacyRelayConnection): RelayConnection {
+  return {
+    bridgeOnline: Boolean(connection.bridgeOnline),
+    state: connection.state ?? "disconnected",
+    relayLabel: connection.relayLabel?.trim() || RELAY_LABEL,
+    deviceLabel: readConnectionDeviceLabel(connection),
+    latencyMs: typeof connection.latencyMs === "number" && Number.isFinite(connection.latencyMs) ? connection.latencyMs : 0,
+    lastSyncAt: connection.lastSyncAt ?? null,
+    rateLimits: connection.rateLimits ?? null,
+  };
+}
+
+function disconnectedBridgeConnection(deviceLabel = DEFAULT_DEVICE_LABEL): RelayConnection {
   return {
     bridgeOnline: false,
     state: "disconnected",
     relayLabel: RELAY_LABEL,
-    macLabel,
+    deviceLabel,
     latencyMs: 0,
     lastSyncAt: null,
     rateLimits: null,
@@ -1237,11 +1261,11 @@ function hasAnyBridgeSocket(userId: string) {
 
 function getBridgeConnection(userId: string, bridgeId?: string | null) {
   if (bridgeId) {
-    const macLabel = getBridgeDevice(userId, bridgeId)?.macLabel ?? DEFAULT_MAC_LABEL;
+    const deviceLabel = getBridgeDevice(userId, bridgeId)?.deviceLabel ?? DEFAULT_DEVICE_LABEL;
     if (!hasBridgeSocket(userId, bridgeId)) {
-      return disconnectedBridgeConnection(macLabel);
+      return disconnectedBridgeConnection(deviceLabel);
     }
-    return getBridgeConnectionMap(userId).get(bridgeId) ?? disconnectedBridgeConnection(macLabel);
+    return getBridgeConnectionMap(userId).get(bridgeId) ?? disconnectedBridgeConnection(deviceLabel);
   }
 
   const activeBridgeTarget = getActiveBridgeTarget(userId);
@@ -1370,7 +1394,7 @@ function bridgeDeviceSummary(userId: string, bridgeId: string): BridgeDeviceSumm
   const connection = getBridgeConnection(userId, bridgeId);
   return {
     id: bridgeId,
-    macLabel: bridgeDevice?.macLabel?.trim() || connection.macLabel || DEFAULT_MAC_LABEL,
+    deviceLabel: bridgeDevice?.deviceLabel?.trim() || connection.deviceLabel || DEFAULT_DEVICE_LABEL,
     bridgeOnline: connection.bridgeOnline,
     state: connection.state,
     lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
@@ -1379,15 +1403,15 @@ function bridgeDeviceSummary(userId: string, bridgeId: string): BridgeDeviceSumm
 }
 
 function bridgeDeviceGroupKey(userId: string, bridgeId: string, device: BridgeDeviceSummary) {
-  const persistedMacLabel = getBridgeDevice(userId, bridgeId)?.macLabel?.trim().toLowerCase() ?? "";
-  if (persistedMacLabel) {
-    return `mac:${persistedMacLabel}`;
+  const persistedDeviceLabel = getBridgeDevice(userId, bridgeId)?.deviceLabel?.trim().toLowerCase() ?? "";
+  if (persistedDeviceLabel) {
+    return `device:${persistedDeviceLabel}`;
   }
 
   if (device.bridgeOnline) {
-    const liveMacLabel = device.macLabel.trim().toLowerCase();
-    if (liveMacLabel) {
-      return `mac:${liveMacLabel}`;
+    const liveDeviceLabel = device.deviceLabel.trim().toLowerCase();
+    if (liveDeviceLabel) {
+      return `device:${liveDeviceLabel}`;
     }
   }
 
@@ -1412,12 +1436,12 @@ function updatePersistedBridgeDeviceMeta(userId: string, bridgeId: string, conne
     return;
   }
 
-  const nextMacLabel = connection.macLabel?.trim() || bridgeDevice.macLabel || null;
-  if (nextMacLabel === bridgeDevice.macLabel) {
+  const nextDeviceLabel = connection.deviceLabel?.trim() || bridgeDevice.deviceLabel || null;
+  if (nextDeviceLabel === bridgeDevice.deviceLabel) {
     return;
   }
 
-  bridgeDevice.macLabel = nextMacLabel;
+  bridgeDevice.deviceLabel = nextDeviceLabel;
   schedulePersist();
 }
 
@@ -1468,7 +1492,7 @@ function issueBridgeAccessToken(userId: string) {
     tokenHash: hashBridgeToken(token),
     issuedAt: new Date().toISOString(),
     lastConnectedAt: null,
-    macLabel: null,
+    deviceLabel: null,
   };
   return token;
 }
@@ -2186,7 +2210,7 @@ function normalizePersistedBridgeDevices(user: LegacyPersistedUser | undefined) 
           tokenHash: bridgeDevice?.tokenHash ?? "",
           issuedAt: bridgeDevice?.issuedAt ?? new Date(0).toISOString(),
           lastConnectedAt: bridgeDevice?.lastConnectedAt ?? null,
-          macLabel: bridgeDevice?.macLabel ?? null,
+          deviceLabel: bridgeDevice?.deviceLabel ?? bridgeDevice?.macLabel ?? null,
         } satisfies PersistedBridgeDevice,
       ])
   );
@@ -2202,7 +2226,7 @@ function normalizePersistedBridgeDevices(user: LegacyPersistedUser | undefined) 
       tokenHash: user.bridgeAuth.tokenHash,
       issuedAt: user.bridgeAuth.issuedAt,
       lastConnectedAt: user.bridgeAuth.lastConnectedAt ?? null,
-      macLabel: null,
+      deviceLabel: null,
     },
   } satisfies Record<string, PersistedBridgeDevice>;
 }

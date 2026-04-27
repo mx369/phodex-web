@@ -19,7 +19,7 @@ Legend:
 | `SubscriptionBootstrapFailureView` | locked error shell with retry/recovery/legal affordances | `partial` | keep the shell but tighten hierarchy and recovery affordances |
 | `SubscriptionGateView` | full-page gate with feature stack, plan choice, CTA, restore/manage/legal | `partial` | keep preview-only purchases, but move closer to source card hierarchy |
 | `QRScannerView` | live camera scanner and QR recovery flow | `out-of-scope` | use only as reference for auth-shell sparseness; do not implement QR/camera |
-| `HomeEmptyStateView` | sparse connected/offline home with trusted Mac summary and CTA swaps | `partial` | disconnected/connecting variants and final spacing still differ |
+| `HomeEmptyStateView` | sparse connected/offline home with trusted computer summary and CTA swaps | `partial` | disconnected/connecting variants and final spacing still differ |
 | `SidebarView` | searchable project-grouped conversation tree with rename/archive/delete/project picker | `partial` | grouping and project picker are now real, but refresh affordances and final row-level parity are still simplified |
 | `TurnView` | timeline, toolbar, pinned plan, structured prompts, queued drafts, scroll state machine, tool cards, sheets | `partial` | richer surfaces landed, but scroll behavior and several secondary actions are still missing |
 | `SettingsView` | standalone settings stack with many cards and linked subpages | `partial` | current page exists but still lacks source card depth and some linked behaviors |

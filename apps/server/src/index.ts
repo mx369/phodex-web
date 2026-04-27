@@ -131,7 +131,7 @@ const distDir = resolve(appRoot, "apps/web/dist");
 
 const HOST = process.env.PHODEX_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PHODEX_PORT ?? "3443");
-const MAC_LABEL = process.env.PHODEX_MAC_LABEL ?? hostname();
+const DEVICE_LABEL = process.env.PHODEX_DEVICE_LABEL ?? process.env.PHODEX_MAC_LABEL ?? hostname();
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const PUBLIC_RELAY_URL = process.env.PHODEX_RELAY_URL ?? "ws://127.0.0.1:3443";
 const BRIDGE_TOKEN = process.env.PHODEX_BRIDGE_TOKEN?.trim() ?? "";
@@ -1023,7 +1023,7 @@ async function startTurn(
       codexSupportsServiceTier = false;
       if (!serviceTierUnsupportedToastSent) {
         serviceTierUnsupportedToastSent = true;
-        sendToast(userId, "info", "Fast mode is unavailable on this Mac bridge yet. This run was sent normally.");
+        sendToast(userId, "info", "Fast mode is unavailable on this bridge yet. This run was sent normally.");
       }
       return await codexRequest("turn/start", baseParams);
     }
@@ -2077,7 +2077,7 @@ function buildConnection(): RelayConnection {
     bridgeOnline: relaySocket?.readyState === WebSocket.OPEN,
     state: codexConnectionState,
     relayLabel: RELAY_LABEL,
-    macLabel: MAC_LABEL,
+    deviceLabel: DEVICE_LABEL,
     latencyMs: codexConnectionState === "connected" ? randomInt(8, 22) : 0,
     lastSyncAt: codexLastSyncAt,
     rateLimits: codexRateLimits,
@@ -2354,7 +2354,7 @@ function readProjectResource(request: BridgeProjectRequest): ProjectResourcePayl
 
   const root = writableRootForThread(thread);
   if (!existsSync(root)) {
-    throw new ProjectResourceError(404, "Project root not found on this Mac.");
+    throw new ProjectResourceError(404, "Project root not found on this computer.");
   }
 
   switch (request.kind) {
