@@ -120,6 +120,55 @@ resolve_bun() {
   error "bun is required to run phodex-bridge. Install it first with the official command: curl -fsSL https://bun.com/install | bash"
 }
 
+resolve_node() {
+  if command -v node >/dev/null 2>&1; then
+    NODE_BIN="$(command -v node)"
+    return
+  fi
+
+  for candidate in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
+    if [[ -x $candidate ]]; then
+      NODE_BIN="$candidate"
+      return
+    fi
+  done
+
+  error "node is required to launch the detected Codex JavaScript entrypoint. Install Codex CLI or pass --codex-bin pointing to an executable codex binary."
+}
+
+resolve_codex() {
+  local candidate
+  local candidates=()
+
+  if [[ -n $CODEX_BIN ]]; then
+    [[ -x $CODEX_BIN || -f $CODEX_BIN ]] || error "Codex binary not found at $CODEX_BIN"
+    return
+  fi
+
+  if command -v codex >/dev/null 2>&1; then
+    CODEX_BIN="$(command -v codex)"
+    return
+  fi
+
+  candidates+=(
+    "/Applications/Codex.app/Contents/Resources/codex"
+    "${HOME}/.bun/install/global/node_modules/@openai/codex/bin/codex.js"
+    "${HOME}/.npm-global/bin/codex"
+    "${HOME}/.local/bin/codex"
+    "/opt/homebrew/bin/codex"
+    "/usr/local/bin/codex"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -x $candidate || -f $candidate ]]; then
+      CODEX_BIN="$candidate"
+      return
+    fi
+  done
+
+  error "Codex CLI is required. Install or sign in to Codex first, then rerun the same Phodex install command."
+}
+
 tildify() {
   if [[ $1 = "$HOME"/* ]]; then
     printf '~/%s\n' "${1#"$HOME"/}"
@@ -215,16 +264,22 @@ launch_agent_label() {
   printf 'com.phodex.bridge.%s\n' "$hash"
 }
 
+codex_launch_agent_label() {
+  local hash
+  hash="$(printf '%s' "$INSTALL_DIR" | shasum | awk '{print substr($1, 1, 12)}')"
+  printf 'com.phodex.codex.%s\n' "$hash"
+}
+
 launch_agent_domain() {
-  printf 'gui/%s/%s\n' "$(id -u)" "$(launch_agent_label)"
+  printf 'gui/%s/%s\n' "$(id -u)" "$1"
 }
 
 launch_agent_plist_path() {
-  printf '%s\n' "$HOME/Library/LaunchAgents/$(launch_agent_label).plist"
+  printf '%s\n' "$HOME/Library/LaunchAgents/$1.plist"
 }
 
 launch_agent_pid() {
-  launchctl print "$(launch_agent_domain)" 2>/dev/null | sed -n 's/.*pid = \([0-9][0-9]*\).*/\1/p' | head -n 1
+  launchctl print "$(launch_agent_domain "$1")" 2>/dev/null | sed -n 's/.*pid = \([0-9][0-9]*\).*/\1/p' | head -n 1
 }
 
 write_launch_agent_plist() {
@@ -254,10 +309,49 @@ write_launch_agent_plist() {
 EOF
 }
 
+write_codex_launch_agent_plist() {
+  local plist_path=$1
+  local label
+  label="$(codex_launch_agent_label)"
+
+  mkdir -p "$HOME/Library/LaunchAgents"
+
+  cat > "$plist_path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$(xml_escape "$label")</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>WorkingDirectory</key><string>$(xml_escape "$INSTALL_DIR")</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$(xml_escape "$CODEX_START_SCRIPT")</string>
+  </array>
+  <key>StandardOutPath</key><string>$(xml_escape "$CODEX_LOG_FILE")</string>
+  <key>StandardErrorPath</key><string>$(xml_escape "$CODEX_LOG_FILE")</string>
+</dict>
+</plist>
+EOF
+}
+
 stop_launch_agent() {
   local plist_path
-  plist_path="$(launch_agent_plist_path)"
-  launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
+  local label
+  label="$(launch_agent_label)"
+  plist_path="$(launch_agent_plist_path "$label")"
+  launchctl bootout "$(launch_agent_domain "$label")" >/dev/null 2>&1 || true
+  rm -f "$plist_path"
+}
+
+stop_codex_launch_agent() {
+  local plist_path
+  local label
+  label="$(codex_launch_agent_label)"
+  plist_path="$(launch_agent_plist_path "$label")"
+  launchctl bootout "$(launch_agent_domain "$label")" >/dev/null 2>&1 || true
   rm -f "$plist_path"
 }
 
@@ -344,6 +438,28 @@ write_start_script() {
   chmod +x "$START_SCRIPT"
 }
 
+write_codex_start_script() {
+  local shell="$LOGIN_SHELL"
+  local fallback_shell
+  local command_bin="$CODEX_BIN"
+  local command_args
+  fallback_shell="$( [[ $(uname -s) == Darwin ]] && printf '/bin/zsh' || printf '/bin/bash' )"
+
+  if [[ $CODEX_BIN == *.js ]]; then
+    resolve_node
+    command_bin="$NODE_BIN"
+    command_args="$(printf '%q %q %q %q' "$CODEX_BIN" app-server --listen "$CODEX_WS_URL")"
+  else
+    command_args="$(printf '%q %q %q' app-server --listen "$CODEX_WS_URL")"
+  fi
+
+  printf '#!/bin/bash\nset -euo pipefail\nLOGIN_SHELL=%q\nif [[ ! -x "$LOGIN_SHELL" ]]; then\n  LOGIN_SHELL=%q\nfi\ncase "$(basename "$LOGIN_SHELL")" in\n  fish)\n    exec "$LOGIN_SHELL" -l -c %q _ %q %s\n    ;;\n  *)\n    exec "$LOGIN_SHELL" -lc %q _ %q %s\n    ;;\nesac\n' \
+    "$shell" "$fallback_shell" \
+    'exec $argv[1] $argv[2..-1]' "$command_bin" "$command_args" \
+    'exec "$@"' "$command_bin" "$command_args" > "$CODEX_START_SCRIPT"
+  chmod +x "$CODEX_START_SCRIPT"
+}
+
 start_bridge() {
   local pid
 
@@ -353,11 +469,11 @@ start_bridge() {
     local bootstrap_output=""
     local kickstart_ok=0
     local kickstart_output=""
-    plist_path="$(launch_agent_plist_path)"
+    plist_path="$(launch_agent_plist_path "$(launch_agent_label)")"
     write_launch_agent_plist "$plist_path"
 
-    launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
-    launchctl enable "$(launch_agent_domain)" >/dev/null 2>&1 || true
+    launchctl bootout "$(launch_agent_domain "$(launch_agent_label)")" >/dev/null 2>&1 || true
+    launchctl enable "$(launch_agent_domain "$(launch_agent_label)")" >/dev/null 2>&1 || true
     launchctl remove "$(launch_agent_label)" >/dev/null 2>&1 || true
 
     for _ in $(seq 1 5); do
@@ -365,8 +481,8 @@ start_bridge() {
         bootstrap_ok=1
         break
       fi
-      launchctl bootout "$(launch_agent_domain)" >/dev/null 2>&1 || true
-      launchctl enable "$(launch_agent_domain)" >/dev/null 2>&1 || true
+      launchctl bootout "$(launch_agent_domain "$(launch_agent_label)")" >/dev/null 2>&1 || true
+      launchctl enable "$(launch_agent_domain "$(launch_agent_label)")" >/dev/null 2>&1 || true
       launchctl remove "$(launch_agent_label)" >/dev/null 2>&1 || true
       sleep 0.2
     done
@@ -374,11 +490,11 @@ start_bridge() {
     [[ $bootstrap_ok -eq 1 ]] || error "Failed to register launch agent with launchctl. ${bootstrap_output:-Run launchctl bootstrap manually for details.}"
 
     for _ in $(seq 1 5); do
-      if kickstart_output="$(launchctl kickstart -k "$(launch_agent_domain)" 2>&1)"; then
+      if kickstart_output="$(launchctl kickstart -k "$(launch_agent_domain "$(launch_agent_label)")" 2>&1)"; then
         kickstart_ok=1
         break
       fi
-      pid="$(launch_agent_pid || true)"
+      pid="$(launch_agent_pid "$(launch_agent_label)" || true)"
       if [[ $pid =~ ^[0-9]+$ ]]; then
         kickstart_ok=1
         break
@@ -389,7 +505,7 @@ start_bridge() {
     [[ $kickstart_ok -eq 1 ]] || error "Failed to start launch agent with launchctl. ${kickstart_output:-Run launchctl kickstart manually for details.}"
 
     for _ in $(seq 1 20); do
-      pid="$(launch_agent_pid || true)"
+      pid="$(launch_agent_pid "$(launch_agent_label)" || true)"
       if [[ $pid =~ ^[0-9]+$ ]]; then
         break
       fi
@@ -403,6 +519,63 @@ start_bridge() {
   [[ $pid =~ ^[0-9]+$ ]] || error "Failed to capture local bridge PID."
   printf '%s\n' "$pid" > "$PID_FILE"
   BRIDGE_PID="$pid"
+}
+
+wait_for_codex_ready() {
+  for _ in $(seq 1 48); do
+    if probe_existing_codex_ready "$CODEX_WS_URL"; then
+      return
+    fi
+    sleep 0.25
+  done
+
+  return 1
+}
+
+start_codex_launch_agent() {
+  local plist_path
+  local label
+  label="$(codex_launch_agent_label)"
+  plist_path="$(launch_agent_plist_path "$label")"
+
+  write_codex_launch_agent_plist "$plist_path"
+  launchctl bootout "$(launch_agent_domain "$label")" >/dev/null 2>&1 || true
+  launchctl enable "$(launch_agent_domain "$label")" >/dev/null 2>&1 || true
+  launchctl remove "$label" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$plist_path" >/dev/null
+  launchctl kickstart -k "$(launch_agent_domain "$label")" >/dev/null
+}
+
+start_codex_process() {
+  if [[ $CODEX_BIN == *.js ]]; then
+    resolve_node
+    nohup "$NODE_BIN" "$CODEX_BIN" app-server --listen "$CODEX_WS_URL" >> "$CODEX_LOG_FILE" 2>&1 < /dev/null &
+  else
+    nohup "$CODEX_BIN" app-server --listen "$CODEX_WS_URL" >> "$CODEX_LOG_FILE" 2>&1 < /dev/null &
+  fi
+  printf '%s\n' "$!" > "$CODEX_PID_FILE"
+}
+
+ensure_external_codex_app_server() {
+  [[ -n $CODEX_WS_URL ]] || CODEX_WS_URL="$DEFAULT_CODEX_WS_URL"
+
+  if probe_existing_codex_ready "$CODEX_WS_URL"; then
+    info "Reusing Codex app-server at $CODEX_WS_URL"
+    return
+  fi
+
+  resolve_codex
+  info "Starting Codex app-server at $CODEX_WS_URL"
+  write_codex_start_script
+
+  if [[ $(uname -s) == Darwin ]]; then
+    stop_codex_launch_agent
+    start_codex_launch_agent || error "Failed to register Codex app-server launch agent. Check $(tildify "$CODEX_LOG_FILE")"
+  else
+    start_codex_process
+  fi
+
+  wait_for_codex_ready || error "Codex app-server did not become ready at $CODEX_WS_URL. Check $(tildify "$CODEX_LOG_FILE")"
 }
 
 wait_for_bridge_health() {
@@ -522,21 +695,21 @@ INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
 PID_FILE="${INSTALL_DIR}/bridge.pid"
 ENV_FILE="${INSTALL_DIR}/bridge.env"
 LOG_FILE="${INSTALL_DIR}/logs/bridge.log"
+CODEX_LOG_FILE="${INSTALL_DIR}/logs/codex-app-server.log"
+CODEX_PID_FILE="${INSTALL_DIR}/codex-app-server.pid"
 RUNTIME_FILE="${INSTALL_DIR}/current/bridge-runtime.ts"
 START_SCRIPT="${INSTALL_DIR}/current/start-bridge.sh"
+CODEX_START_SCRIPT="${INSTALL_DIR}/current/start-codex-app-server.sh"
 STATE_FILE="${INSTALL_DIR}/data/bridge-state.json"
 
 resolve_bun
 resolve_login_shell
 
-if [[ -z $CODEX_WS_URL ]] && probe_existing_codex_ready "$DEFAULT_CODEX_WS_URL"; then
-  CODEX_WS_URL="$DEFAULT_CODEX_WS_URL"
-fi
-
 mkdir -p "$INSTALL_DIR/current" "$INSTALL_DIR/logs" "$INSTALL_DIR/data"
 
 info "Using bun at $(tildify "$BUN_BIN")"
 info "Using login shell $(tildify "$LOGIN_SHELL")"
+ensure_external_codex_app_server
 info "Downloading bridge runtime..."
 curl --fail --location --progress-bar --output "$RUNTIME_FILE" "$BRIDGE_RUNTIME_URL" || error "Failed to download bridge runtime"
 
@@ -555,4 +728,5 @@ success "phodex-bridge installed successfully to ${Bold_Green}$(tildify "$INSTAL
 info "Runtime: $(tildify "$RUNTIME_FILE")"
 info "Env: $(tildify "$ENV_FILE")"
 info "Log: $(tildify "$LOG_FILE")"
+info "Codex log: $(tildify "$CODEX_LOG_FILE")"
 info_bold "PID: ${BRIDGE_PID}"
