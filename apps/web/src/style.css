@@ -3624,6 +3624,7 @@ button {
   gap: 14px;
   width: 100%;
   min-width: 0;
+  padding-right: 92px;
 }
 
 .drawer-search {
@@ -3656,6 +3657,9 @@ button {
   min-height: 42px;
   margin-left: auto;
   margin-top: 0;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: none;
 }
 
 .drawer-new-chat:hover,
