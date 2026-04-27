@@ -2158,6 +2158,7 @@ function forgetThread(threadId: string, userId?: string) {
 
   schedulePersist();
   broadcastSnapshotsToAllUsers();
+  sendBridgeState();
   if (userId) {
     publishPresenceToAllUsers();
   }
