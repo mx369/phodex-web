@@ -237,7 +237,7 @@ probe_existing_codex_ready() {
 port_listener_pids() {
   local port=$1
   if command -v lsof >/dev/null 2>&1; then
-    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u
+    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u || true
     return
   fi
   return 0
@@ -387,10 +387,10 @@ stop_manual_codex_listener() {
   local port
   local pids
   port="$(codex_ws_port "$ws_url")"
-  [[ $port =~ ^[0-9]+$ ]] || return
+  [[ $port =~ ^[0-9]+$ ]] || return 0
 
   pids="$(port_listener_pids "$port" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
-  [[ -n $pids ]] || return
+  [[ -n $pids ]] || return 0
 
   info "Stopping existing process on Codex app-server port $port: $pids"
   kill $pids 2>/dev/null || true
