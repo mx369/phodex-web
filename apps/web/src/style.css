@@ -2166,6 +2166,36 @@ button {
   letter-spacing: 0.02em;
 }
 
+.phone-message__copy .phone-inline-image-link {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 6px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.phone-message__copy .phone-inline-image-link img {
+  display: block;
+  width: min(100%, 240px);
+  max-height: 260px;
+  border-radius: 18px;
+  object-fit: cover;
+  background: rgba(18, 18, 18, 0.06);
+  cursor: zoom-in;
+}
+
+.phone-message__copy .phone-inline-image-link span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .phone-message--user .phone-message__copy p {
   color: rgba(255, 255, 255, 0.96);
 }
@@ -2186,6 +2216,14 @@ button {
 }
 
 .phone-message--user .phone-inline-file-link__line {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.phone-message--user .phone-inline-image-link img {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.phone-message--user .phone-inline-image-link span {
   color: rgba(255, 255, 255, 0.74);
 }
 

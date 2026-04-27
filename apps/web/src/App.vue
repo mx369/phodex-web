@@ -96,7 +96,7 @@ type InstallManifest = {
 type InstallCommandPlatform = "shell" | "powershell";
 
 type MessageInlineSegment = {
-  type: "text" | "code" | "link" | "file-link";
+  type: "text" | "code" | "link" | "file-link" | "image-link";
   text?: string;
   label?: string;
   displayLabel?: string;
@@ -1718,6 +1718,11 @@ function normalizeMarkdownHref(href: string) {
   return value;
 }
 
+function isImageHref(href: string) {
+  const value = normalizeMarkdownHref(href).split(/[?#]/, 1)[0]?.toLowerCase() ?? "";
+  return /\.(png|jpe?g|webp|gif|svg)$/.test(value);
+}
+
 function parseMarkdownLinkSegment(label: string, href: string): MessageInlineSegment {
   const normalizedHref = normalizeMarkdownHref(href);
   const lineMatch = normalizedHref.match(/:(\d+)$/);
@@ -1740,7 +1745,7 @@ function parseMarkdownLinkSegment(label: string, href: string): MessageInlineSeg
 
 function splitInlineSegments(text: string): MessageInlineSegment[] {
   const segments: MessageInlineSegment[] = [];
-  const pattern = /`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+  const pattern = /`([^`\n]+)`|!\[([^\]\n]*)\]\(([^)\n]+)\)|\[([^\]\n]+)\]\(([^)\n]+)\)/g;
   let cursor = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -1757,8 +1762,22 @@ function splitInlineSegments(text: string): MessageInlineSegment[] {
         type: "code",
         text: match[1],
       });
-    } else if (match[2] && match[3]) {
-      segments.push(parseMarkdownLinkSegment(match[2], match[3]));
+    } else if (match[3]) {
+      const href = normalizeMarkdownHref(match[3]);
+      if (isImageHref(href)) {
+        segments.push({
+          type: "image-link",
+          label: match[2]?.trim() || href.split("/").at(-1) || "Image",
+          href,
+        });
+      } else {
+        segments.push({
+          type: "text",
+          text: match[0],
+        });
+      }
+    } else if (match[4] && match[5]) {
+      segments.push(parseMarkdownLinkSegment(match[4], match[5]));
     }
 
     cursor = index + match[0].length;
@@ -3860,6 +3879,15 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                     <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
                                     <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
                                   </span>
+                                  <button
+                                    v-else-if="segment.type === 'image-link'"
+                                    class="phone-inline-image-link"
+                                    type="button"
+                                    @click="openImagePreview(segment.href ?? '', segment.label ?? 'Image', segment.href)"
+                                  >
+                                    <img :src="segment.href ?? ''" :alt="segment.label ?? 'Image'" />
+                                    <span>{{ segment.label }}</span>
+                                  </button>
                                   <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
                                     {{ segment.label }}
                                   </a>
@@ -3950,6 +3978,15 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                       <span class="phone-inline-file-link__label">{{ segment.displayLabel }}</span>
                                       <span v-if="segment.line" class="phone-inline-file-link__line">L{{ segment.line }}</span>
                                     </span>
+                                    <button
+                                      v-else-if="segment.type === 'image-link'"
+                                      class="phone-inline-image-link"
+                                      type="button"
+                                      @click="openImagePreview(segment.href ?? '', segment.label ?? 'Image', segment.href)"
+                                    >
+                                      <img :src="segment.href ?? ''" :alt="segment.label ?? 'Image'" />
+                                      <span>{{ segment.label }}</span>
+                                    </button>
                                     <a v-else class="phone-inline-link" :href="segment.href" target="_blank" rel="noreferrer">
                                       {{ segment.label }}
                                     </a>
