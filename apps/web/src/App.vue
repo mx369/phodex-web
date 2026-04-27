@@ -3951,11 +3951,12 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
                                 }"
                                 type="button"
+                                :aria-label="bridgeInstallCopyLabel"
                                 :disabled="!installManifest?.command"
                                 @click="copyInstallCommand"
                               >
                                 <AppIcon :name="installCommandCopyState === 'copied' ? 'check' : 'copy'" aria-hidden="true" />
-                                <span>{{ bridgeInstallCopyLabel }}</span>
+                                <span aria-hidden="true">Copy</span>
                               </button>
                               <button
                                 class="home-empty-state__install-toggle"

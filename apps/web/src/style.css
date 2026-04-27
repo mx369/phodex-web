@@ -2326,7 +2326,7 @@ button {
   gap: 14px;
   place-content: start center;
   min-height: 100%;
-  width: min(100%, 318px);
+  width: min(100%, 430px);
   margin: 0 auto;
   justify-items: center;
   padding: 0 0 32px;
@@ -2346,6 +2346,7 @@ button {
   display: flex;
   align-items: center;
   width: 100%;
+  min-width: 0;
   gap: 8px;
   padding: 8px;
   border: 1px solid rgba(18, 18, 18, 0.07);
@@ -2555,7 +2556,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  flex: 0 0 auto;
   min-height: 34px;
+  min-width: 74px;
   padding: 0 12px;
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: var(--radius-pill);
@@ -2565,9 +2568,8 @@ button {
   font-weight: 600;
   box-shadow: none;
   transition:
-    background 140ms ease,
     color 140ms ease,
-    transform 140ms ease;
+    border-color 140ms ease;
 }
 
 .home-empty-state__install-copy .app-icon {
@@ -2578,7 +2580,6 @@ button {
 .home-empty-state__install-copy:hover:not(:disabled),
 .home-empty-state__install-copy:focus-visible {
   background: rgba(255, 255, 255, 1);
-  transform: translateY(-1px);
   outline: none;
 }
 
@@ -2588,13 +2589,11 @@ button {
 }
 
 .home-empty-state__install-copy--copied {
-  background: rgba(239, 250, 245, 0.92);
   color: #21714c;
   border-color: rgba(38, 162, 105, 0.16);
 }
 
 .home-empty-state__install-copy--failed {
-  background: rgba(255, 242, 242, 0.96);
   color: #b34141;
   border-color: rgba(201, 72, 72, 0.18);
 }
@@ -2634,6 +2633,7 @@ button {
 
 .home-empty-state__install-code-shell {
   display: grid;
+  min-width: 0;
   padding-top: 4px;
 }
 
@@ -2642,7 +2642,9 @@ button {
   align-items: center;
   gap: 4px;
   justify-content: flex-start;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
   min-height: 34px;
   padding: 3px;
   border-radius: var(--radius-pill);
@@ -2682,6 +2684,7 @@ button {
 
 .home-empty-state__install-code {
   margin: 0;
+  min-width: 0;
   overflow-x: auto;
   padding: 10px 12px;
   border-radius: 16px;
@@ -2705,11 +2708,16 @@ button {
 
 @media (max-width: 420px) {
   .home-empty-state {
-    width: min(100%, 300px);
+    width: 100%;
   }
 
   .home-empty-state__install-platforms {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+  }
+
+  .home-empty-state__install-copy {
+    min-width: 34px;
+    padding: 0 10px;
   }
 
   .home-empty-state__install-copy span {
