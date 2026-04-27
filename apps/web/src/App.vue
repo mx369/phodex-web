@@ -65,6 +65,13 @@ type DrawerProjectTarget = {
   isCurrent: boolean;
 };
 
+type RateLimitDisplayRow = {
+  key: "primary" | "secondary";
+  label: string;
+  detail: string;
+  remainingPercent: number;
+};
+
 type DrawerThreadGroup = {
   label: string;
   threads: ThreadRecord[];
@@ -419,6 +426,7 @@ const installCommandExpanded = ref(false);
 const expandedDrawerGroups = ref<string[]>([]);
 const expandedDrawerThreadLimits = ref<Record<string, number>>({});
 const drawerThreadSyncing = ref(false);
+const drawerRateLimitExpanded = ref(false);
 const projectTree = ref<ProjectTreePayload | null>(null);
 const projectTreeLoading = ref(false);
 const projectTreeError = ref("");
@@ -824,7 +832,17 @@ const drawerThreadSyncHintVisible = computed(() =>
   threadGroups.value.length === 0 &&
   (state.snapshot?.connection.state === "connected" || state.snapshot?.connection.state === "connecting")
 );
-const drawerRateLimitSummary = computed(() => formatRateLimitSummary(state.snapshot?.connection.rateLimits ?? null));
+const drawerRateLimitRows = computed(() => formatRateLimitRows(state.snapshot?.connection.rateLimits ?? null));
+const drawerCriticalWeeklyRateLimit = computed(
+  () => drawerRateLimitRows.value.find((row) => row.label === "Weekly" && row.remainingPercent < 10) ?? null
+);
+const drawerVisibleRateLimitRows = computed(() =>
+  drawerRateLimitExpanded.value
+    ? drawerRateLimitRows.value
+    : drawerCriticalWeeklyRateLimit.value
+      ? [drawerCriticalWeeklyRateLimit.value]
+      : []
+);
 const composerPlaceholder = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
     return "Starting a new chat on your Mac…";
@@ -1508,30 +1526,35 @@ function formatRelativeTime(value: string) {
   return `${days}d`;
 }
 
-function formatRateLimitSummary(snapshot: CodexRateLimitSnapshot | null) {
+function formatRateLimitRows(snapshot: CodexRateLimitSnapshot | null): RateLimitDisplayRow[] {
   if (!snapshot) {
-    return "";
+    return [];
   }
 
-  const parts = [
-    formatRateLimitWindow(snapshot.primary, "5h"),
-    formatRateLimitWindow(snapshot.secondary, "Weekly"),
-  ].filter(Boolean);
-
-  return parts.join(" · ");
+  return [
+    formatRateLimitWindow(snapshot.primary, "5h", "primary"),
+    formatRateLimitWindow(snapshot.secondary, "Weekly", "secondary"),
+  ].filter((row): row is RateLimitDisplayRow => Boolean(row));
 }
 
-function formatRateLimitWindow(window: CodexRateLimitWindow | null, fallbackLabel: string) {
+function formatRateLimitWindow(
+  window: CodexRateLimitWindow | null,
+  fallbackLabel: string,
+  key: RateLimitDisplayRow["key"]
+): RateLimitDisplayRow | null {
   if (!window) {
-    return "";
+    return null;
   }
 
   const label = formatRateLimitWindowLabel(window.windowDurationMins, fallbackLabel);
   const remainingPercent = Math.max(0, Math.min(100, Math.round(100 - window.usedPercent)));
   const resetLabel = formatRateLimitReset(window.resetsAt);
-  return resetLabel
-    ? `${label} ${remainingPercent}% left, resets ${resetLabel}`
-    : `${label} ${remainingPercent}% left`;
+  return {
+    key,
+    label,
+    remainingPercent,
+    detail: resetLabel ? `${remainingPercent}% left, resets ${resetLabel}` : `${remainingPercent}% left`,
+  };
 }
 
 function formatRateLimitWindowLabel(windowDurationMins: number | null, fallbackLabel: string) {
@@ -3567,9 +3590,32 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 · {{ state.snapshot?.connection.latencyMs }}ms
                               </template>
                             </span>
-                            <span v-if="drawerRateLimitSummary" class="drawer-status__quota">
-                              {{ drawerRateLimitSummary }}
-                            </span>
+                            <div v-if="drawerRateLimitRows.length" class="drawer-status__quota">
+                              <button
+                                class="drawer-status__quota-toggle"
+                                :class="{ 'drawer-status__quota-toggle--expanded': drawerRateLimitExpanded }"
+                                type="button"
+                                :aria-expanded="drawerRateLimitExpanded"
+                                @click="drawerRateLimitExpanded = !drawerRateLimitExpanded"
+                              >
+                                <span>Usage limits</span>
+                                <AppIcon name="chevron-down" aria-hidden="true" />
+                              </button>
+                              <div
+                                v-if="drawerVisibleRateLimitRows.length"
+                                class="drawer-status__quota-lines"
+                              >
+                                <span
+                                  v-for="row in drawerVisibleRateLimitRows"
+                                  :key="row.key"
+                                  class="drawer-status__quota-line"
+                                  :class="{ 'drawer-status__quota-line--critical': row.remainingPercent < 10 }"
+                                >
+                                  <strong>{{ row.label }}</strong>
+                                  <span>{{ row.detail }}</span>
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 

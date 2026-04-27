@@ -4006,13 +4006,66 @@ button {
 }
 
 .drawer-status__quota {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #2f6f52;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.drawer-status__quota-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2f6f52;
+  font: inherit;
+  text-align: left;
+}
+
+.drawer-status__quota-toggle .app-icon {
+  width: 13px;
+  height: 13px;
+  transition: transform 160ms ease;
+}
+
+.drawer-status__quota-toggle--expanded .app-icon {
+  transform: rotate(180deg);
+}
+
+.drawer-status__quota-lines {
+  display: grid;
+  gap: 2px;
+}
+
+.drawer-status__quota-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  color: #2f6f52;
+}
+
+.drawer-status__quota-line strong {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.drawer-status__quota-line span {
+  min-width: 0;
+  text-align: right;
+}
+
+.drawer-status__quota-line--critical {
+  color: #9a4b16;
 }
 
 .drawer-footer-actions {
