@@ -460,7 +460,7 @@ export function createAppClient() {
     });
   }
 
-  function toggleArchiveThread(thread: ThreadRecord) {
+  function toggleArchiveThread(thread: { id: string }) {
     send({
       type: "thread:archive",
       threadId: thread.id,
@@ -876,6 +876,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
     repoLabel: seedThread?.repoLabel ?? "",
     branch: seedThread?.branch ?? "main",
     state: "queued",
+    createdAt: new Date().toISOString(),
     lastActivityAt: new Date().toISOString(),
     unreadCount: 0,
     subagentCount: 0,

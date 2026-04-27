@@ -993,6 +993,7 @@ function ensureMirroredThread(userId: string, threadId: string) {
     repoLabel: "",
     branch: "main",
     state: "idle",
+    createdAt: new Date().toISOString(),
     lastActivityAt: new Date().toISOString(),
     unreadCount: 0,
     subagentCount: 0,
@@ -1095,13 +1096,13 @@ function snapshotForUser(userId: string, options: { includeSelectedMessages?: bo
   const activeBridgeTarget = getActiveBridgeTarget(userId);
   const activeBridgeId = activeBridgeTarget?.bridgeId ?? null;
   const includeSelectedMessages = options.includeSelectedMessages ?? false;
-  const threads = [...getThreadMirror(userId).values()].sort((left, right) => {
+  const threads = [...sortThreadsByCreatedAtDesc([...getThreadMirror(userId).values()])].sort((left, right) => {
     const leftArchived = left.state === "archived" ? 1 : 0;
     const rightArchived = right.state === "archived" ? 1 : 0;
     if (leftArchived !== rightArchived) {
       return leftArchived - rightArchived;
     }
-    return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
+    return Date.parse(right.createdAt || right.lastActivityAt) - Date.parse(left.createdAt || left.lastActivityAt);
   }).map((thread) => serializeThreadForUser(userId, thread, user.selectedThreadId, includeSelectedMessages));
 
   return {
@@ -1156,17 +1157,22 @@ function normalizeSelectionForUser(userId: string) {
   }
 
   const firstLiveThreadId = findFirstLiveThreadId(userId);
-  const firstAnyThreadId = [...mirror.values()]
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
-    .at(0)?.id ?? null;
+  const firstAnyThreadId = sortThreadsByCreatedAtDesc([...mirror.values()]).at(0)?.id ?? null;
   setSelectedThreadForUser(userId, firstLiveThreadId ?? firstAnyThreadId);
 }
 
 function findFirstLiveThreadId(userId: string, excludingThreadId?: string) {
-  return [...getThreadMirror(userId).values()]
-    .filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
-    .at(0)?.id ?? null;
+  return sortThreadsByCreatedAtDesc(
+    [...getThreadMirror(userId).values()].filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
+  ).at(0)?.id ?? null;
+}
+
+function sortThreadsByCreatedAtDesc<T extends Pick<ThreadRecord, "createdAt" | "lastActivityAt">>(threads: T[]) {
+  return threads.sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || left.lastActivityAt);
+    const rightTime = Date.parse(right.createdAt || right.lastActivityAt);
+    return rightTime - leftTime;
+  });
 }
 
 function getThreadMirror(userId: string) {

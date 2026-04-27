@@ -178,6 +178,7 @@ export interface ThreadRecord {
   repoLabel: string;
   branch: string;
   state: ThreadState;
+  createdAt: string;
   lastActivityAt: string;
   unreadCount: number;
   subagentCount: number;
