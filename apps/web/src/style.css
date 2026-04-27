@@ -440,6 +440,7 @@ button {
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: var(--radius-4);
   background: var(--surface-raised-strong);
+  backdrop-filter: blur(18px);
   box-shadow: 0 24px 64px rgba(18, 18, 18, 0.16);
 }
 
@@ -464,11 +465,30 @@ button {
 }
 
 .app-dialog-card--create-thread {
-  width: min(100%, 392px);
+  gap: 12px;
+  width: min(100%, 388px);
+  padding: 14px 14px 12px;
   grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: calc(100dvh - 28px - env(safe-area-inset-bottom, 0px));
   min-height: 0;
   overflow: hidden;
+}
+
+.app-dialog-card--create-thread .app-dialog-card__head {
+  gap: 6px;
+  padding-bottom: 0;
+}
+
+.app-dialog-card--create-thread h3 {
+  font-size: var(--font-size-title);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.app-dialog-card--create-thread p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
 }
 
 .app-dialog-card--inspector {
@@ -489,8 +509,8 @@ button {
 
 .app-dialog-card__body--create-thread {
   overflow: auto;
-  margin: 0 -4px;
-  padding: 2px 4px 0;
+  margin: 0 -2px;
+  padding: 0 2px;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
@@ -508,27 +528,27 @@ button {
 .thread-create-sheet__modes,
 .thread-create-sheet__targets {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .thread-create-sheet__body {
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
-  padding-bottom: 4px;
+  padding-bottom: 2px;
 }
 
 .thread-create-sheet__custom {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .thread-create-sheet__modes {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .thread-create-sheet__targets-wrap {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
 }
 
@@ -536,13 +556,13 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 2px;
+  gap: 10px;
+  padding: 2px 2px 0;
 }
 
 .thread-create-sheet__targets-head span:last-child {
-  color: var(--muted);
-  font-size: var(--font-size-support);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-label);
   font-weight: 600;
 }
 
@@ -551,57 +571,84 @@ button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 12px;
+  padding: 12px 13px;
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.82);
+  border-radius: var(--radius-2);
+  background: rgba(255, 255, 255, 0.78);
   color: var(--text);
   text-align: left;
 }
 
 .thread-create-sheet__mode--active,
 .thread-create-sheet__target--active {
-  border-color: rgba(92, 109, 255, 0.24);
-  background: linear-gradient(180deg, rgba(92, 109, 255, 0.08), rgba(92, 109, 255, 0.04));
-  box-shadow: 0 12px 24px rgba(92, 109, 255, 0.08);
+  border-color: rgba(92, 109, 255, 0.26);
+  background: linear-gradient(180deg, rgba(92, 109, 255, 0.08), rgba(255, 255, 255, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(92, 109, 255, 0.06);
 }
 
 .thread-create-sheet__mode strong,
 .thread-create-sheet__target strong {
   display: block;
-  font-size: 15px;
-  line-height: 1.28;
+  font-size: var(--font-size-body-strong);
+  line-height: 1.24;
+  letter-spacing: -0.02em;
 }
 
 .thread-create-sheet__mode span,
 .thread-create-sheet__target p,
 .thread-create-sheet__target span {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
   line-height: 1.45;
 }
 
 .thread-create-sheet__mode p,
 .thread-create-sheet__target p {
-  margin: 3px 0 0;
+  margin: 2px 0 0;
+}
+
+.thread-create-sheet__mode-copy,
+.thread-create-sheet__target-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.thread-create-sheet__mode-icon,
+.thread-create-sheet__target-icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: var(--radius-1);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text);
+}
+
+.thread-create-sheet__mode--active .thread-create-sheet__mode-icon,
+.thread-create-sheet__target--active .thread-create-sheet__target-icon {
+  border-color: rgba(92, 109, 255, 0.14);
+  background: rgba(92, 109, 255, 0.12);
+  color: var(--blue);
 }
 
 .thread-create-sheet__target-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .thread-create-sheet__target-tag {
   display: inline-flex;
   align-items: center;
   min-height: 18px;
-  padding: 0 7px;
+  padding: 0 8px;
   border-radius: var(--radius-pill);
-  background: rgba(18, 18, 18, 0.05);
-  color: var(--muted-strong);
+  background: rgba(18, 18, 18, 0.06);
+  color: var(--text-tertiary);
   font-size: var(--font-size-meta);
   font-weight: 700;
 }
@@ -610,20 +657,9 @@ button {
   min-width: 0;
 }
 
-.thread-create-sheet__target-icon {
-  display: inline-grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--text);
-  box-shadow: var(--shadow-1);
-}
-
 .thread-create-sheet__custom-body {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   padding: 0 2px;
 }
 
@@ -633,8 +669,8 @@ button {
 
 .thread-create-sheet__preview {
   display: grid;
-  gap: 6px;
-  padding: 12px 14px;
+  gap: 5px;
+  padding: 11px 12px;
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: var(--radius-2);
   background: rgba(18, 18, 18, 0.028);
@@ -653,10 +689,10 @@ button {
 
 .thread-create-sheet__targets {
   min-height: 0;
-  max-height: min(34dvh, 304px);
+  max-height: min(31dvh, 272px);
   overflow: auto;
   padding-right: 2px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
@@ -667,10 +703,26 @@ button {
 
 .alert-card__actions--dialog {
   margin-top: 0;
-  gap: 10px;
-  padding-top: 14px;
+  gap: 8px;
+  padding-top: 12px;
   border-top: 1px solid rgba(18, 18, 18, 0.06);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.98) 22%);
+}
+
+.app-dialog-card--create-thread .ghost-cta--compact,
+.app-dialog-card--create-thread .primary-cta--compact {
+  flex: 1 1 0;
+  min-height: var(--control-h-dialog);
+  padding: 0 16px;
+}
+
+.app-dialog-card--create-thread .ghost-cta--compact {
+  background: rgba(18, 18, 18, 0.045);
+  font-size: var(--font-size-body-strong);
+}
+
+.app-dialog-card--create-thread .primary-cta--compact {
+  box-shadow: 0 10px 22px rgba(18, 18, 18, 0.12);
 }
 
 .project-inspector,
@@ -3982,11 +4034,15 @@ button {
 }
 
 .app-dialog-card__warning {
-  margin: 8px 0 0;
-  color: var(--orange-strong);
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 142, 85, 0.2);
+  border-radius: var(--radius-2);
+  background: rgba(239, 142, 85, 0.1);
+  color: #9a5d34;
   font-size: var(--font-size-support);
-  font-weight: 700;
-  line-height: 1.35;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .app-dialog-card__danger-copy {
