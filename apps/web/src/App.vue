@@ -3432,10 +3432,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                 <div key="main-shell" class="phone-app">
                   <transition name="drawer" @after-leave="handleDrawerAfterLeave">
                     <aside v-if="state.ui.sidebarOpen" class="phone-drawer phone-drawer--open">
-                      <button class="icon-button icon-button--tiny drawer-dismiss" aria-label="Close menu" @click="closeSidebar">
-                        <AppIcon name="close" />
-                      </button>
-
                       <div class="phone-drawer__toolbar">
                         <div class="phone-drawer__toolbar-copy">
                           <span class="section-label">Conversations</span>

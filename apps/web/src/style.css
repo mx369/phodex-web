@@ -3594,13 +3594,6 @@ button {
   pointer-events: auto;
 }
 
-.drawer-dismiss {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-}
-
 .phone-drawer__toolbar {
   display: grid;
   gap: 10px;
@@ -3612,7 +3605,6 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-right: 92px;
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-weight: 700;
@@ -3624,7 +3616,6 @@ button {
   gap: 14px;
   width: 100%;
   min-width: 0;
-  padding-right: 92px;
 }
 
 .drawer-search {
