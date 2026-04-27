@@ -4491,8 +4491,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'local' }"
                               @click="setCreateThreadMode('local')"
                             >
-                              <AppIcon name="folder" />
-                              <div>
+                              <span class="thread-create-sheet__mode-icon">
+                                <AppIcon name="folder" />
+                              </span>
+                              <div class="thread-create-sheet__mode-copy">
                                 <strong>Local Chat</strong>
                                 <span>Starts at the project root</span>
                               </div>
@@ -4502,8 +4504,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               :class="{ 'thread-create-sheet__mode--active': dialogState.mode === 'worktree' }"
                               @click="setCreateThreadMode('worktree')"
                             >
-                              <AppIcon name="worktree" />
-                              <div>
+                              <span class="thread-create-sheet__mode-icon">
+                                <AppIcon name="worktree" />
+                              </span>
+                              <div class="thread-create-sheet__mode-copy">
                                 <strong>Worktree Chat</strong>
                                 <span>Creates a fresh git worktree first</span>
                               </div>
