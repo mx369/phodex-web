@@ -2364,7 +2364,7 @@ button {
   gap: 14px;
   place-content: start center;
   min-height: 100%;
-  width: 100%;
+  width: 80vw;
   max-width: 430px;
   margin: 0 auto;
   justify-items: stretch;
@@ -2375,8 +2375,7 @@ button {
 .home-connection-panel {
   display: grid;
   gap: 8px;
-  width: 100%;
-  min-width: 100%;
+  width: inherit;
   max-width: 100%;
   justify-self: stretch;
   padding: 0;
@@ -2387,8 +2386,7 @@ button {
 .home-install-compact {
   box-sizing: border-box;
   display: grid;
-  width: 100%;
-  min-width: 100%;
+  width: inherit;
   max-width: 100%;
   justify-self: stretch;
   grid-template-columns: minmax(0, 1fr);
@@ -2429,8 +2427,7 @@ button {
 .home-empty-state__device-list {
   display: grid;
   gap: 8px;
-  width: 100%;
-  min-width: 100%;
+  width: inherit;
   max-width: 100%;
   justify-self: stretch;
 }
@@ -2765,7 +2762,7 @@ button {
 
 @media (max-width: 420px) {
   .home-empty-state {
-    width: 100%;
+    width: 80vw;
   }
 
   .home-empty-state__install-platforms {
@@ -2783,8 +2780,7 @@ button {
 }
 
 .home-empty-state__primary {
-  width: 100%;
-  min-width: 100%;
+  width: inherit;
   max-width: 100%;
   justify-self: stretch;
 }
