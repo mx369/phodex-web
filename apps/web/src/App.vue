@@ -74,10 +74,20 @@ type RateLimitDisplayRow = {
 
 type DrawerThreadGroup = {
   label: string;
-  threads: ThreadRecord[];
+  threads: DrawerThreadSummary[];
   liveCount: number;
   cwd: string | null;
   hasWorktree: boolean;
+};
+
+type DrawerThreadSummary = {
+  id: string;
+  title: string;
+  projectLabel: string;
+  repoLabel: string;
+  createdAt: string;
+  isWorktree: boolean;
+  isForked: boolean;
 };
 
 type InstallManifest = {
@@ -669,17 +679,37 @@ const currentPendingRunFeedback = computed(() => {
   }
   return pending;
 });
+
+function sortThreadsByCreatedAtDesc<T extends Pick<ThreadRecord, "createdAt" | "lastActivityAt">>(threads: T[]) {
+  return threads.sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || left.lastActivityAt);
+    const rightTime = Date.parse(right.createdAt || right.lastActivityAt);
+    return rightTime - leftTime;
+  });
+}
+
 const threadGroups = computed<DrawerThreadGroup[]>(() => {
-  const groups = new Map<string, ThreadRecord[]>();
+  const groups = new Map<string, DrawerThreadSummary[]>();
   const search = state.ui.search.trim().toLowerCase();
-  const threads = [...liveThreads.value]
-    .filter((thread) => {
-      if (!search) {
-        return true;
-      }
-      return `${thread.title} ${thread.preview} ${thread.projectLabel}`.toLowerCase().includes(search);
-    })
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt));
+  const threads = sortThreadsByCreatedAtDesc(
+    [...liveThreads.value]
+      .filter((thread) => {
+        if (!search) {
+          return true;
+        }
+        return `${thread.title} ${thread.projectLabel}`.toLowerCase().includes(search);
+      })
+      .map((thread) => ({
+        id: thread.id,
+        title: thread.title,
+        projectLabel: thread.projectLabel,
+        repoLabel: thread.repoLabel,
+        createdAt: thread.createdAt || thread.lastActivityAt,
+        isWorktree: thread.isWorktree,
+        isForked: thread.isForked,
+        lastActivityAt: thread.lastActivityAt,
+      }))
+  );
 
   for (const thread of threads) {
     const existing = groups.get(thread.projectLabel) ?? [];
@@ -821,9 +851,7 @@ const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
   });
 });
 const archivedThreads = computed(() =>
-  [...(state.snapshot?.threads ?? [])]
-    .filter((thread) => thread.state === "archived")
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
+  sortThreadsByCreatedAtDesc([...(state.snapshot?.threads ?? [])].filter((thread) => thread.state === "archived"))
 );
 const drawerThreadSyncHintVisible = computed(() =>
   state.ui.sidebarOpen &&
@@ -2721,9 +2749,7 @@ function confirmDialogAction() {
     const group = threadGroups.value.find((entry) => entry.label === projectLabel);
     if (group) {
       for (const thread of group.threads) {
-        if (thread.state !== "archived") {
-          client.toggleArchiveThread(thread);
-        }
+        client.toggleArchiveThread(thread);
       }
     }
     closeDialog();
@@ -3364,7 +3390,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                           <article v-for="thread in archivedThreads" :key="thread.id" class="archived-row">
                             <div>
                               <strong>{{ thread.title }}</strong>
-                              <span class="archived-row__time">{{ formatRelativeTime(thread.lastActivityAt) }}</span>
+                              <span class="archived-row__time">{{ formatRelativeTime(thread.createdAt || thread.lastActivityAt) }}</span>
                               <p>{{ thread.preview }}</p>
                             </div>
                             <div class="archived-row__actions">
@@ -3499,7 +3525,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               class="drawer-thread"
                               :class="{
                                 'drawer-thread--selected': currentThread?.id === thread.id,
-                                'drawer-thread--archived': thread.state === 'archived',
                               }"
                               role="button"
                               tabindex="0"
@@ -3508,7 +3533,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               @keydown.space.prevent="handleDrawerThreadClick(thread.id)"
                             >
                               <div class="drawer-thread__indicator">
-                                <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
+                                <span class="drawer-thread__dot drawer-thread__dot--idle"></span>
                                 <span v-if="thread.isWorktree" class="drawer-thread__badge">
                                   <AppIcon name="worktree" />
                                   <span>WT</span>
@@ -3521,11 +3546,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               <div class="drawer-thread__body">
                                 <div class="drawer-thread__top">
                                   <strong>{{ thread.title }}</strong>
-                                  <span>{{ formatRelativeTime(thread.lastActivityAt) }}</span>
-                                </div>
-                                <div v-if="thread.queuedDrafts.length || thread.unreadCount" class="drawer-thread__meta">
-                                  <span v-if="thread.queuedDrafts.length">{{ thread.queuedDrafts.length }} queued</span>
-                                  <span v-if="thread.unreadCount">{{ thread.unreadCount }} unread</span>
+                                  <span>{{ formatRelativeTime(thread.createdAt) }}</span>
                                 </div>
                               </div>
 
@@ -3558,8 +3579,8 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                         <span>Edit</span>
                                       </button>
                                       <button class="drawer-thread-menu__action" type="button" role="menuitem" @click="client.toggleArchiveThread(thread); closeDrawerThreadMenu()">
-                                        <AppIcon :name="thread.state === 'archived' ? 'restore' : 'archive'" />
-                                        <span>{{ thread.state === "archived" ? "Restore" : "Archive" }}</span>
+                                        <AppIcon name="archive" />
+                                        <span>Archive</span>
                                       </button>
                                       <button
                                         class="drawer-thread-menu__action drawer-thread-menu__action--danger"

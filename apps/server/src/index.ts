@@ -432,7 +432,15 @@ function sendBridgeState() {
 }
 
 function listBridgeThreads() {
-  return [...threadCache.values()].sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt));
+  return sortThreadsByCreatedAtDesc([...threadCache.values()]);
+}
+
+function sortThreadsByCreatedAtDesc<T extends Pick<ThreadRecord, "createdAt" | "lastActivityAt">>(threads: T[]) {
+  return threads.sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || left.lastActivityAt);
+    const rightTime = Date.parse(right.createdAt || right.lastActivityAt);
+    return rightTime - leftTime;
+  });
 }
 
 function serializeThreadForUser(thread: ThreadRecord, selectedThreadId: string | null) {
@@ -1765,6 +1773,7 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
     repoLabel,
     branch: readString(rawThread?.gitInfo?.branch) || existing?.branch || "main",
     state: deriveThreadState(readString(rawThread?.status?.type), threadId, archived),
+    createdAt: toIsoFromEpoch(rawThread?.createdAt) ?? existing?.createdAt ?? existing?.lastActivityAt ?? new Date().toISOString(),
     lastActivityAt: toIsoFromEpoch(rawThread?.updatedAt) ?? toIsoFromEpoch(rawThread?.createdAt) ?? existing?.lastActivityAt ?? new Date().toISOString(),
     unreadCount: 0,
     subagentCount: 0,
@@ -2034,6 +2043,7 @@ function ensureThreadRecord(threadId: string) {
     repoLabel: defaultProject.projectRoot,
     branch: "main",
     state: local.queuedDrafts.length > 0 ? "queued" : "idle",
+    createdAt: new Date().toISOString(),
     lastActivityAt: new Date().toISOString(),
     unreadCount: 0,
     subagentCount: 0,
@@ -2049,14 +2059,14 @@ function ensureThreadRecord(threadId: string) {
 
 function snapshotForUser(userId: string): AppSnapshot {
   const user = persisted.users[userId];
-  const threads = [...threadCache.values()]
+  const threads = [...sortThreadsByCreatedAtDesc([...threadCache.values()])]
     .sort((left, right) => {
       const leftArchived = left.state === "archived" ? 1 : 0;
       const rightArchived = right.state === "archived" ? 1 : 0;
       if (leftArchived !== rightArchived) {
         return leftArchived - rightArchived;
       }
-      return Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt);
+      return Date.parse(right.createdAt || right.lastActivityAt) - Date.parse(left.createdAt || left.lastActivityAt);
     })
     .map((thread) => serializeThreadForUser(thread, user.selectedThreadId));
 
@@ -2112,9 +2122,7 @@ function ensureUser(email: string): PersistedUser {
 
 function normalizeSelections() {
   const firstLiveThreadId = findFirstLiveThreadId();
-  const firstAnyThreadId = [...threadCache.values()]
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
-    .at(0)?.id ?? null;
+  const firstAnyThreadId = sortThreadsByCreatedAtDesc([...threadCache.values()]).at(0)?.id ?? null;
 
   for (const user of bridgeUsers.values()) {
     if (user.selectedThreadId === null) {
@@ -2165,10 +2173,9 @@ function forgetThread(threadId: string, userId?: string) {
 }
 
 function findFirstLiveThreadId(excludingThreadId?: string) {
-  return [...threadCache.values()]
-    .filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
-    .sort((left, right) => Date.parse(right.lastActivityAt) - Date.parse(left.lastActivityAt))
-    .at(0)?.id ?? null;
+  return sortThreadsByCreatedAtDesc(
+    [...threadCache.values()].filter((thread) => thread.id !== excludingThreadId && thread.state !== "archived")
+  ).at(0)?.id ?? null;
 }
 
 function ensureThreadLocal(threadId: string) {
