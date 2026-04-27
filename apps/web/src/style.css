@@ -2366,7 +2366,7 @@ button {
   min-height: 100%;
   width: min(100%, 430px);
   margin: 0 auto;
-  justify-items: center;
+  justify-items: stretch;
   padding: 0 0 32px;
   text-align: center;
 }
@@ -2381,10 +2381,12 @@ button {
 }
 
 .home-install-compact {
-  display: flex;
-  align-items: center;
+  box-sizing: border-box;
+  display: grid;
   width: 100%;
+  justify-self: stretch;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 8px;
   border: 1px solid rgba(18, 18, 18, 0.07);
@@ -2392,15 +2394,21 @@ button {
   background: rgba(255, 255, 255, 0.68);
 }
 
-.home-install-compact {
-  display: grid;
-}
-
 .home-install-compact__bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto;
   align-items: center;
+  min-width: 0;
   justify-content: space-between;
   gap: 8px;
+}
+
+.home-install-compact__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .home-empty-state__trusted-card {
@@ -2596,7 +2604,7 @@ button {
   gap: 6px;
   flex: 0 0 auto;
   min-height: 34px;
-  min-width: 74px;
+  min-width: 34px;
   padding: 0 12px;
   border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: var(--radius-pill);
@@ -2641,9 +2649,9 @@ button {
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 0;
+  border: 1px solid rgba(18, 18, 18, 0.06);
   border-radius: 999px;
-  background: rgba(18, 18, 18, 0.04);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--muted-strong);
   box-shadow: none;
   transition:
@@ -2660,7 +2668,7 @@ button {
 
 .home-empty-state__install-toggle:hover,
 .home-empty-state__install-toggle:focus-visible {
-  background: rgba(18, 18, 18, 0.07);
+  background: rgba(255, 255, 255, 0.96);
   color: var(--text);
   outline: none;
 }
@@ -2672,6 +2680,8 @@ button {
 .home-empty-state__install-code-shell {
   display: grid;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding-top: 4px;
 }
 
@@ -2683,6 +2693,7 @@ button {
   flex: 0 1 auto;
   width: max-content;
   max-width: 100%;
+  min-width: 0;
   min-height: 34px;
   padding: 3px;
   border-radius: var(--radius-pill);
@@ -2723,6 +2734,7 @@ button {
 .home-empty-state__install-code {
   margin: 0;
   min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   padding: 10px 12px;
   border-radius: 16px;

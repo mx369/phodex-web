@@ -4027,30 +4027,32 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   Mac
                                 </button>
                               </div>
-                              <button
-                                class="home-empty-state__install-copy"
-                                :class="{
-                                  'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
-                                  'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
-                                }"
-                                type="button"
-                                :aria-label="bridgeInstallCopyLabel"
-                                :disabled="!installManifest?.command"
-                                @click="copyInstallCommand"
-                              >
-                                <AppIcon :name="installCommandCopyState === 'copied' ? 'check' : 'copy'" aria-hidden="true" />
-                                <span aria-hidden="true">Copy</span>
-                              </button>
-                              <button
-                                class="home-empty-state__install-toggle"
-                                :class="{ 'home-empty-state__install-toggle--expanded': installCommandExpanded }"
-                                type="button"
-                                aria-label="Toggle install command"
-                                :aria-expanded="installCommandExpanded"
-                                @click="installCommandExpanded = !installCommandExpanded"
-                              >
-                                <AppIcon name="chevron-down" aria-hidden="true" />
-                              </button>
+                              <div class="home-install-compact__actions">
+                                <button
+                                  class="home-empty-state__install-copy"
+                                  :class="{
+                                    'home-empty-state__install-copy--copied': installCommandCopyState === 'copied',
+                                    'home-empty-state__install-copy--failed': installCommandCopyState === 'failed',
+                                  }"
+                                  type="button"
+                                  :aria-label="bridgeInstallCopyLabel"
+                                  :disabled="!installManifest?.command"
+                                  @click="copyInstallCommand"
+                                >
+                                  <AppIcon :name="installCommandCopyState === 'copied' ? 'check' : 'copy'" aria-hidden="true" />
+                                  <span aria-hidden="true">Copy</span>
+                                </button>
+                                <button
+                                  class="home-empty-state__install-toggle"
+                                  :class="{ 'home-empty-state__install-toggle--expanded': installCommandExpanded }"
+                                  type="button"
+                                  aria-label="Toggle install command"
+                                  :aria-expanded="installCommandExpanded"
+                                  @click="installCommandExpanded = !installCommandExpanded"
+                                >
+                                  <AppIcon name="chevron-down" aria-hidden="true" />
+                                </button>
+                              </div>
                             </div>
                             <div v-if="installCommandExpanded" class="home-empty-state__install-code-shell">
                               <pre
