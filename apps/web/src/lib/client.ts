@@ -39,6 +39,9 @@ type PendingThreadCreate = {
   resolve: (threadId: string) => void;
   reject: (error: Error) => void;
 };
+type PendingThreadCreatePromise = Promise<string> & {
+  tempId: string;
+};
 type PendingRunFeedback = {
   threadId: string;
   prompt: string;
@@ -395,10 +398,15 @@ export function createAppClient() {
 
   function createThreadAndSend(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
     pendingSendAfterThreadCreate = true;
-    return createThread(projectLabel, mode, cwd).catch((error) => {
+    const creation = createThread(projectLabel, mode, cwd);
+    const chained = creation.catch((error) => {
       pendingSendAfterThreadCreate = false;
       throw error;
-    });
+    }) as Promise<string> & { tempId?: string };
+    if ("tempId" in creation) {
+      chained.tempId = creation.tempId;
+    }
+    return chained;
   }
 
   function selectThread(threadId: string) {
@@ -881,7 +889,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
   state.snapshot.selectedThreadId = tempId;
   state.snapshot.threads = [tempThread, ...state.snapshot.threads.filter((thread) => thread.id !== tempId)];
 
-  return new Promise<string>((resolve, reject) => {
+  const promise = new Promise<string>((resolve, reject) => {
     pendingThreadCreate = {
       tempId,
       requestId,
@@ -897,7 +905,9 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
       resolve,
       reject,
     };
-  });
+  }) as PendingThreadCreatePromise;
+  promise.tempId = tempId;
+  return promise;
 }
 
 function resolvePendingThreadCreate(selectedThreadId: string | null) {

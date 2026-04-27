@@ -1481,6 +1481,31 @@ button {
   text-overflow: ellipsis;
 }
 
+.thread-create-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 16px 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(131, 111, 77, 0.16);
+  border-radius: var(--radius-2);
+  background: rgba(255, 250, 237, 0.7);
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.thread-create-notice__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #c58b2c;
+  box-shadow: 0 0 0 4px rgba(197, 139, 44, 0.12);
+  animation: pending-pulse 1.4s ease-in-out infinite;
+}
+
 .phone-topbar-status__label {
   display: inline;
   flex: 0 0 auto;

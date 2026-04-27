@@ -65,6 +65,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - The production web bundle should call relay HTTP routes via same-origin paths and derive the relay websocket from the current page origin. Do not bake loopback client targets such as `127.0.0.1:3443` into a public build.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by hydrating the selected thread through `thread:updated` and message events instead of every snapshot.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.
+- New-chat navigation is optimistic: the web client inserts a temporary `pending-thread:*` record, immediately routes to that temporary thread ID, shows a lightweight creating notice, and replaces the URL with the real Codex thread route when `thread:created` resolves.
 - Thread changes rebroadcast updated thread records.
 - Streaming assistant output is forwarded as append/delta/finished events.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.

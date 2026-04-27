@@ -315,6 +315,9 @@ type PendingThreadRouteState = {
   machineId: string | null;
   threadId: string;
 };
+type ThreadCreateNavigationPromise = Promise<string> & {
+  tempId?: string;
+};
 
 type AppRouteName =
   | "home"
@@ -663,9 +666,7 @@ const currentThread = computed(() => {
   }
   return state.snapshot.threads.find((thread) => thread.id === state.snapshot?.selectedThreadId) ?? null;
 });
-const isCurrentThreadPendingCreate = computed(() =>
-  Boolean(currentThread.value?.id.startsWith("pending-thread:"))
-);
+const isCurrentThreadPendingCreate = computed(() => isPendingThreadId(currentThread.value?.id ?? null));
 const liveThreads = computed(() => (state.snapshot?.threads ?? []).filter((thread) => thread.state !== "archived"));
 const liveThreadCount = computed(() => liveThreads.value.length);
 const floatingToasts = computed(() => state.ui.toasts.filter((toast) => toast.tone === "error"));
@@ -2517,12 +2518,7 @@ watch(verificationCode, () => {
 
 function handleSend() {
   if (!currentThread.value) {
-    void client
-      .createThreadAndSend("Phodex Web", "local")
-      .then((threadId) => {
-        navigateToThread(threadId);
-      })
-      .catch(() => {});
+    handleThreadCreateNavigation(client.createThreadAndSend("Phodex Web", "local"));
     return;
   }
   client.sendComposer(currentThread.value.id);
@@ -2568,12 +2564,7 @@ function startToolbarLocalChat() {
     return;
   }
   closeModelPicker();
-  void client
-    .createThread(currentThread.value.projectLabel, "local", currentThread.value.repoLabel || undefined)
-    .then((threadId) => {
-      navigateToThread(threadId);
-    })
-    .catch(() => {});
+  handleThreadCreateNavigation(client.createThread(currentThread.value.projectLabel, "local", currentThread.value.repoLabel || undefined));
 }
 
 function startWorktreeChat() {
@@ -2592,11 +2583,12 @@ function openPanel(panel: ShellPageState, replace = false) {
   state.ui.sidebarOpen = false;
 }
 
-function navigateToThread(threadId: string) {
+function navigateToThread(threadId: string, replace = false) {
   const machineId = currentRouteMachineId();
   if (!machineId) {
     client.logFlowTrace("route.thread.manual-missing-machine", {
       threadId,
+      replace,
     });
     client.selectThread(threadId);
     return;
@@ -2605,12 +2597,33 @@ function navigateToThread(threadId: string) {
   client.logFlowTrace("route.thread.manual", {
     threadId,
     machineId,
+    replace,
   });
-  void router.push({
+  const target = {
     name: "thread",
     params: { machineId, threadId },
     query: preservedRouteQuery(),
-  });
+  } satisfies RouteLocationRaw;
+  void (replace ? router.replace(target) : router.push(target));
+}
+
+function handleThreadCreateNavigation(creation: ThreadCreateNavigationPromise) {
+  const tempId = creation.tempId;
+  if (tempId) {
+    navigateToThread(tempId);
+  }
+
+  void creation
+    .then((threadId) => {
+      if (tempId && routeThreadId.value === tempId) {
+        navigateToThread(threadId, true);
+        return;
+      }
+      if (!tempId) {
+        navigateToThread(threadId);
+      }
+    })
+    .catch(() => {});
 }
 
 function handleDrawerThreadClick(threadId: string) {
@@ -2688,16 +2701,13 @@ function confirmDialogAction() {
     if (!nextSelection?.cwd && nextSelection?.isCustom) {
       return;
     }
-    void client
-      .createThread(
+    handleThreadCreateNavigation(
+      client.createThread(
         nextSelection?.projectLabel ?? dialogState.value.projectLabel,
         dialogState.value.mode,
         nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
       )
-      .then((threadId) => {
-        navigateToThread(threadId);
-      })
-      .catch(() => {});
+    );
     closeDialog();
     closeSidebar();
     return;
@@ -2809,6 +2819,10 @@ function normalizedRouteParam(value: unknown) {
   return null;
 }
 
+function isPendingThreadId(threadId: string | null) {
+  return Boolean(threadId?.startsWith("pending-thread:"));
+}
+
 function currentRouteMachineId() {
   if (route.name === "thread") {
     const routeMachineId = normalizedRouteParam(route.params.machineId);
@@ -2853,6 +2867,24 @@ function routeLocationForState(): RouteLocationRaw {
       params: { machineId, threadId: currentThread.value.id },
       query: preservedRouteQuery(),
     };
+  }
+
+  const selectedThreadId = state.snapshot?.selectedThreadId ?? null;
+  if (
+    routeThreadId.value &&
+    isPendingThreadId(routeThreadId.value) &&
+    selectedThreadId &&
+    selectedThreadId !== routeThreadId.value &&
+    state.snapshot?.threads.some((thread) => thread.id === selectedThreadId)
+  ) {
+    const machineId = currentRouteMachineId();
+    if (machineId) {
+      return {
+        name: "thread",
+        params: { machineId, threadId: selectedThreadId },
+        query: preservedRouteQuery(),
+      };
+    }
   }
 
   return {
@@ -3683,6 +3715,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                       </transition>
                     </div>
                   </header>
+
+                  <div v-if="isCurrentThreadPendingCreate" class="thread-create-notice" role="status" aria-live="polite">
+                    <span class="thread-create-notice__dot" aria-hidden="true"></span>
+                    <span>Creating this chat on your Mac. The URL will update when it is ready.</span>
+                  </div>
 
                   <div v-if="floatingToasts.length" class="toast-stack">
                     <div
