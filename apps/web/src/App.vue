@@ -985,9 +985,6 @@ function bridgeDeviceStateLabel(device: BridgeDeviceSummary) {
   if (isActiveBridgeDevice(device)) {
     return "Current";
   }
-  if (canSelectBridgeDevice(device)) {
-    return "Available";
-  }
   return "";
 }
 

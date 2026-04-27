@@ -2391,21 +2391,27 @@ button {
   gap: 8px;
   width: 100%;
   padding: 12px;
-  border: 1px solid rgba(18, 18, 18, 0.06);
+  border: 1px solid rgba(18, 18, 18, 0.07);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.56);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.54)),
+    rgba(255, 255, 255, 0.58);
   transition:
     border-color 160ms ease,
     background 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease,
     transform 160ms ease;
 }
 
 .home-empty-state__device-card--active {
-  border-color: rgba(38, 162, 105, 0.22);
+  border-color: rgba(38, 162, 105, 0.34);
   background:
-    linear-gradient(180deg, rgba(239, 250, 245, 0.9), rgba(239, 250, 245, 0.62)),
+    linear-gradient(180deg, rgba(231, 250, 240, 0.96), rgba(238, 251, 244, 0.72)),
     rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(38, 162, 105, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(38, 162, 105, 0.11),
+    0 10px 28px rgba(38, 162, 105, 0.08);
 }
 
 .home-empty-state__device-card--selectable {
@@ -2414,20 +2420,39 @@ button {
 
 .home-empty-state__device-card--selectable:hover,
 .home-empty-state__device-card--selectable:focus-visible {
-  border-color: rgba(38, 162, 105, 0.16);
-  background: rgba(249, 253, 251, 0.88);
+  border-color: rgba(38, 162, 105, 0.22);
+  background:
+    linear-gradient(180deg, rgba(247, 253, 250, 0.96), rgba(255, 255, 255, 0.74)),
+    rgba(255, 255, 255, 0.82);
   outline: none;
 }
 
 .home-empty-state__device-card--active.home-empty-state__device-card--selectable:hover,
 .home-empty-state__device-card--active.home-empty-state__device-card--selectable:focus-visible {
-  border-color: rgba(38, 162, 105, 0.22);
-  background: rgba(234, 247, 239, 0.88);
+  border-color: rgba(38, 162, 105, 0.34);
+  background:
+    linear-gradient(180deg, rgba(231, 250, 240, 0.96), rgba(238, 251, 244, 0.72)),
+    rgba(255, 255, 255, 0.72);
 }
 
 .home-empty-state__device-card--disabled {
   cursor: default;
-  opacity: 0.68;
+  border-color: rgba(18, 18, 18, 0.045);
+  background:
+    linear-gradient(180deg, rgba(247, 246, 242, 0.5), rgba(243, 241, 236, 0.42)),
+    rgba(255, 255, 255, 0.36);
+  opacity: 0.48;
+  filter: saturate(0.55);
+}
+
+.home-empty-state__device-card--disabled .home-empty-state__trusted-icon {
+  background: rgba(18, 18, 18, 0.035);
+  color: rgba(18, 18, 18, 0.32);
+}
+
+.home-empty-state__device-card--disabled .home-empty-state__trusted strong,
+.home-empty-state__device-card--disabled .home-empty-state__trusted p {
+  color: rgba(18, 18, 18, 0.42);
 }
 
 .home-empty-state__trusted-row {
@@ -2490,11 +2515,6 @@ button {
   text-transform: uppercase;
   white-space: nowrap;
   background: rgba(18, 18, 18, 0.08);
-  color: var(--muted-strong);
-}
-
-.home-empty-state__device-card--selectable .home-empty-state__device-chip {
-  background: rgba(18, 18, 18, 0.06);
   color: var(--muted-strong);
 }
 
