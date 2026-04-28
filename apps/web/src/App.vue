@@ -612,9 +612,6 @@ const bridgeInstallCommand = computed(() => {
   return manifest.command;
 });
 const showBridgeInstallCard = computed(() => isAuthenticated.value);
-const showBridgeLinkedWarning = computed(
-  () => isAuthenticated.value && state.snapshot?.connection.bridgeOnline && state.snapshot?.connection.state !== "connected"
-);
 const bridgeInstallCopyLabel = computed(() => {
   switch (installCommandCopyState.value) {
     case "copied":
@@ -4137,14 +4134,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               </div>
                             </article>
                           </div>
-                        </div>
-                        <div v-if="showBridgeLinkedWarning" class="home-empty-state__install-card home-empty-state__install-card--warning">
-                          <span class="section-label">Computer Linked</span>
-                          <strong>{{ currentBridgeDeviceLabel }}</strong>
-                          <p>
-                            The bridge is already bound to this account. This screen stays offline because the local Codex
-                            app-server has not finished initializing on your computer yet.
-                          </p>
                         </div>
                         <button
                           class="primary-cta primary-cta--compact home-empty-state__primary"

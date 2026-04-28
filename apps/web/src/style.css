@@ -2696,11 +2696,6 @@ button {
   background: rgba(18, 18, 18, 0.03);
 }
 
-.home-empty-state__install-card--warning {
-  background: rgba(188, 139, 51, 0.08);
-  border-color: rgba(188, 139, 51, 0.18);
-}
-
 .home-empty-state__install-card strong {
   font-size: 13px;
   letter-spacing: -0.02em;
