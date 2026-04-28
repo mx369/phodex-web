@@ -364,14 +364,16 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
         await handleThreadCreate(user, command.event);
         return;
       case "thread:select":
-        try {
-          await syncThreadFromCodex(command.event.threadId, true);
-        } catch (error) {
-          if (handleMissingThread(user.profile.id, command.event.threadId, error)) {
-            sendToast(user.profile.id, "error", "This thread is no longer available.");
-            return;
+        if (shouldHydrateThreadOnSelect(command.event.threadId)) {
+          try {
+            await syncThreadFromCodex(command.event.threadId, true);
+          } catch (error) {
+            if (handleMissingThread(user.profile.id, command.event.threadId, error)) {
+              sendToast(user.profile.id, "error", "This thread is no longer available.");
+              return;
+            }
+            throw error;
           }
-          throw error;
         }
         user.selectedThreadId = command.event.threadId;
         sendUserPatch(user.profile.id, {
@@ -592,12 +594,14 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       user.selectedThreadId = event.threadId;
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
-      void syncThreadFromCodex(event.threadId, true).catch((error) => {
-        if (handleMissingThread(user.profile.id, event.threadId, error)) {
-          return;
-        }
-        sendToast(user.profile.id, "error", readErrorMessage(error));
-      });
+      if (shouldHydrateThreadOnSelect(event.threadId)) {
+        void syncThreadFromCodex(event.threadId, true).catch((error) => {
+          if (handleMissingThread(user.profile.id, event.threadId, error)) {
+            return;
+          }
+          sendToast(user.profile.id, "error", readErrorMessage(error));
+        });
+      }
       break;
     case "thread:clearSelection":
       user.selectedThreadId = null;
@@ -660,6 +664,7 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
       personality: "pragmatic",
     });
     const thread = mergeCodexThread(result.thread, false, false);
+    thread.history = buildLoadedThreadHistoryState(thread.messages.length, false);
     threadCache.set(thread.id, thread);
     user.selectedThreadId = thread.id;
     if (ws) {
@@ -674,6 +679,7 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
         userId: user.profile.id,
         requestId: event.requestId,
         threadId: thread.id,
+        thread,
       });
     }
     sendUserPatch(user.profile.id, {
@@ -685,7 +691,6 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
     broadcastSnapshotsToAllUsers();
     codexLastSyncAt = new Date().toISOString();
     publishPresenceToAllUsers();
-    void syncAllThreadsFromCodex();
   } catch (error) {
     const message = readErrorMessage(error);
     if (ws) {
@@ -1864,6 +1869,9 @@ function markThreadHistoryHydrating(threadId: string) {
   if (!thread) {
     return;
   }
+  if (isThreadHistoryKnownComplete(thread.history)) {
+    return;
+  }
 
   thread.history = {
     totalMessages: thread.history?.totalMessages ?? null,
@@ -1926,11 +1934,7 @@ async function loadThreadTurnsPageFromCodex(threadId: string, reset: boolean) {
   return current;
 }
 
-function buildLoadedThreadHistoryState(loadedMessages: number, hasMoreBefore: boolean): ThreadHistoryState | null {
-  if (!loadedMessages && !hasMoreBefore) {
-    return null;
-  }
-
+function buildLoadedThreadHistoryState(loadedMessages: number, hasMoreBefore: boolean): ThreadHistoryState {
   return {
     totalMessages: hasMoreBefore ? null : loadedMessages,
     loadedMessages,
@@ -1940,8 +1944,17 @@ function buildLoadedThreadHistoryState(loadedMessages: number, hasMoreBefore: bo
   };
 }
 
+function isThreadHistoryKnownComplete(history: ThreadHistoryState | null | undefined) {
+  return Boolean(history && history.totalMessages !== null && history.remainingMessages === 0 && !history.hasMoreBefore);
+}
+
+function shouldHydrateThreadOnSelect(threadId: string) {
+  const thread = threadCache.get(threadId);
+  return !thread || thread.messages.length > 0 || !isThreadHistoryKnownComplete(thread.history);
+}
+
 function finalizeSelectedThreadHydration(thread: ThreadRecord) {
-  if (thread.messages.length > 0) {
+  if (thread.messages.length > 0 || isThreadHistoryKnownComplete(thread.history)) {
     const retryTimer = selectedThreadHydrationRetryTimers.get(thread.id);
     if (retryTimer) {
       clearTimeout(retryTimer);

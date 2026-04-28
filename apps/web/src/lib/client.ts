@@ -75,7 +75,7 @@ const FLOW_TRACE_STORAGE_KEY = "phodex.flowTrace";
 const PENDING_THREAD_PREFIX = "pending-thread:";
 const OPTIMISTIC_QUEUED_DRAFT_PREFIX = "optimistic-queued:";
 const PENDING_THREAD_SLOW_MS = 18_000;
-const PENDING_THREAD_FAILURE_MS = 45_000;
+const PENDING_THREAD_FAILURE_MS = 75_000;
 const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
 const DEFAULT_SELECTED_MODEL = "GPT-5.4";
 const DEFAULT_ACCESS_MODE: AccessMode = "full-access";
@@ -969,14 +969,17 @@ function mergeHistoryAfterMetadataUpdate(
     existing?.totalMessages ??
     incoming?.totalMessages ??
     (incoming && !incoming.hasMoreBefore ? Math.max(loadedMessages, incoming.loadedMessages) : null);
-  const remainingMessages = totalMessages == null ? null : Math.max(0, totalMessages - loadedMessages);
+  const nextLoadedMessages = Math.max(loadedMessages, existing?.loadedMessages ?? 0);
+  const remainingMessages = totalMessages == null ? null : Math.max(0, totalMessages - nextLoadedMessages);
+  const hasMoreBefore =
+    totalMessages == null ? Boolean(incoming?.hasMoreBefore ?? existing?.hasMoreBefore) : remainingMessages !== null && remainingMessages > 0;
+  const knownComplete = totalMessages !== null && !hasMoreBefore && remainingMessages === 0;
   return {
     totalMessages,
-    loadedMessages: Math.max(loadedMessages, existing?.loadedMessages ?? 0),
+    loadedMessages: nextLoadedMessages,
     remainingMessages,
-    hasMoreBefore:
-      totalMessages == null ? Boolean(incoming?.hasMoreBefore ?? existing?.hasMoreBefore) : remainingMessages !== null && remainingMessages > 0,
-    isHydrating: Boolean(existing?.isHydrating || incoming?.isHydrating),
+    hasMoreBefore,
+    isHydrating: knownComplete ? false : Boolean(existing?.isHydrating || incoming?.isHydrating),
   };
 }
 

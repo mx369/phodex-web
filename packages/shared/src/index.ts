@@ -339,7 +339,7 @@ export type BridgeCommand =
 
 export type BridgeEvent =
   | { type: "bridge:state"; threads: ThreadRecord[]; connection: RelayConnection }
-  | { type: "bridge:thread:created"; userId: string; requestId: string; threadId: string }
+  | { type: "bridge:thread:created"; userId: string; requestId: string; threadId: string; thread?: ThreadRecord }
   | { type: "bridge:thread:create-failed"; userId: string; requestId: string; message: string }
   | { type: "bridge:thread:updated"; thread: ThreadRecord }
   | {

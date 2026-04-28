@@ -147,6 +147,7 @@ const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
 const MESSAGE_SEND_ACK_TIMEOUT_MS = 45_000;
+const THREAD_CREATE_DISPATCH_TIMEOUT_MS = 60_000;
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const DEFAULT_DEVICE_LABEL = process.env.PHODEX_DEVICE_LABEL ?? process.env.PHODEX_MAC_LABEL ?? hostname();
 const AUTH_ENV_FALLBACK_FILE =
@@ -675,7 +676,7 @@ function trackThreadCreateDispatch(userId: string, requestId: string) {
         requestId,
         message: "The computer did not acknowledge the new chat request. Restart the bridge and try again.",
       });
-    }, 22_000),
+    }, THREAD_CREATE_DISPATCH_TIMEOUT_MS),
   });
 }
 
@@ -890,7 +891,12 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       clearThreadCreateDispatch(event.userId, event.requestId);
       setSelectedThreadForUser(event.userId, event.threadId);
-      ensureMirroredThread(event.userId, event.threadId);
+      if (event.thread) {
+        const mirror = getThreadMirror(event.userId);
+        mirror.set(event.threadId, mergeIncomingMirroredThread(mirror.get(event.threadId), event.thread));
+      } else {
+        ensureMirroredThread(event.userId, event.threadId);
+      }
       schedulePersist();
       broadcast(event.userId, {
         type: "thread:created",
@@ -1123,6 +1129,7 @@ function ensureMirroredThread(userId: string, threadId: string) {
     diff: { additions: 0, deletions: 0 },
     queuedDrafts: [],
     messages: [],
+    history: buildThreadHistoryState(0, 0),
   };
   mirror.set(threadId, thread);
   return thread;
@@ -1165,8 +1172,19 @@ function setSelectedThreadForUser(userId: string, selectedThreadId: string | nul
 }
 
 function mergeIncomingMirroredThread(existing: ThreadRecord | undefined, incoming: ThreadRecord) {
-  if (!existing?.messages.length || incoming.messages.length > 0) {
+  if (!existing) {
     return incoming;
+  }
+
+  if (incoming.messages.length > 0) {
+    return incoming;
+  }
+
+  if (!existing.messages.length && !incoming.messages.length) {
+    return {
+      ...incoming,
+      history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, incoming.history ?? null, 0),
+    } satisfies ThreadRecord;
   }
 
   return {
@@ -1190,7 +1208,8 @@ function mergeHistoryAfterMetadataUpdate(
     incoming?.totalMessages ??
     (incoming && !incoming.hasMoreBefore ? Math.max(loadedMessages, incoming.loadedMessages) : null);
   const hasMoreBefore = incoming?.hasMoreBefore ?? existing?.hasMoreBefore ?? false;
-  const isHydrating = Boolean(existing?.isHydrating || incoming?.isHydrating);
+  const isKnownComplete = totalMessages !== null && !hasMoreBefore && totalMessages <= Math.max(loadedMessages, existing?.loadedMessages ?? 0);
+  const isHydrating = isKnownComplete ? false : Boolean(existing?.isHydrating || incoming?.isHydrating);
   return buildThreadHistoryState(totalMessages, Math.max(loadedMessages, existing?.loadedMessages ?? 0), {
     hasMoreBefore,
     isHydrating,
@@ -1200,6 +1219,9 @@ function mergeHistoryAfterMetadataUpdate(
 function markMirroredThreadHistoryHydrating(userId: string, threadId: string) {
   const thread = getThreadMirror(userId).get(threadId);
   if (!thread) {
+    return;
+  }
+  if (isThreadHistoryKnownComplete(thread.history)) {
     return;
   }
   if (thread.messages.length > 0 && !thread.history?.hasMoreBefore) {
@@ -1212,6 +1234,10 @@ function markMirroredThreadHistoryHydrating(userId: string, threadId: string) {
     hasMoreBefore: thread.history?.hasMoreBefore ?? false,
     isHydrating: true,
   };
+}
+
+function isThreadHistoryKnownComplete(history: ThreadHistoryState | null | undefined) {
+  return Boolean(history && history.totalMessages !== null && history.remainingMessages === 0 && !history.hasMoreBefore);
 }
 
 function shouldRequestOlderThreadHistory(thread: ThreadRecord, nextLoadedMessages: number) {
