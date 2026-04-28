@@ -46,6 +46,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Bug fixes must be done in a dedicated Git worktree. After verification, merge the fix back into the main worktree, then remove the temporary worktree.
 - For bugfix worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
 - Before fixing a bug, reproduce it first with fresh runtime evidence. Prefer CDP screenshots; if the failure is transient, capture a short frame sequence or timestamped logs that prove the bug exists before changing code.
+- Browser/UI tests must use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper by default. Do not use Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks for them or Electron CDP cannot cover the required browser capability; document any exception.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
 - Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
 - Prioritize work surfaces and interactions over decorative marketing composition.
@@ -54,6 +55,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 ## Verification
 
 - Default order: build, targeted checks, then real-flow validation.
+- Browser-based validation must run through Electron CDP by default, not Chrome, Firefox, Playwright, or Selenium.
 - Real OTP acceptance must send a real email and fetch the code through a mailbox-reading skill. If that path is unavailable, report the verification gap instead of faking success.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com` through the local Apple Mail `QQ` account unless the user explicitly names another email.
 - If something was not verified, say so explicitly.

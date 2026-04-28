@@ -12,6 +12,10 @@ Read this file when you need to verify a change or continue from prior evidence.
 - Relay start: `bun run start:relay`
 - Bridge dev: `bun run dev:bridge`
 - Bridge start: `bun run start:bridge`
+- Electron CDP wrapper:
+  - `export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"`
+  - `export ECDP="$CODEX_HOME/skills/electron-cdp-automation/scripts/electron_cdp.sh"`
+  - Use `"$ECDP" open <url> --session <name>`, then `snapshot`, `click`, `fill`, `wait-for-text`, and `screenshot` with the same session.
 - Installer manifest: authenticated `GET /install/manifest.json`
 - Installer setup-token exchange: `POST /install/claim`
 - Latest shell installer alias: `GET /install`
@@ -55,7 +59,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 
 ## Verification Expectations
 
-- UI changes: run `bun run build:web`, then validate the real page in a browser session and capture fresh screenshots when acceptance depends on visuals.
+- UI changes: run `bun run build:web`, then validate the real page with the local `electron-cdp-automation` skill and hidden Electron CDP wrapper; capture fresh screenshots when acceptance depends on visuals.
+- Do not use Chrome, Firefox, Playwright, or Selenium for browser/UI validation unless the user explicitly asks for them or Electron CDP cannot cover the required browser capability; document any exception.
 - For transient UI bugs such as flicker, auto-scroll loss, disappearing cards, or tap-state regressions, capture a short mp4 or ordered frame sequence plus a timestamped state log.
   Do not treat a single screenshot as sufficient evidence for those cases.
 - For public web deploys, also inspect the emitted bundle or runtime requests to confirm the production build did not embed a local-only API origin.
