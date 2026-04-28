@@ -2642,6 +2642,17 @@ function handleThreadCreateNavigation(creation: ThreadCreateNavigationPromise) {
     .catch(() => {});
 }
 
+function createThreadAfterClosingChrome(projectLabel: string, mode: ThreadCreateMode, cwd?: string) {
+  closeDialog();
+  closeSidebar();
+
+  void nextTick(() => {
+    window.requestAnimationFrame(() => {
+      handleThreadCreateNavigation(client.createThread(projectLabel, mode, cwd));
+    });
+  });
+}
+
 function handleDrawerThreadClick(threadId: string) {
   clearPendingDrawerThreadNavigation();
   closeSidebar();
@@ -2717,15 +2728,11 @@ function confirmDialogAction() {
     if (!nextSelection?.cwd && nextSelection?.isCustom) {
       return;
     }
-    handleThreadCreateNavigation(
-      client.createThread(
-        nextSelection?.projectLabel ?? dialogState.value.projectLabel,
-        dialogState.value.mode,
-        nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
-      )
+    createThreadAfterClosingChrome(
+      nextSelection?.projectLabel ?? dialogState.value.projectLabel,
+      dialogState.value.mode,
+      nextSelection?.cwd ?? dialogState.value.cwd ?? undefined
     );
-    closeDialog();
-    closeSidebar();
     return;
   }
 
