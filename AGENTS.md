@@ -26,6 +26,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Prefer the smallest, simplest change with the smallest diff that actually solves the task.
   Smallest diff means narrow scope and normal readable code, not code golf, one-letter names, or collapsing code into one line.
 - Prefer environment variables or sourced secret files over inline secret strings. Do not paste tokens, passwords, or API keys into commands, docs, logs, or temp scripts when an env-based path exists.
+- Treat this as a real product. Do not add fake, mock, random, hardcoded, or placeholder product data to production paths. If a real signal is unavailable, show an explicit unavailable/unknown state, hide the metric, or report the verification gap instead of fabricating a value.
 - For CNB Git operations from the Codex shell, self-correct before asking the user: switch to the `cnb-dev-deploy` skill flow, use its authenticated `cnb-git.sh` wrapper, and verify remote/auth state before treating a push failure as a missing repository.
 - Do not deploy after merge or push by default. Deploy only when the user explicitly asks to deploy, publish, release, or restart the live environment.
 - If the user says to deploy without naming a target, deploy to QCP by default.
