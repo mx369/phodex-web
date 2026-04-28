@@ -820,7 +820,8 @@ function stabilizeIncomingThread(nextThread: ThreadRecord) {
     return mergeIncomingQueuedDrafts(nextThread);
   }
 
-  const shouldPreserveCachedMessages = nextThread.messages.length === 0 && existing.messages.length > 0;
+  const shouldPreserveCachedMessages =
+    nextThread.messages.length === 0 && existing.messages.length > 0 && !nextThread.history;
 
   if (!shouldPreserveCachedMessages) {
     return mergeIncomingQueuedDrafts(nextThread);

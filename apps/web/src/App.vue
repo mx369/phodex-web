@@ -83,6 +83,7 @@ type DrawerThreadGroup = {
 type DrawerThreadSummary = {
   id: string;
   title: string;
+  state: ThreadRecord["state"];
   projectLabel: string;
   repoLabel: string;
   createdAt: string;
@@ -702,6 +703,7 @@ const threadGroups = computed<DrawerThreadGroup[]>(() => {
       .map((thread) => ({
         id: thread.id,
         title: thread.title,
+        state: thread.state,
         projectLabel: thread.projectLabel,
         repoLabel: thread.repoLabel,
         createdAt: thread.createdAt || thread.lastActivityAt,
@@ -3533,7 +3535,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               @keydown.space.prevent="handleDrawerThreadClick(thread.id)"
                             >
                               <div class="drawer-thread__indicator">
-                                <span class="drawer-thread__dot drawer-thread__dot--idle"></span>
+                                <span :class="`drawer-thread__dot drawer-thread__dot--${thread.state}`"></span>
                                 <span v-if="thread.isWorktree" class="drawer-thread__badge">
                                   <AppIcon name="worktree" />
                                   <span>WT</span>
