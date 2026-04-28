@@ -1266,7 +1266,7 @@ const composerSuggestion = computed(() => {
 const dialogTitle = computed(() => {
   switch (dialogState.value?.kind) {
     case "create-thread":
-      return dialogState.value.mode === "worktree" ? "Start a worktree chat" : "Start a local chat";
+      return "New Chat";
     case "project-browser":
       return "Project Files";
     case "project-diff":
@@ -4487,12 +4487,17 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                     }"
                   >
                     <div class="app-dialog-card__head">
-                      <span class="section-label">
-                        {{
-                          dialogState.kind === "rename-thread"
-                            ? "Rename"
-                            : dialogState.kind === "create-thread"
-                              ? "Create"
+                      <template v-if="dialogState.kind === 'create-thread'">
+                        <div class="thread-create-sheet__head">
+                          <h3>{{ dialogTitle }}</h3>
+                          <span>{{ drawerProjectTargets.length }} projects</span>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <span class="section-label">
+                          {{
+                            dialogState.kind === "rename-thread"
+                              ? "Rename"
                               : dialogState.kind === "project-browser"
                                 ? "Project"
                                 : dialogState.kind === "project-diff"
@@ -4500,10 +4505,11 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   : dialogState.kind === "delete-thread"
                                     ? "Delete"
                                     : "Confirm"
-                        }}
-                      </span>
-                      <h3>{{ dialogTitle }}</h3>
-                      <p>{{ dialogBody }}</p>
+                          }}
+                        </span>
+                        <h3>{{ dialogTitle }}</h3>
+                        <p>{{ dialogBody }}</p>
+                      </template>
                       <p v-if="createThreadBlockedReason" class="app-dialog-card__warning">
                         {{ createThreadBlockedReason }}
                       </p>
@@ -4522,7 +4528,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 <AppIcon name="folder" />
                               </span>
                               <div class="thread-create-sheet__mode-copy">
-                                <strong>Local Chat</strong>
+                                <strong>Local</strong>
                                 <span>Starts at the project root</span>
                               </div>
                             </button>
@@ -4535,7 +4541,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 <AppIcon name="worktree" />
                               </span>
                               <div class="thread-create-sheet__mode-copy">
-                                <strong>Worktree Chat</strong>
+                                <strong>Worktree</strong>
                                 <span>Creates a fresh git worktree first</span>
                               </div>
                             </button>
@@ -4552,11 +4558,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               </span>
                               <div class="thread-create-sheet__target-copy">
                                 <div class="thread-create-sheet__target-head">
-                                  <strong>New Project Path</strong>
+                                  <strong>New path</strong>
                                   <span v-if="dialogState.useCustomCwd" class="thread-create-sheet__target-tag">Custom</span>
                                 </div>
                                 <p>Paste a full path or type a folder name.</p>
-                                <span>Folder names default to {{ PROJECTS_ROOT_HINT }}</span>
                               </div>
                             </button>
 
@@ -4580,8 +4585,8 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
 
                           <div class="thread-create-sheet__targets-wrap">
                             <div class="thread-create-sheet__targets-head">
-                              <span class="section-label">Existing Projects</span>
-                              <span>{{ drawerProjectTargets.length }} options</span>
+                              <span class="section-label">Projects</span>
+                              <span>{{ drawerProjectTargets.length }}</span>
                             </div>
 
                             <div class="thread-create-sheet__targets">
@@ -4605,8 +4610,10 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                     <strong>{{ target.label }}</strong>
                                     <span v-if="target.isCurrent" class="thread-create-sheet__target-tag">Current</span>
                                   </div>
-                                  <p>{{ target.detail }}</p>
-                                  <span>{{ target.liveCount }} live {{ target.liveCount === 1 ? "chat" : "chats" }}</span>
+                                  <p>
+                                    {{ target.detail }} · {{ target.liveCount }} live
+                                    {{ target.liveCount === 1 ? "chat" : "chats" }}
+                                  </p>
                                 </div>
                               </button>
                             </div>

@@ -465,24 +465,24 @@ button {
 }
 
 .app-dialog-card--create-thread {
-  gap: 12px;
-  width: min(100%, 388px);
-  padding: 14px 14px 12px;
+  gap: 10px;
+  width: min(100%, 420px);
+  padding: 12px;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: calc(100dvh - 28px - env(safe-area-inset-bottom, 0px));
+  max-height: min(82dvh, 680px);
   min-height: 0;
   overflow: hidden;
 }
 
 .app-dialog-card--create-thread .app-dialog-card__head {
-  gap: 6px;
+  gap: 4px;
   padding-bottom: 0;
 }
 
 .app-dialog-card--create-thread h3 {
-  font-size: var(--font-size-title);
+  font-size: 17px;
   line-height: 1.12;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
 }
 
 .app-dialog-card--create-thread p {
@@ -524,31 +524,57 @@ button {
   z-index: 1;
 }
 
+.thread-create-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  padding: 0 2px;
+}
+
+.thread-create-sheet__head h3 {
+  margin: 0;
+}
+
+.thread-create-sheet__head span {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-label);
+  font-weight: 700;
+}
+
 .thread-create-sheet__body,
-.thread-create-sheet__modes,
 .thread-create-sheet__targets {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .thread-create-sheet__body {
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
-  padding-bottom: 2px;
+  gap: 8px;
+  padding-bottom: 1px;
 }
 
 .thread-create-sheet__custom {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .thread-create-sheet__modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
   margin-top: 0;
+  padding: 4px;
+  border: 1px solid rgba(18, 18, 18, 0.06);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.035);
 }
 
 .thread-create-sheet__targets-wrap {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   min-height: 0;
 }
 
@@ -557,7 +583,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 2px 2px 0;
+  padding: 1px 2px 0;
 }
 
 .thread-create-sheet__targets-head span:last-child {
@@ -566,68 +592,98 @@ button {
   font-weight: 600;
 }
 
-.thread-create-sheet__mode,
+.thread-create-sheet__mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 .thread-create-sheet__target {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 13px;
+  min-height: 54px;
+  padding: 9px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-2);
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
   color: var(--text);
   text-align: left;
 }
 
-.thread-create-sheet__mode--active,
+.thread-create-sheet__mode--active {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  box-shadow: 0 8px 18px rgba(18, 18, 18, 0.07);
+}
+
 .thread-create-sheet__target--active {
   border-color: rgba(92, 109, 255, 0.26);
-  background: linear-gradient(180deg, rgba(92, 109, 255, 0.08), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(92, 109, 255, 0.07), rgba(255, 255, 255, 0.94));
   box-shadow: inset 0 0 0 1px rgba(92, 109, 255, 0.06);
 }
 
 .thread-create-sheet__mode strong,
 .thread-create-sheet__target strong {
   display: block;
-  font-size: var(--font-size-body-strong);
-  line-height: 1.24;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-body);
+  line-height: 1.22;
   letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.thread-create-sheet__mode span,
-.thread-create-sheet__target p,
-.thread-create-sheet__target span {
+.thread-create-sheet__mode span {
+  display: none;
+}
+
+.thread-create-sheet__target p {
   color: var(--text-secondary);
   font-size: var(--font-size-label);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
-.thread-create-sheet__mode p,
 .thread-create-sheet__target p {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-create-sheet__mode-copy,
 .thread-create-sheet__target-copy {
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  min-width: 0;
 }
 
-.thread-create-sheet__mode-icon,
 .thread-create-sheet__target-icon {
   display: inline-grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 1px solid rgba(18, 18, 18, 0.06);
-  border-radius: var(--radius-1);
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.84);
   color: var(--text);
 }
 
-.thread-create-sheet__mode--active .thread-create-sheet__mode-icon,
+.thread-create-sheet__mode-icon {
+  display: none;
+}
+
 .thread-create-sheet__target--active .thread-create-sheet__target-icon {
   border-color: rgba(92, 109, 255, 0.14);
   background: rgba(92, 109, 255, 0.12);
@@ -639,6 +695,7 @@ button {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .thread-create-sheet__target-tag {
@@ -659,7 +716,7 @@ button {
 
 .thread-create-sheet__custom-body {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 0 2px;
 }
 
@@ -685,11 +742,14 @@ button {
 
 .thread-create-sheet__preview p {
   margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+  line-height: 1.4;
 }
 
 .thread-create-sheet__targets {
   min-height: 0;
-  max-height: min(31dvh, 272px);
+  max-height: min(34dvh, 272px);
   overflow: auto;
   padding-right: 2px;
   padding-bottom: 4px;
