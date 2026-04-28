@@ -2655,12 +2655,7 @@ function handleThreadCreateNavigation(creation: ThreadCreateNavigationPromise) {
 function createThreadAfterClosingChrome(projectLabel: string, mode: ThreadCreateMode, cwd?: string) {
   closeDialog();
   closeSidebar();
-
-  void nextTick(() => {
-    window.requestAnimationFrame(() => {
-      handleThreadCreateNavigation(client.createThread(projectLabel, mode, cwd));
-    });
-  });
+  handleThreadCreateNavigation(client.createThread(projectLabel, mode, cwd));
 }
 
 function handleDrawerThreadClick(threadId: string) {
