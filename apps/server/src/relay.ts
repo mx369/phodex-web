@@ -768,9 +768,11 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       if (!promoted && getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }
-      getThreadMirror(bridgeUserId).clear();
+      const mirror = getThreadMirror(bridgeUserId);
+      const existingThreads = new Map(mirror);
+      mirror.clear();
       for (const thread of event.threads) {
-        getThreadMirror(bridgeUserId).set(thread.id, thread);
+        mirror.set(thread.id, mergeIncomingMirroredThread(existingThreads.get(thread.id), thread));
       }
       const selectedThreadId = persisted.users[bridgeUserId]?.selectedThreadId;
       if (selectedThreadId) {
@@ -821,7 +823,10 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       if (getActiveBridgeId(bridgeUserId) !== bridgeId) {
         break;
       }
-      getThreadMirror(bridgeUserId).set(event.thread.id, event.thread);
+      {
+        const mirror = getThreadMirror(bridgeUserId);
+        mirror.set(event.thread.id, mergeIncomingMirroredThread(mirror.get(event.thread.id), event.thread));
+      }
       normalizeSelectionForUser(bridgeUserId);
       broadcastThreadToUser(bridgeUserId, event.thread.id);
       break;
@@ -1051,6 +1056,39 @@ function setSelectedThreadForUser(userId: string, selectedThreadId: string | nul
     return;
   }
   selectedThreadHistoryWindowByUserId.set(userId, THREAD_HISTORY_PAGE_SIZE);
+}
+
+function mergeIncomingMirroredThread(existing: ThreadRecord | undefined, incoming: ThreadRecord) {
+  if (!existing?.messages.length || incoming.messages.length > 0) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    messages: existing.messages,
+    history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, incoming.history ?? null, existing.messages.length),
+  } satisfies ThreadRecord;
+}
+
+function mergeHistoryAfterMetadataUpdate(
+  existing: ThreadHistoryState | null,
+  incoming: ThreadHistoryState | null,
+  loadedMessages: number
+): ThreadHistoryState | null {
+  if (!existing && !incoming) {
+    return loadedMessages ? buildThreadHistoryState(loadedMessages, loadedMessages) : null;
+  }
+
+  const totalMessages =
+    existing?.totalMessages ??
+    incoming?.totalMessages ??
+    (incoming && !incoming.hasMoreBefore ? Math.max(loadedMessages, incoming.loadedMessages) : null);
+  const hasMoreBefore = incoming?.hasMoreBefore ?? existing?.hasMoreBefore ?? false;
+  const isHydrating = Boolean(existing?.isHydrating || incoming?.isHydrating);
+  return buildThreadHistoryState(totalMessages, Math.max(loadedMessages, existing?.loadedMessages ?? 0), {
+    hasMoreBefore,
+    isHydrating,
+  });
 }
 
 function markMirroredThreadHistoryHydrating(userId: string, threadId: string) {

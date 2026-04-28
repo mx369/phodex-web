@@ -924,9 +924,7 @@ function stabilizeIncomingThread(nextThread: ThreadRecord) {
   }
 
   const shouldPreserveCachedMessages =
-    nextThread.messages.length === 0 &&
-    existing.messages.length > 0 &&
-    (!nextThread.history || nextThread.history.isHydrating);
+    nextThread.messages.length === 0 && existing.messages.length > 0;
 
   if (!shouldPreserveCachedMessages) {
     return mergeIncomingQueuedDrafts(nextThread);
@@ -935,8 +933,32 @@ function stabilizeIncomingThread(nextThread: ThreadRecord) {
   return mergeIncomingQueuedDrafts({
     ...nextThread,
     messages: existing.messages,
-    history: existing.history ?? nextThread.history,
+    history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, nextThread.history ?? null, existing.messages.length),
   });
+}
+
+function mergeHistoryAfterMetadataUpdate(
+  existing: ThreadRecord["history"],
+  incoming: ThreadRecord["history"],
+  loadedMessages: number
+): ThreadRecord["history"] {
+  if (!existing && !incoming) {
+    return null;
+  }
+
+  const totalMessages =
+    existing?.totalMessages ??
+    incoming?.totalMessages ??
+    (incoming && !incoming.hasMoreBefore ? Math.max(loadedMessages, incoming.loadedMessages) : null);
+  const remainingMessages = totalMessages == null ? null : Math.max(0, totalMessages - loadedMessages);
+  return {
+    totalMessages,
+    loadedMessages: Math.max(loadedMessages, existing?.loadedMessages ?? 0),
+    remainingMessages,
+    hasMoreBefore:
+      totalMessages == null ? Boolean(incoming?.hasMoreBefore ?? existing?.hasMoreBefore) : remainingMessages !== null && remainingMessages > 0,
+    isHydrating: Boolean(existing?.isHydrating || incoming?.isHydrating),
+  };
 }
 
 function upsertThread(nextThread: ThreadRecord) {
