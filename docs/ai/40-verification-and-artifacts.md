@@ -59,8 +59,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 
 ## Verification Expectations
 
-- UI changes: run `bun run build:web`, then validate the real page with the local `electron-cdp-automation` skill and hidden Electron CDP wrapper; capture fresh screenshots when acceptance depends on visuals.
-- Do not use Chrome, Firefox, Playwright, or Selenium for browser/UI validation unless the user explicitly asks for them or Electron CDP cannot cover the required browser capability; document any exception.
+- UI changes: run `bun run build:web` plus the smallest targeted checks that cover the change. Use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper only when acceptance depends on browser behavior, visual output, or interaction timing.
+- Browser/UI validation is not required by default. When browser automation is needed, prefer Electron CDP over Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks otherwise or Electron CDP cannot cover the required capability; document any exception.
 - For transient UI bugs such as flicker, auto-scroll loss, disappearing cards, or tap-state regressions, capture a short mp4 or ordered frame sequence plus a timestamped state log.
   Do not treat a single screenshot as sufficient evidence for those cases.
 - For public web deploys, also inspect the emitted bundle or runtime requests to confirm the production build did not embed a local-only API origin.
@@ -75,7 +75,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - For Home registered-device interaction changes, capture a real mobile runtime showing all three cases: tapping the active online device, tapping a second online device to switch `activeBridgeId`, and tapping an offline saved device to confirm it stays inert.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
-- CDP state-machine regressions need at least two timed assertions: an early sample inside the transient window and a settled sample after hydration or completion. Do not accept a final-state screenshot as proof that flicker, stale cache, or disappearing-card bugs are fixed.
+- Timing-sensitive browser state-machine regressions need at least two timed assertions: an early sample inside the transient window and a settled sample after hydration or completion. Do not accept a final-state screenshot as proof that flicker, stale cache, or disappearing-card bugs are fixed.
 - For local Electron CDP on this repo, use `--allow-insecure` for the self-signed Vite HTTPS cert, isolate test ports instead of killing another worktree's server, and save screenshots with absolute paths because relative paths resolve inside the Electron runtime app.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com`, which is available through the local Apple Mail `QQ` account, unless the user explicitly names another email.

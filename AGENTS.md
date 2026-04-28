@@ -46,8 +46,8 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - In fix loops: reproduce, fix, verify.
 - Before editing files, inspect current repo changes and decide whether the target files conflict with existing work. Use the current worktree when there is no conflict; create a dedicated Git worktree only when existing changes would overlap or make the edit unsafe to isolate.
 - For conflict-driven worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
-- Before fixing a bug, reproduce it first with fresh runtime evidence. Prefer CDP screenshots; if the failure is transient, capture a short frame sequence or timestamped logs that prove the bug exists before changing code.
-- Browser/UI tests must use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper by default. Do not use Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks for them or Electron CDP cannot cover the required browser capability; document any exception.
+- Before fixing a bug, reproduce it first with the lightest reliable evidence. Use CDP screenshots or frame sequences only when the failure is visual, interaction-heavy, or transient enough that simple logs/checks are insufficient.
+- Browser/UI validation defaults to lightweight checks. Use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper only when browser behavior, visual acceptance, or timing-sensitive UI evidence matters; if browser automation is needed, prefer Electron CDP over Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks otherwise or Electron CDP cannot cover the required capability.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
 - Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
 - Prioritize work surfaces and interactions over decorative marketing composition.
@@ -55,9 +55,9 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 
 ## Verification
 
-- Default order: build, targeted checks, then real-flow validation.
-- Browser-based validation must run through Electron CDP by default, not Chrome, Firefox, Playwright, or Selenium.
-- For state-machine CDP regressions, capture both the early transient state and the settled state; a final screenshot alone is not enough.
+- Default order: build, targeted checks, then real-flow validation only when the task risk justifies it.
+- Browser-based validation is not required by default. When it is needed, use Electron CDP rather than Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks otherwise or Electron CDP cannot cover the required capability.
+- For timing-sensitive browser state-machine regressions, capture both the early transient state and the settled state; a final screenshot alone is not enough.
 - Real OTP acceptance must send a real email and fetch the code through a mailbox-reading skill. If that path is unavailable, report the verification gap instead of faking success.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com` through the local Apple Mail `QQ` account unless the user explicitly names another email.
 - Local email inspection must use the `apple-mail-reader` skill; if that skill or Mail automation is unavailable, report the blocker instead of reading `~/Library/Mail` directly.
