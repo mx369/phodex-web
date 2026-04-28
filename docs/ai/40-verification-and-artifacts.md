@@ -75,6 +75,8 @@ Read this file when you need to verify a change or continue from prior evidence.
 - For Home registered-device interaction changes, capture a real mobile runtime showing all three cases: tapping the active online device, tapping a second online device to switch `activeBridgeId`, and tapping an offline saved device to confirm it stays inert.
 - If `x-phodex-bridge-token` is present but invalid, `/api/health` should return `401` so stale install commands do not masquerade as a slow bridge startup.
 - State-machine fixes: test the full path, not just the isolated component.
+- CDP state-machine regressions need at least two timed assertions: an early sample inside the transient window and a settled sample after hydration or completion. Do not accept a final-state screenshot as proof that flicker, stale cache, or disappearing-card bugs are fixed.
+- For local Electron CDP on this repo, use `--allow-insecure` for the self-signed Vite HTTPS cert, isolate test ports instead of killing another worktree's server, and save screenshots with absolute paths because relative paths resolve inside the Electron runtime app.
 - Any real OTP validation must send a real email and complete login with the real code from that mailbox.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com`, which is available through the local Apple Mail `QQ` account, unless the user explicitly names another email.
 - In local operator language, `Email Scale` refers to the provisioned OTP mail sender already wired through the repo's Resend path; do not treat that phrase as evidence that mail delivery is absent.

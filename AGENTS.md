@@ -57,6 +57,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 
 - Default order: build, targeted checks, then real-flow validation.
 - Browser-based validation must run through Electron CDP by default, not Chrome, Firefox, Playwright, or Selenium.
+- For state-machine CDP regressions, capture both the early transient state and the settled state; a final screenshot alone is not enough.
 - Real OTP acceptance must send a real email and fetch the code through a mailbox-reading skill. If that path is unavailable, report the verification gap instead of faking success.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com` through the local Apple Mail `QQ` account unless the user explicitly names another email.
 - Local email inspection must use the `apple-mail-reader` skill; if that skill or Mail automation is unavailable, report the blocker instead of reading `~/Library/Mail` directly.
