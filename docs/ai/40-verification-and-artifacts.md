@@ -79,6 +79,7 @@ Read this file when you need to verify a change or continue from prior evidence.
 - On this workstation, default real OTP validation to `otth.xyz@qq.com`, which is available through the local Apple Mail `QQ` account, unless the user explicitly names another email.
 - In local operator language, `Email Scale` refers to the provisioned OTP mail sender already wired through the repo's Resend path; do not treat that phrase as evidence that mail delivery is absent.
 - Preferred path: use a mailbox-reading skill to fetch the latest OTP from the inbox, then continue the browser flow with that code.
+- On this workstation, local email inspection must use the `apple-mail-reader` skill. If the skill, Apple Mail automation, or mailbox access fails, report the blocker instead of reading `~/Library/Mail` directly.
 - Do not say OTP mail is unavailable unless you first verify it with evidence, such as relay startup logs reporting missing credentials or `/api/auth/request-code` returning `503`.
 - Forbidden shortcuts for real acceptance: static codes, reading server persistence/state files, hidden dev endpoints, or any local bypass path.
 - If the mailbox-reading skill is unavailable or mailbox access fails, call out the validation as blocked rather than simulating success.
