@@ -4,27 +4,30 @@ Use this workflow for UI/state-machine regressions, especially mobile polish, fl
 
 ## Default Order
 
-1. Create a dedicated Git worktree for the bugfix before editing code.
-2. Verify the bug exists before proposing a fix.
-3. Prefer runtime evidence first:
+1. Inspect current repo changes before editing files and identify the likely target files.
+2. Use the current worktree if those files do not conflict with existing changes; create a dedicated Git worktree only when the existing changes overlap or make the fix unsafe to isolate.
+3. Verify the bug exists before proposing a fix.
+4. Prefer runtime evidence first:
    use Electron CDP, Computer Use, browser devtools, websocket logs, or server logs.
-4. For transient issues such as flicker, auto-scroll loss, or disappearing cards, record a short video or frame sequence plus state logs.
+5. For transient issues such as flicker, auto-scroll loss, or disappearing cards, record a short video or frame sequence plus state logs.
    A single screenshot is not enough unless the issue is static.
-5. If runtime capture is blocked, say what blocked it, then fall back to code analysis.
-6. Search the repo first:
+6. If runtime capture is blocked, say what blocked it, then fall back to code analysis.
+7. Search the repo first:
    inspect current code, nearby flows, and any prior acceptance artifacts.
-7. Search official or primary sources next.
+8. Search official or primary sources next.
    Prefer vendor docs, MDN, framework docs, standards, and upstream issue trackers from the technology owner.
-8. Only after those steps, fill gaps with engineering judgment.
-9. Implement the smallest fix that resolves the verified failure.
-10. Re-run the real flow and capture fresh evidence.
-11. Merge the verified fix back into the main worktree, then remove the temporary worktree.
-12. Summarize the result with links to code, logs, screenshots, and recordings.
+9. Only after those steps, fill gaps with engineering judgment.
+10. Implement the smallest fix that resolves the verified failure.
+11. Re-run the real flow and capture fresh evidence.
+12. If a temporary worktree was used, merge the verified fix back into the main worktree, then remove the temporary worktree.
+13. Summarize the result with links to code, logs, screenshots, and recordings.
 
 ## Worktree Discipline
 
-- Before creating a bugfix worktree, confirm the main worktree is clean with `git status --short --branch`.
-- Create bugfix worktrees from the current main HEAD with a unique branch and sibling path, for example:
+- Before editing, run `git status --short --branch` and inspect any modified files that may overlap the task.
+- If the target files are clean or existing changes are clearly unrelated, work in the current worktree.
+- If target files already contain unrelated edits, generated churn, or changes that would make the fix hard to isolate, create a dedicated worktree before editing.
+- Create temporary worktrees from the current main HEAD with a unique branch and sibling path, for example:
   `git worktree add -b bugfix/<topic> ../phodex-web-bugfix-<topic>`.
 - A fresh Git worktree does not share `node_modules`. Do not run `bun run build:web` there before bootstrapping dependencies.
 - Bootstrap temporary worktrees with Bun's absolute path and an explicit PATH on this Mac:
@@ -36,7 +39,7 @@ Use this workflow for UI/state-machine regressions, especially mobile polish, fl
   `chmod 644 packages/bridge-installer/bin/phodex-bridge.js`.
 - Commit only source/doc changes that belong to the fix. Do not commit `node_modules`, build output, ignored artifacts, or mode-only installer changes.
 - Fresh evidence under `.artifacts/current-audit/` is ignored by Git. Copy the relevant evidence directory from the temporary worktree back to the main worktree before removing the worktree.
-- Before merging back, confirm both worktrees are clean. Try `git merge --ff-only bugfix/<topic>` from main first.
+- Before merging back from a temporary worktree, confirm both worktrees are clean. Try `git merge --ff-only bugfix/<topic>` from main first.
 - If fast-forward merge fails because main advanced while the bugfix worktree was active, inspect `git log --oneline --graph --decorate --max-count=12 --all`; then use a normal merge from main if the histories are expected and conflicts are absent. Do not treat the failed fast-forward as a missing branch or lost work.
 - After the merge and final verification in main, remove the temporary worktree with `git worktree remove ../phodex-web-bugfix-<topic>` and delete the bugfix branch.
 

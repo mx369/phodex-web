@@ -43,8 +43,8 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 - Delegate in small units with clear acceptance criteria.
 - Delegation does not transfer final responsibility.
 - In fix loops: reproduce, fix, verify.
-- Bug fixes must be done in a dedicated Git worktree. After verification, merge the fix back into the main worktree, then remove the temporary worktree.
-- For bugfix worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
+- Before editing files, inspect current repo changes and decide whether the target files conflict with existing work. Use the current worktree when there is no conflict; create a dedicated Git worktree only when existing changes would overlap or make the edit unsafe to isolate.
+- For conflict-driven worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
 - Before fixing a bug, reproduce it first with fresh runtime evidence. Prefer CDP screenshots; if the failure is transient, capture a short frame sequence or timestamped logs that prove the bug exists before changing code.
 - Browser/UI tests must use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper by default. Do not use Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks for them or Electron CDP cannot cover the required browser capability; document any exception.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
