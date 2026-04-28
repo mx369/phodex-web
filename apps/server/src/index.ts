@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
@@ -2088,7 +2088,6 @@ function buildConnection(): RelayConnection {
     state: codexConnectionState,
     relayLabel: RELAY_LABEL,
     deviceLabel: DEVICE_LABEL,
-    latencyMs: codexConnectionState === "connected" ? randomInt(8, 22) : 0,
     lastSyncAt: codexLastSyncAt,
     rateLimits: codexRateLimits,
   };

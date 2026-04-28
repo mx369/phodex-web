@@ -3632,9 +3632,6 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                             <strong>{{ currentBridgeDeviceLabel }}</strong>
                             <span class="drawer-status__meta">
                               {{ state.snapshot?.connection.relayLabel }}
-                              <template v-if="state.snapshot?.connection.state === 'connected'">
-                                · {{ state.snapshot?.connection.latencyMs }}ms
-                              </template>
                             </span>
                             <div v-if="drawerRateLimitRows.length" class="drawer-status__quota">
                               <button

@@ -387,7 +387,6 @@ const server = Bun.serve<SocketData>({
           ...getBridgeConnection(ws.data.userId, ws.data.bridgeId),
           bridgeOnline: false,
           state: "disconnected",
-          latencyMs: 0,
         });
         if (activeBridgeIdsByUserId.get(ws.data.userId) === ws.data.bridgeId) {
           activeBridgeIdsByUserId.delete(ws.data.userId);
@@ -1202,7 +1201,6 @@ function normalizeBridgeConnection(connection: LegacyRelayConnection): RelayConn
     state: connection.state ?? "disconnected",
     relayLabel: connection.relayLabel?.trim() || RELAY_LABEL,
     deviceLabel: readConnectionDeviceLabel(connection),
-    latencyMs: typeof connection.latencyMs === "number" && Number.isFinite(connection.latencyMs) ? connection.latencyMs : 0,
     lastSyncAt: connection.lastSyncAt ?? null,
     rateLimits: connection.rateLimits ?? null,
   };
@@ -1214,7 +1212,6 @@ function disconnectedBridgeConnection(deviceLabel = DEFAULT_DEVICE_LABEL): Relay
     state: "disconnected",
     relayLabel: RELAY_LABEL,
     deviceLabel,
-    latencyMs: 0,
     lastSyncAt: null,
     rateLimits: null,
   };

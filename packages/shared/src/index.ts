@@ -230,7 +230,6 @@ export interface RelayConnection {
   state: "connecting" | "connected" | "disconnected";
   relayLabel: string;
   deviceLabel: string;
-  latencyMs: number;
   lastSyncAt: string | null;
   rateLimits: CodexRateLimitSnapshot | null;
 }
