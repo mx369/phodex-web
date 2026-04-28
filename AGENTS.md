@@ -55,6 +55,7 @@ Use progressive disclosure for AI context. Read only the smallest set of docs ne
 
 - Default order: build, targeted checks, then real-flow validation.
 - Real OTP acceptance must send a real email and fetch the code through a mailbox-reading skill. If that path is unavailable, report the verification gap instead of faking success.
+- On this workstation, default real OTP validation to `otth.xyz@qq.com` through the local Apple Mail `QQ` account unless the user explicitly names another email.
 - If something was not verified, say so explicitly.
 
 ## Deep Reads
