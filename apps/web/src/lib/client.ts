@@ -113,6 +113,9 @@ export const state = reactive({
 let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let pendingSendAfterThreadCreate = false;
+let pendingBridgeSelectionId: string | null = null;
+let pendingThreadSelectionId: string | null = null;
+let pendingThreadSelectionClear = false;
 let pendingThreadCreate: PendingThreadCreate | null = null;
 let pendingResumeFeedback: PendingResumeFeedback | null = null;
 const optimisticQueuedDrafts = new Map<string, QueuedDraft[]>();
@@ -354,6 +357,9 @@ export function createAppClient() {
     state.ui.authStatusTone = "neutral";
     state.ui.pendingRunFeedback = null;
     pendingResumeFeedback = null;
+    pendingBridgeSelectionId = null;
+    pendingThreadSelectionId = null;
+    pendingThreadSelectionClear = false;
     optimisticQueuedDrafts.clear();
     for (const timerId of pendingResumeTimers.values()) {
       window.clearTimeout(timerId);
@@ -363,10 +369,17 @@ export function createAppClient() {
   }
 
   function selectBridge(bridgeId: string) {
-    send({
-      type: "bridge:select",
-      bridgeId,
-    });
+    pendingBridgeSelectionId = bridgeId;
+    const sent = send(
+      {
+        type: "bridge:select",
+        bridgeId,
+      },
+      { toastOnFailure: false }
+    );
+    if (sent) {
+      pendingBridgeSelectionId = null;
+    }
   }
 
   function createThread(projectLabel?: string, mode: ThreadCreateMode = "local", cwd?: string) {
@@ -410,10 +423,18 @@ export function createAppClient() {
   }
 
   function selectThread(threadId: string) {
-    send({
-      type: "thread:select",
-      threadId,
-    });
+    pendingThreadSelectionId = threadId;
+    pendingThreadSelectionClear = false;
+    const sent = send(
+      {
+        type: "thread:select",
+        threadId,
+      },
+      { toastOnFailure: false }
+    );
+    if (sent) {
+      pendingThreadSelectionId = null;
+    }
     if (state.snapshot) {
       state.snapshot.selectedThreadId = threadId;
     }
@@ -443,9 +464,17 @@ export function createAppClient() {
   }
 
   function clearThreadSelection() {
-    send({
-      type: "thread:clearSelection",
-    });
+    pendingThreadSelectionId = null;
+    pendingThreadSelectionClear = true;
+    const sent = send(
+      {
+        type: "thread:clearSelection",
+      },
+      { toastOnFailure: false }
+    );
+    if (sent) {
+      pendingThreadSelectionClear = false;
+    }
     if (state.snapshot) {
       state.snapshot.selectedThreadId = null;
     }
@@ -578,6 +607,10 @@ function connectSocket() {
   socket.addEventListener("open", () => {
     updateConnectionState("connected");
     send({ type: "bootstrap" });
+    const flushedSelections = flushPendingSelections();
+    if (!flushedSelections.thread) {
+      refreshSelectedThreadOnConnect();
+    }
   });
 
   socket.addEventListener("message", (event) => {
@@ -608,9 +641,11 @@ function disconnectSocket() {
   }
 }
 
-function send(event: ClientEvent) {
+function send(event: ClientEvent, options: { toastOnFailure?: boolean } = {}) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    pushToast("error", "Relay not connected yet.");
+    if (options.toastOnFailure !== false) {
+      pushToast("error", "Relay not connected yet.");
+    }
     return false;
   }
   if (event.type === "message:send") {
@@ -630,6 +665,73 @@ function send(event: ClientEvent) {
   }
   socket.send(JSON.stringify(event));
   return true;
+}
+
+function flushPendingSelections() {
+  const flushed = {
+    bridge: false,
+    thread: false,
+  };
+
+  if (pendingBridgeSelectionId) {
+    const bridgeId = pendingBridgeSelectionId;
+    if (
+      send(
+        {
+          type: "bridge:select",
+          bridgeId,
+        },
+        { toastOnFailure: false }
+      )
+    ) {
+      pendingBridgeSelectionId = null;
+      flushed.bridge = true;
+    }
+  }
+
+  if (pendingThreadSelectionId) {
+    const threadId = pendingThreadSelectionId;
+    if (
+      send(
+        {
+          type: "thread:select",
+          threadId,
+        },
+        { toastOnFailure: false }
+      )
+    ) {
+      pendingThreadSelectionId = null;
+      flushed.thread = true;
+    }
+  } else if (pendingThreadSelectionClear) {
+    if (
+      send(
+        {
+          type: "thread:clearSelection",
+        },
+        { toastOnFailure: false }
+      )
+    ) {
+      pendingThreadSelectionClear = false;
+      flushed.thread = true;
+    }
+  }
+
+  return flushed;
+}
+
+function refreshSelectedThreadOnConnect() {
+  const selectedThreadId = state.snapshot?.selectedThreadId ?? null;
+  if (!selectedThreadId || selectedThreadId.startsWith(PENDING_THREAD_PREFIX)) {
+    return;
+  }
+  send(
+    {
+      type: "thread:select",
+      threadId: selectedThreadId,
+    },
+    { toastOnFailure: false }
+  );
 }
 
 function handleServerEvent(event: ServerEvent) {
@@ -1368,6 +1470,9 @@ function writeStoredSession(session: AuthSession) {
 function clearSession() {
   localStorage.removeItem(SESSION_STORAGE_KEY);
   state.session = null;
+  pendingBridgeSelectionId = null;
+  pendingThreadSelectionId = null;
+  pendingThreadSelectionClear = false;
 }
 
 function readErrorMessage(error: unknown) {
