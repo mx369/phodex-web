@@ -43,7 +43,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - `GET /api/bootstrap`, OTP verify, and relay `snapshot` events now send metadata-first snapshots from the public relay.
 - The selected thread's message bodies hydrate separately over the websocket via bridge sync and `thread:updated`, so session restore does not redownload the full selected conversation in every snapshot hop.
-- Selected-thread history now pages in from the relay: the first `thread:updated` only carries the most recent window, and `thread:history:load` expands that window with older messages on demand instead of sending the entire thread body at once.
+- Selected-thread history now pages from Codex app-server through the bridge when `thread/turns/list` is available: the first selected-thread hydration requests only the latest turn page, and `thread:history:load` asks the bridge for the next older page instead of forcing `thread/read(includeTurns=true)` for the entire rollout. Older Codex app-server builds fall back to the legacy full `thread/read(includeTurns=true)` path.
+- When Codex returns paged history without a total count, `ThreadHistoryState.totalMessages` and `remainingMessages` are `null`; the UI should show loading or a generic "Load earlier messages" action, not a fabricated remaining count.
 - `AppSnapshot` now carries `activeBridgeId` plus `bridgeDevices[]`, and relay `presence` events rebroadcast those same per-device records so Home can render every registered bridge device instead of only the active one.
 - When Home sends `bridge:select`, the relay validates that the target bridge is both registered and currently online before moving `activeBridgeId`, clearing mirrored thread selection, rebroadcasting snapshot/presence, and requesting a fresh `bridge:sync-all` from that bridge.
 - `RelayConnection` now separates `bridgeOnline` from `state`: `bridgeOnline` means the signed-in account has a live bridge websocket on the relay, while `state` continues to reflect the local Codex app-server readiness reported by that bridge.
@@ -65,6 +66,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Public relay origin generation is proxy-aware. In reverse-proxied HTTPS deployments, manifest, claim, and CORS origin values should follow trusted `Forwarded` / `X-Forwarded-*` headers instead of the internal Bun listener origin.
 - The production web bundle should call relay HTTP routes via same-origin paths and derive the relay websocket from the current page origin. Do not bake loopback client targets such as `127.0.0.1:3443` into a public build.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by hydrating the selected thread through `thread:updated` and message events instead of every snapshot.
+- Bridge `thread:updated` payloads may carry a selected thread with `messages: []` and `history.isHydrating=true`; the client should treat that as an explicit history-loading state rather than an empty conversation.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.
 - New-chat navigation is optimistic: the web client inserts a temporary `pending-thread:*` record, immediately routes to that temporary thread ID, shows a lightweight creating notice, and replaces the URL with the real Codex thread route when `thread:created` resolves.
 - Thread changes rebroadcast updated thread records.
@@ -84,7 +86,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 ## Codex App-Server Methods In Use
 
-- `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `thread/archive`, `thread/unarchive`, `turn/start`, `turn/interrupt`
+- `thread/start`, `thread/list`, `thread/read`, `thread/turns/list`, `thread/name/set`, `thread/archive`, `thread/unarchive`, `turn/start`, `turn/interrupt`
 
 ## Codex Notifications Consumed
 
@@ -95,7 +97,8 @@ Read this file for relay, auth, client, and Codex bridge work.
 
 - Thread delete is not available from Codex app-server, so permanent delete must stay out of the UI.
 - The message mapper covers `commandExecution`, `fileChange`, `webSearch`, `mcpToolCall`, `collabAgentToolCall`, `imageView`, and `contextCompaction`, but the UI remains a simplified card system.
-- `thread/read` may still omit completed tool activity on this workstation's current bridge build; the JSONL/git fallback is a compatibility path, not ideal source behavior.
+- Paged `thread/turns/list` history may not provide a total message count, and current upstream still rebuilds rollout history internally per page; it primarily avoids sending the full turn array over the bridge on initial route load.
+- `thread/read` may still omit completed tool activity on older bridge builds; the JSONL/git fallback is a compatibility path for the legacy full-read path, not ideal source behavior.
 - Codex app-server does not expose a dedicated plan item type today, so pinned-plan UI is inferred from `/plan` turns and the non-`final_answer` assistant messages inside them.
 - Structured-input replacement and deeper toolbar/sheet behavior are still parity gaps.
 

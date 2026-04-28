@@ -1151,6 +1151,16 @@ const planAccessory = computed(() => {
 });
 const composerWorkStateVisible = computed(() => Boolean(planAccessory.value || currentThread.value?.queuedDrafts.length));
 const currentThreadHistory = computed(() => currentThread.value?.history ?? null);
+const showCurrentThreadHistoryLoading = computed(() => {
+  const thread = currentThread.value;
+  const history = thread?.history;
+  return Boolean(
+    thread &&
+      history &&
+      !thread.messages.length &&
+      (history.isHydrating || history.totalMessages === null || history.hasMoreBefore)
+  );
+});
 const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
   const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
   return [
@@ -1178,7 +1188,8 @@ const showConversationContent = computed(
     Boolean(
       currentThread.value &&
         (currentThread.value.messages.length ||
-          currentThread.value.history?.totalMessages ||
+          showCurrentThreadHistoryLoading.value ||
+          (currentThread.value.history?.totalMessages ?? 0) > 0 ||
           currentPendingRunFeedback.value ||
           currentThread.value.queuedDrafts.length ||
           currentThread.value.state === "running" ||
@@ -3148,6 +3159,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
   if (history.isHydrating) {
     return "Loading earlier messages…";
   }
+  if (history.remainingMessages === null) {
+    return "Load earlier messages";
+  }
   const nextChunk = Math.min(history.remainingMessages, 200);
   if (history.remainingMessages <= nextChunk) {
     return `Load ${history.remainingMessages} earlier messages`;
@@ -3772,7 +3786,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                   >
                     <div ref="conversationInnerEl" class="phone-conversation__inner">
                       <template v-if="currentThread && showConversationContent">
-                        <div v-if="currentThread.history?.totalMessages && !currentThread.messages.length" class="conversation-history-status">
+                        <div v-if="showCurrentThreadHistoryLoading" class="conversation-history-status">
                           Loading recent messages…
                         </div>
                         <div v-else-if="showLoadOlderMessagesButton" class="conversation-history-actions">

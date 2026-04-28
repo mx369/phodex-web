@@ -29,6 +29,7 @@ import type {
   RelayConnection,
   ServerEvent,
   ThreadMessage,
+  ThreadHistoryState,
   ThreadRecord,
   UserSummary,
 } from "@phodex/shared";
@@ -92,6 +93,18 @@ type ThreadListResponse = {
   nextCursor: string | null;
 };
 
+type ThreadTurnsListResponse = {
+  data: any[];
+  nextCursor: string | null;
+  backwardsCursor: string | null;
+};
+
+type ThreadTurnPaginationState = {
+  nextCursor: string | null;
+  backwardsCursor: string | null;
+  loadedTurns: number;
+};
+
 type SessionTurnHistoryFallback = {
   fileChanges: FileChangeSummary[];
 };
@@ -145,6 +158,7 @@ const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const ACTIVE_TURN_STALE_MS = Math.max(60_000, Number(process.env.PHODEX_ACTIVE_TURN_STALE_MS ?? "600000"));
+const CODEX_THREAD_TURNS_PAGE_SIZE = Math.max(1, Number(process.env.PHODEX_CODEX_THREAD_TURNS_PAGE_SIZE ?? "100"));
 const CODEX_BIN = resolveCodexBinary();
 const FLOW_TRACE_ENABLED = /^(1|true)$/i.test(process.env.PHODEX_FLOW_TRACE ?? "");
 const DEV_ORIGINS = new Set([
@@ -168,6 +182,9 @@ const activeTurnStaleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const codexRequestWaiters = new Map<string, PendingCodexRequest>();
 const projectContextCache = new Map<string, ProjectContext>();
 const threadReadInFlight = new Map<string, Promise<ThreadRecord | null>>();
+const threadHistoryPageInFlight = new Map<string, Promise<ThreadRecord | null>>();
+const threadTurnPaginationByThreadId = new Map<string, ThreadTurnPaginationState>();
+let codexSupportsThreadTurnsList = true;
 
 function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
   if (!FLOW_TRACE_ENABLED) {
@@ -294,6 +311,14 @@ function handleRelayMessage(raw: string) {
           return;
         }
         console.error(`[phodex-bridge] sync-thread failed: ${readErrorMessage(error)}`);
+      });
+      break;
+    case "bridge:sync-thread-history":
+      void syncOlderThreadHistoryFromCodex(command.threadId).catch((error) => {
+        if (handleMissingThread(undefined, command.threadId, error)) {
+          return;
+        }
+        console.error(`[phodex-bridge] sync-thread-history failed: ${readErrorMessage(error)}`);
       });
       break;
     case "bridge:project:request":
@@ -1661,14 +1686,62 @@ async function syncThreadFromCodex(threadId: string, includeTurns: boolean) {
 }
 
 async function readThreadFromCodex(threadId: string, includeTurns: boolean) {
+  if (!includeTurns) {
+    return readThreadMetadataFromCodex(threadId, false);
+  }
+
+  if (codexSupportsThreadTurnsList) {
+    try {
+      return await readThreadFromCodexWithPagedTurns(threadId);
+    } catch (error) {
+      if (isThreadTurnsListUnsupportedError(error)) {
+        codexSupportsThreadTurnsList = false;
+        console.warn("[phodex] Codex app-server does not support thread/turns/list; falling back to full thread/read.");
+      } else if (isThreadNotMaterializedError(error)) {
+        return syncThreadFromCodex(threadId, false);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return readThreadFromCodexWithFullTurns(threadId);
+}
+
+async function readThreadMetadataFromCodex(threadId: string, includeMessages: boolean, broadcast = true) {
   let result: any;
   try {
     result = await codexRequest("thread/read", {
       threadId,
-      includeTurns,
+      includeTurns: false,
     });
   } catch (error) {
-    if (includeTurns && isThreadNotMaterializedError(error)) {
+    throw error;
+  }
+  if (!result?.thread) {
+    return null;
+  }
+
+  const archived = threadCache.get(threadId)?.state === "archived";
+  const thread = mergeCodexThread(result.thread, archived, false);
+  threadCache.set(thread.id, thread);
+  codexLastSyncAt = new Date().toISOString();
+  if (broadcast) {
+    broadcastThreadToAllUsers(thread.id, includeMessages);
+    publishPresenceToAllUsers();
+  }
+  return thread;
+}
+
+async function readThreadFromCodexWithFullTurns(threadId: string) {
+  let result: any;
+  try {
+    result = await codexRequest("thread/read", {
+      threadId,
+      includeTurns: true,
+    });
+  } catch (error) {
+    if (isThreadNotMaterializedError(error)) {
       return syncThreadFromCodex(threadId, false);
     }
     throw error;
@@ -1678,22 +1751,151 @@ async function readThreadFromCodex(threadId: string, includeTurns: boolean) {
   }
 
   const archived = threadCache.get(threadId)?.state === "archived";
-  const thread = mergeCodexThread(result.thread, archived, includeTurns);
+  const thread = mergeCodexThread(result.thread, archived, true);
+  thread.history = buildLoadedThreadHistoryState(thread.messages.length, false);
+  threadTurnPaginationByThreadId.delete(thread.id);
   threadCache.set(thread.id, thread);
   codexLastSyncAt = new Date().toISOString();
-  if (includeTurns && thread.messages.length > 0) {
+  finalizeSelectedThreadHydration(thread);
+  broadcastThreadToAllUsers(thread.id, true);
+  publishPresenceToAllUsers();
+  return thread;
+}
+
+async function readThreadFromCodexWithPagedTurns(threadId: string) {
+  const metadataThread = await readThreadMetadataFromCodex(threadId, true, false);
+  if (!metadataThread) {
+    return null;
+  }
+
+  markThreadHistoryHydrating(metadataThread.id);
+  return loadThreadTurnsPageFromCodex(metadataThread.id, true);
+}
+
+async function syncOlderThreadHistoryFromCodex(threadId: string) {
+  if (!isCodexReady()) {
+    return null;
+  }
+
+  const existingSync = threadHistoryPageInFlight.get(threadId);
+  if (existingSync) {
+    return existingSync;
+  }
+
+  const syncPromise = (async () => {
+    if (!codexSupportsThreadTurnsList) {
+      return readThreadFromCodexWithFullTurns(threadId);
+    }
+    markThreadHistoryHydrating(threadId);
+    try {
+      return await loadThreadTurnsPageFromCodex(threadId, false);
+    } catch (error) {
+      if (isThreadTurnsListUnsupportedError(error)) {
+        codexSupportsThreadTurnsList = false;
+        return readThreadFromCodexWithFullTurns(threadId);
+      }
+      throw error;
+    }
+  })().finally(() => {
+    threadHistoryPageInFlight.delete(threadId);
+  });
+
+  threadHistoryPageInFlight.set(threadId, syncPromise);
+  return syncPromise;
+}
+
+function markThreadHistoryHydrating(threadId: string) {
+  const thread = threadCache.get(threadId);
+  if (!thread) {
+    return;
+  }
+
+  thread.history = {
+    totalMessages: thread.history?.totalMessages ?? null,
+    loadedMessages: thread.messages.length,
+    remainingMessages: thread.history?.remainingMessages ?? null,
+    hasMoreBefore: thread.history?.hasMoreBefore ?? false,
+    isHydrating: true,
+  };
+  threadCache.set(thread.id, thread);
+  broadcastThreadToAllUsers(thread.id, true);
+}
+
+async function loadThreadTurnsPageFromCodex(threadId: string, reset: boolean) {
+  let current = threadCache.get(threadId) ?? null;
+  if (!current) {
+    current = await readThreadMetadataFromCodex(threadId, true);
+  }
+  if (!current) {
+    return null;
+  }
+
+  const pagination = reset ? null : threadTurnPaginationByThreadId.get(threadId) ?? null;
+  if (!reset && pagination && !pagination.nextCursor) {
+    current.history = buildLoadedThreadHistoryState(current.messages.length, false);
+    threadCache.set(current.id, current);
+    broadcastThreadToAllUsers(current.id, true);
+    return current;
+  }
+
+  const response = await codexRequest("thread/turns/list", {
+    threadId,
+    cursor: reset ? null : pagination?.nextCursor ?? null,
+    limit: CODEX_THREAD_TURNS_PAGE_SIZE,
+    sortDirection: "desc",
+  }) as ThreadTurnsListResponse;
+
+  const pageTurns = Array.isArray(response?.data) ? response.data : [];
+  const pageMessages = mapTurnsToMessages([...pageTurns].reverse(), new Map(), current.repoLabel || DEFAULT_THREAD_CWD);
+  const existingMessages = current.messages ?? [];
+  const nextMessages = dedupeMessages(reset ? [...existingMessages, ...pageMessages] : [...pageMessages, ...existingMessages]).map(
+    (message) => preserveImagePreviewFromMessage(existingMessages.find((entry) => entry.id === message.id), message)
+  );
+  const hasMoreBefore = Boolean(response?.nextCursor);
+
+  current = {
+    ...current,
+    messages: nextMessages,
+    history: buildLoadedThreadHistoryState(nextMessages.length, hasMoreBefore),
+  };
+  threadCache.set(current.id, current);
+  threadTurnPaginationByThreadId.set(current.id, {
+    nextCursor: response?.nextCursor ?? null,
+    backwardsCursor: response?.backwardsCursor ?? null,
+    loadedTurns: (reset ? 0 : pagination?.loadedTurns ?? 0) + pageTurns.length,
+  });
+  codexLastSyncAt = new Date().toISOString();
+  finalizeSelectedThreadHydration(current);
+  broadcastThreadToAllUsers(current.id, true);
+  publishPresenceToAllUsers();
+  return current;
+}
+
+function buildLoadedThreadHistoryState(loadedMessages: number, hasMoreBefore: boolean): ThreadHistoryState | null {
+  if (!loadedMessages && !hasMoreBefore) {
+    return null;
+  }
+
+  return {
+    totalMessages: hasMoreBefore ? null : loadedMessages,
+    loadedMessages,
+    remainingMessages: hasMoreBefore ? null : 0,
+    hasMoreBefore,
+    isHydrating: false,
+  };
+}
+
+function finalizeSelectedThreadHydration(thread: ThreadRecord) {
+  if (thread.messages.length > 0) {
     const retryTimer = selectedThreadHydrationRetryTimers.get(thread.id);
     if (retryTimer) {
       clearTimeout(retryTimer);
       selectedThreadHydrationRetryTimers.delete(thread.id);
     }
     selectedThreadHydrationRetryCounts.delete(thread.id);
-  } else if (includeTurns && shouldRetrySelectedThreadHydration(thread.id)) {
+  } else if (shouldRetrySelectedThreadHydration(thread.id)) {
     scheduleSelectedThreadHydrationRetry(thread.id);
   }
-  broadcastThreadToAllUsers(thread.id, includeTurns);
-  publishPresenceToAllUsers();
-  return thread;
 }
 
 function shouldRetrySelectedThreadHydration(threadId: string) {
@@ -1782,6 +1984,7 @@ function mergeCodexThread(rawThread: any, archived: boolean, includeTurns: boole
     diff: fallbackDiff,
     queuedDrafts: local.queuedDrafts,
     messages: mappedMessages,
+    history: includeTurns ? buildLoadedThreadHistoryState(mappedMessages.length, false) : existing?.history ?? null,
   } satisfies ThreadRecord;
 }
 
@@ -3604,7 +3807,21 @@ function isThreadNotFoundError(error: unknown) {
 
 function isThreadNotMaterializedError(error: unknown) {
   const message = readErrorMessage(error).toLowerCase();
-  return message.includes("not materialized yet") && message.includes("includeturns is unavailable");
+  return (
+    message.includes("not materialized yet") &&
+    (message.includes("includeturns is unavailable") || message.includes("thread/turns/list is unavailable"))
+  );
+}
+
+function isThreadTurnsListUnsupportedError(error: unknown) {
+  const code = (error as (Error & { code?: unknown }) | null)?.code;
+  const message = readErrorMessage(error).toLowerCase();
+  return (
+    code === -32601 ||
+    message.includes("method not found") ||
+    message.includes("unknown method") ||
+    (message.includes("thread/turns/list") && message.includes("not found"))
+  );
 }
 
 function handleMissingThread(userId: string | undefined, threadId: string, error: unknown) {

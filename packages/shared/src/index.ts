@@ -163,9 +163,9 @@ export interface QueuedDraft {
 }
 
 export interface ThreadHistoryState {
-  totalMessages: number;
+  totalMessages: number | null;
   loadedMessages: number;
-  remainingMessages: number;
+  remainingMessages: number | null;
   hasMoreBefore: boolean;
   isHydrating: boolean;
 }
@@ -319,6 +319,7 @@ export type BridgeDispatchEvent = Extract<
 export type BridgeCommand =
   | { type: "bridge:sync-all" }
   | { type: "bridge:sync-thread"; threadId: string }
+  | { type: "bridge:sync-thread-history"; threadId: string }
   | {
       type: "bridge:project:request";
       requestId: string;

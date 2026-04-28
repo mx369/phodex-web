@@ -527,6 +527,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       schedulePersist();
       sendEvent(ws, { type: "snapshot", snapshot: snapshotForUser(user.profile.id) });
       if (getThreadMirror(user.profile.id).has(event.threadId)) {
+        if (hasAnyBridgeSocket(user.profile.id)) {
+          markMirroredThreadHistoryHydrating(user.profile.id, event.threadId);
+        }
         broadcastThreadToUser(user.profile.id, event.threadId);
       }
       if (!dispatchToBridge(user, event) && shouldSyncThreadBeforeSelect(user.profile.id, event.threadId)) {
@@ -547,6 +550,10 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       }
       const nextLoadedMessages = Math.min(thread.messages.length, Math.max(0, event.loadedMessages) + THREAD_HISTORY_PAGE_SIZE);
       selectedThreadHistoryWindowByUserId.set(user.profile.id, nextLoadedMessages);
+      if (shouldRequestOlderThreadHistory(thread, nextLoadedMessages) && hasAnyBridgeSocket(user.profile.id)) {
+        markMirroredThreadHistoryHydrating(user.profile.id, event.threadId);
+        sendBridgeCommand(user.profile.id, { type: "bridge:sync-thread-history", threadId: event.threadId });
+      }
       broadcastThreadToUser(user.profile.id, event.threadId);
       break;
     }
@@ -1046,27 +1053,56 @@ function setSelectedThreadForUser(userId: string, selectedThreadId: string | nul
   selectedThreadHistoryWindowByUserId.set(userId, THREAD_HISTORY_PAGE_SIZE);
 }
 
-function buildThreadHistoryState(totalMessages: number, loadedMessages: number): ThreadHistoryState {
-  const remainingMessages = Math.max(0, totalMessages - loadedMessages);
+function markMirroredThreadHistoryHydrating(userId: string, threadId: string) {
+  const thread = getThreadMirror(userId).get(threadId);
+  if (!thread) {
+    return;
+  }
+  if (thread.messages.length > 0 && !thread.history?.hasMoreBefore) {
+    return;
+  }
+  thread.history = {
+    totalMessages: thread.history?.totalMessages ?? null,
+    loadedMessages: thread.messages.length,
+    remainingMessages: thread.history?.remainingMessages ?? null,
+    hasMoreBefore: thread.history?.hasMoreBefore ?? false,
+    isHydrating: true,
+  };
+}
+
+function shouldRequestOlderThreadHistory(thread: ThreadRecord, nextLoadedMessages: number) {
+  return Boolean(thread.history?.hasMoreBefore && nextLoadedMessages >= thread.messages.length && !thread.history.isHydrating);
+}
+
+function buildThreadHistoryState(
+  totalMessages: number | null,
+  loadedMessages: number,
+  options: { hasMoreBefore?: boolean; isHydrating?: boolean } = {}
+): ThreadHistoryState {
+  const remainingMessages = totalMessages == null ? null : Math.max(0, totalMessages - loadedMessages);
   return {
     totalMessages,
     loadedMessages,
     remainingMessages,
-    hasMoreBefore: remainingMessages > 0,
-    isHydrating: false,
+    hasMoreBefore: totalMessages == null ? Boolean(options.hasMoreBefore) : remainingMessages > 0,
+    isHydrating: options.isHydrating ?? false,
   };
 }
 
 function serializeSelectedThreadForUser(userId: string, thread: ThreadRecord) {
-  const totalMessages = thread.messages.length;
+  const sourceHistory = thread.history ?? null;
+  const totalMessages = sourceHistory?.totalMessages ?? (sourceHistory?.hasMoreBefore ? null : thread.messages.length);
   const loadedMessages = Math.min(
-    totalMessages,
+    thread.messages.length,
     Math.max(THREAD_HISTORY_PAGE_SIZE, selectedThreadHistoryWindowByUserId.get(userId) ?? THREAD_HISTORY_PAGE_SIZE)
   );
   return {
     ...thread,
     messages: thread.messages.slice(-loadedMessages),
-    history: buildThreadHistoryState(totalMessages, loadedMessages),
+    history: buildThreadHistoryState(totalMessages, loadedMessages, {
+      hasMoreBefore: sourceHistory?.hasMoreBefore,
+      isHydrating: sourceHistory?.isHydrating,
+    }),
   } satisfies ThreadRecord;
 }
 
@@ -1083,7 +1119,14 @@ function serializeThreadForUser(
     return {
       ...thread,
       messages: [],
-      history: thread.messages.length ? buildThreadHistoryState(thread.messages.length, 0) : null,
+      history: thread.history
+        ? buildThreadHistoryState(thread.history.totalMessages, 0, {
+            hasMoreBefore: thread.history.hasMoreBefore,
+            isHydrating: thread.history.isHydrating,
+          })
+        : thread.messages.length
+          ? buildThreadHistoryState(thread.messages.length, 0)
+          : null,
     } satisfies ThreadRecord;
   }
 

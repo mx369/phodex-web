@@ -801,14 +801,15 @@ function handleServerEvent(event: ServerEvent) {
         thread.messages.push(event.message);
         thread.lastActivityAt = event.message.createdAt;
         if (thread.history) {
-          const totalMessages = thread.history.totalMessages + 1;
+          const totalMessages = thread.history.totalMessages == null ? null : thread.history.totalMessages + 1;
           const loadedMessages = thread.history.loadedMessages + 1;
+          const remainingMessages = totalMessages == null ? thread.history.remainingMessages : Math.max(0, totalMessages - loadedMessages);
           thread.history = {
             ...thread.history,
             totalMessages,
             loadedMessages,
-            remainingMessages: Math.max(0, totalMessages - loadedMessages),
-            hasMoreBefore: Math.max(0, totalMessages - loadedMessages) > 0,
+            remainingMessages,
+            hasMoreBefore: totalMessages == null ? thread.history.hasMoreBefore : Math.max(0, totalMessages - loadedMessages) > 0,
             isHydrating: false,
           };
         }
@@ -923,7 +924,9 @@ function stabilizeIncomingThread(nextThread: ThreadRecord) {
   }
 
   const shouldPreserveCachedMessages =
-    nextThread.messages.length === 0 && existing.messages.length > 0 && !nextThread.history;
+    nextThread.messages.length === 0 &&
+    existing.messages.length > 0 &&
+    (!nextThread.history || nextThread.history.isHydrating);
 
   if (!shouldPreserveCachedMessages) {
     return mergeIncomingQueuedDrafts(nextThread);
