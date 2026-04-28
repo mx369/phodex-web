@@ -43,11 +43,18 @@ type PendingThreadCreatePromise = Promise<string> & {
   tempId: string;
 };
 type PendingRunFeedback = {
+  requestId?: string;
   threadId: string;
   prompt: string;
   images: InputImageAttachment[];
   startedAt: string;
   promptAcknowledged: boolean;
+};
+type PendingMessageSend = {
+  requestId: string;
+  threadId: string;
+  text: string;
+  images: InputImageAttachment[];
 };
 type PendingResumeFeedback = {
   threadId: string;
@@ -119,6 +126,8 @@ let pendingThreadSelectionClear = false;
 let pendingThreadCreate: PendingThreadCreate | null = null;
 let pendingResumeFeedback: PendingResumeFeedback | null = null;
 const optimisticQueuedDrafts = new Map<string, QueuedDraft[]>();
+const optimisticQueuedDraftIdsByRequestId = new Map<string, string>();
+const pendingMessageSends = new Map<string, PendingMessageSend>();
 const pendingResumeTimers = new Map<string, number>();
 
 function flowTraceEnabled() {
@@ -214,6 +223,7 @@ function addOptimisticQueuedDraft(threadId: string, text: string, images: InputI
   if (thread) {
     thread.queuedDrafts = mergeIncomingQueuedDrafts(thread).queuedDrafts;
   }
+  return draft.id;
 }
 
 function clearPendingResumeTimer(threadId: string, draftId: string) {
@@ -361,6 +371,8 @@ export function createAppClient() {
     pendingThreadSelectionId = null;
     pendingThreadSelectionClear = false;
     optimisticQueuedDrafts.clear();
+    optimisticQueuedDraftIdsByRequestId.clear();
+    pendingMessageSends.clear();
     for (const timerId of pendingResumeTimers.values()) {
       window.clearTimeout(timerId);
     }
@@ -650,6 +662,7 @@ function send(event: ClientEvent, options: { toastOnFailure?: boolean } = {}) {
   }
   if (event.type === "message:send") {
     logFlowTrace("ws.send.message", {
+      requestId: event.requestId,
       threadId: event.threadId,
       promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
       promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
@@ -784,6 +797,12 @@ function handleServerEvent(event: ServerEvent) {
         pendingSendAfterThreadCreate = false;
         flushComposer(event.thread.id);
       }
+      break;
+    case "message:send-accepted":
+      handleMessageSendAccepted(event.requestId, event.threadId, event.outcome);
+      break;
+    case "message:send-failed":
+      handleMessageSendFailed(event.requestId, event.threadId);
       break;
     case "message:appended": {
       logFlowTrace("ws.recv.message-appended", {
@@ -979,6 +998,59 @@ function updateConnectionState(next: AppSnapshot["connection"]["state"]) {
     return;
   }
   state.snapshot.connection.state = next;
+}
+
+function handleMessageSendAccepted(requestId: string, threadId: string, outcome: "queued" | "started") {
+  logFlowTrace("message.send.accepted", {
+    requestId,
+    threadId,
+    outcome,
+  });
+  pendingMessageSends.delete(requestId);
+  optimisticQueuedDraftIdsByRequestId.delete(requestId);
+}
+
+function handleMessageSendFailed(requestId: string, threadId: string) {
+  const pending = pendingMessageSends.get(requestId) ?? null;
+  logFlowTrace("message.send.failed", {
+    requestId,
+    threadId,
+    hadPending: Boolean(pending),
+  });
+  pendingMessageSends.delete(requestId);
+  removeOptimisticQueuedDraftForRequest(requestId, pending?.threadId ?? threadId);
+
+  const pendingRun = state.ui.pendingRunFeedback;
+  if (pendingRun?.requestId === requestId && !pendingRun.promptAcknowledged) {
+    state.ui.pendingRunFeedback = null;
+  }
+
+  if (!pending) {
+    return;
+  }
+
+  if (!state.ui.composerText.trim() && state.ui.composerImages.length === 0) {
+    state.ui.composerText = pending.text;
+    state.ui.composerImages = pending.images.map((image) => ({ ...image }));
+  }
+}
+
+function removeOptimisticQueuedDraftForRequest(requestId: string, threadId: string) {
+  const draftId = optimisticQueuedDraftIdsByRequestId.get(requestId);
+  if (!draftId) {
+    return;
+  }
+  optimisticQueuedDraftIdsByRequestId.delete(requestId);
+  const nextDrafts = (optimisticQueuedDrafts.get(threadId) ?? []).filter((draft) => draft.id !== draftId);
+  if (nextDrafts.length) {
+    optimisticQueuedDrafts.set(threadId, nextDrafts);
+  } else {
+    optimisticQueuedDrafts.delete(threadId);
+  }
+  const thread = findThread(threadId);
+  if (thread) {
+    thread.queuedDrafts = thread.queuedDrafts.filter((draft) => draft.id !== draftId);
+  }
 }
 
 function beginPendingThreadCreate(requestId: string, projectLabel: string, mode: ThreadCreateMode) {
@@ -1204,8 +1276,9 @@ function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
   }, Math.max(PENDING_THREAD_FAILURE_MS - PENDING_THREAD_SLOW_MS, 0));
 }
 
-function beginPendingRunFeedback(threadId: string, prompt: string, images: InputImageAttachment[]) {
+function beginPendingRunFeedback(threadId: string, prompt: string, images: InputImageAttachment[], requestId?: string) {
   state.ui.pendingRunFeedback = {
+    requestId,
     threadId,
     prompt,
     images,
@@ -1292,6 +1365,10 @@ function syncPendingRunFeedbackFromMessage(threadId: string, role: string, text:
       promptSummary: summarizePromptForTrace(pending.prompt, pending.images),
     });
     pending.promptAcknowledged = true;
+    if (pending.requestId) {
+      pendingMessageSends.delete(pending.requestId);
+      optimisticQueuedDraftIdsByRequestId.delete(pending.requestId);
+    }
     if (pendingResumeFeedback?.threadId === threadId && normalizePendingRunPrompt(text) === normalizePendingRunPrompt(pendingResumeFeedback.prompt)) {
       clearPendingResumeTimer(threadId, pendingResumeFeedback.draftId);
       pendingResumeFeedback = null;
@@ -1371,10 +1448,12 @@ function flushComposer(threadId: string) {
 
   const thread = findThread(threadId);
   const willQueueDraft = thread?.state === "running";
+  const requestId = createClientId();
   const promptTrace = buildPromptTraceKey(text, images);
   const promptSummary = summarizePromptForTrace(text, images);
   const sent = send({
     type: "message:send",
+    requestId,
     threadId,
     text,
     images,
@@ -1387,6 +1466,7 @@ function flushComposer(threadId: string) {
     return false;
   }
   logFlowTrace(willQueueDraft ? "composer.send.queued" : "composer.send.started", {
+    requestId,
     threadId,
     promptTrace,
     promptSummary,
@@ -1395,10 +1475,16 @@ function flushComposer(threadId: string) {
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
   });
+  pendingMessageSends.set(requestId, {
+    requestId,
+    threadId,
+    text,
+    images,
+  });
   if (willQueueDraft) {
-    addOptimisticQueuedDraft(threadId, text, images);
+    optimisticQueuedDraftIdsByRequestId.set(requestId, addOptimisticQueuedDraft(threadId, text, images));
   } else {
-    beginPendingRunFeedback(threadId, text, images);
+    beginPendingRunFeedback(threadId, text, images, requestId);
   }
   state.ui.composerText = "";
   state.ui.composerImages = [];

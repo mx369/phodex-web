@@ -19,6 +19,7 @@ import type {
   FileChangeSummary,
   ImageMessageCard,
   InputImageAttachment,
+  MessageSendOutcome,
   ProjectDiffFile,
   ProjectDiffPayload,
   ProjectFilePayload,
@@ -115,7 +116,9 @@ type SessionHistoryFallback = {
 };
 
 type ThreadCreateRequest = Extract<ClientEvent, { type: "thread:create" }>;
-type MessageSendResult = "queued" | "started" | "failed";
+type MessageSendResult =
+  | { ok: true; outcome: MessageSendOutcome }
+  | { ok: false; message: string };
 
 type ProjectContext = {
   requestedCwd: string;
@@ -361,11 +364,6 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
         await handleThreadCreate(user, command.event);
         return;
       case "thread:select":
-        user.selectedThreadId = command.event.threadId;
-        sendUserPatch(user.profile.id, {
-          selectedThreadId: command.event.threadId,
-          banner: null,
-        });
         try {
           await syncThreadFromCodex(command.event.threadId, true);
         } catch (error) {
@@ -375,6 +373,11 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
           }
           throw error;
         }
+        user.selectedThreadId = command.event.threadId;
+        sendUserPatch(user.profile.id, {
+          selectedThreadId: command.event.threadId,
+          banner: null,
+        });
         return;
       case "thread:rename":
         await handleThreadRename(user, command.event.threadId, command.event.title);
@@ -382,9 +385,11 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
       case "thread:archive":
         await handleThreadArchive(user, command.event.threadId);
         return;
-      case "message:send":
-        await handleMessageSend(user, command.event);
+      case "message:send": {
+        const result = await handleMessageSend(user, command.event);
+        sendBridgeMessageSendResult(command, command.event, result);
         return;
+      }
       case "draft:resume":
         await handleDraftResume(user, command.event.threadId, command.event.draftId);
         return;
@@ -396,7 +401,11 @@ async function handleBridgeDispatch(command: Extract<BridgeCommand, { type: "bri
         return;
     }
   } catch (error) {
-    sendToast(user.profile.id, "error", readErrorMessage(error));
+    const message = readErrorMessage(error);
+    sendToast(user.profile.id, "error", message);
+    if (command.event.type === "message:send") {
+      sendBridgeMessageSendResult(command, command.event, { ok: false, message });
+    }
   }
 }
 
@@ -505,6 +514,34 @@ function sendBridgeEvent(event: BridgeEvent) {
   relaySocket.send(JSON.stringify(event));
 }
 
+function sendBridgeMessageSendResult(
+  command: Extract<BridgeCommand, { type: "bridge:dispatch" }>,
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  result: MessageSendResult
+) {
+  const base = {
+    userId: command.userId,
+    requestId: command.requestId,
+    clientRequestId: event.requestId,
+    threadId: event.threadId,
+  };
+  if (result.ok) {
+    sendBridgeEvent({
+      type: "bridge:message:send-result",
+      ...base,
+      ok: true,
+      outcome: result.outcome,
+    });
+    return;
+  }
+  sendBridgeEvent({
+    type: "bridge:message:send-result",
+    ...base,
+    ok: false,
+    message: result.message,
+  });
+}
+
 function scheduleRelayReconnect() {
   if (relayReconnectTimer) {
     return;
@@ -577,7 +614,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       void handleThreadArchive(user, event.threadId);
       break;
     case "message:send":
-      void handleMessageSend(user, event);
+      void handleMessageSend(user, event).then((result) => {
+        sendClientMessageSendResult(ws, event, result);
+      });
       break;
     case "draft:resume":
       void handleDraftResume(user, event.threadId, event.draftId);
@@ -741,6 +780,7 @@ function buildQueuedDraft(
 function buildQueuedDraftEvent(threadId: string, draft: QueuedDraft): Extract<ClientEvent, { type: "message:send" }> {
   return {
     type: "message:send",
+    requestId: randomUUID(),
     threadId,
     text: draft.text,
     images: draft.images,
@@ -846,14 +886,19 @@ async function startThreadRun(
     pendingTurnTraces.delete(thread.id);
     codexLastSyncAt = new Date().toISOString();
     publishPresenceToAllUsers();
-    return true;
+    return { ok: true as const };
   } catch (error) {
     pendingTurnModes.delete(thread.id);
     pendingTurnTraces.delete(thread.id);
-    thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
-    broadcastThreadToAllUsers(thread.id);
-    sendToast(user.profile.id, "error", readErrorMessage(error));
-    return false;
+    let message = readErrorMessage(error);
+    if (handleMissingThread(user.profile.id, thread.id, error)) {
+      message = "This thread is no longer available.";
+    } else {
+      thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
+      broadcastThreadToAllUsers(thread.id);
+    }
+    sendToast(user.profile.id, "error", message);
+    return { ok: false as const, message };
   }
 }
 
@@ -864,8 +909,9 @@ async function handleMessageSend(
   const text = event.text.trim();
   const images = normalizeInputImages(event.images);
   if (!text && !images.length) {
-    sendToast(user.profile.id, "error", "Compose something first.");
-    return "failed";
+    const message = "Compose something first.";
+    sendToast(user.profile.id, "error", message);
+    return { ok: false, message };
   }
   const preview = summarizeMessagePreview(text, images);
   logFlowTrace("message-send.received", {
@@ -884,33 +930,39 @@ async function handleMessageSend(
         thread = await syncThreadFromCodex(event.threadId, false);
       } catch (error) {
         if (handleMissingThread(user.profile.id, event.threadId, error)) {
-          sendToast(user.profile.id, "error", "This thread is no longer available.");
-          return "failed";
+          const message = "This thread is no longer available.";
+          sendToast(user.profile.id, "error", message);
+          return { ok: false, message };
         }
         throw error;
       }
     }
     if (!thread) {
       forgetThread(event.threadId, user.profile.id);
-      sendToast(user.profile.id, "error", "Thread not found.");
-      return "failed";
+      const message = "Thread not found.";
+      sendToast(user.profile.id, "error", message);
+      return { ok: false, message };
     }
 
     if (thread.state === "running") {
       queueDraft(thread, text, images, event, preview);
       sendToast(user.profile.id, "info", "Draft queued while the current run finishes.");
-      return "queued";
+      return { ok: true, outcome: "queued" };
     }
 
-    return (await startThreadRun(user, thread, event, text, preview)) ? "started" : "failed";
+    const started = await startThreadRun(user, thread, event, text, preview);
+    return started.ok ? { ok: true, outcome: "started" } : started;
   } catch (error) {
     const thread = threadCache.get(event.threadId);
-    if (thread) {
+    let message = readErrorMessage(error);
+    if (handleMissingThread(user.profile.id, event.threadId, error)) {
+      message = "This thread is no longer available.";
+    } else if (thread) {
       thread.state = deriveThreadState("idle", thread.id, thread.state === "archived");
       broadcastThreadToAllUsers(thread.id);
     }
-    sendToast(user.profile.id, "error", readErrorMessage(error));
-    return "failed";
+    sendToast(user.profile.id, "error", message);
+    return { ok: false, message };
   }
 }
 
@@ -961,10 +1013,10 @@ async function handleDraftResume(user: PersistedUser, threadId: string, draftId:
     const nextText = nextEvent.text.trim();
     const nextPreview = summarizeMessagePreview(nextText, normalizeInputImages(nextEvent.images));
     const started = await startThreadRun(user, thread, nextEvent, nextText, nextPreview);
-    if (!started) {
+    if (!started.ok) {
       restoreQueuedDraft(threadId, draft, draftIndex);
     }
-    return started;
+    return started.ok;
   } catch (error) {
     sendToast(user.profile.id, "error", readErrorMessage(error));
     return false;
@@ -1654,6 +1706,9 @@ async function syncAllThreadsFromCodex() {
       await Promise.all(
         [...selectedThreadIds].map((threadId) =>
           syncThreadFromCodex(threadId, true).catch((error) => {
+            if (handleMissingThread(undefined, threadId, error)) {
+              return null;
+            }
             console.error(`[phodex] selected-thread sync failed for ${threadId}: ${readErrorMessage(error)}`);
             return null;
           })
@@ -3969,6 +4024,28 @@ function broadcast(userId: string, event: ServerEvent) {
 
 function sendEvent(ws: ServerWebSocket<SocketData>, event: ServerEvent) {
   ws.send(JSON.stringify(event));
+}
+
+function sendClientMessageSendResult(
+  ws: ServerWebSocket<SocketData>,
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  result: MessageSendResult
+) {
+  if (result.ok) {
+    sendEvent(ws, {
+      type: "message:send-accepted",
+      requestId: event.requestId,
+      threadId: event.threadId,
+      outcome: result.outcome,
+    });
+    return;
+  }
+  sendEvent(ws, {
+    type: "message:send-failed",
+    requestId: event.requestId,
+    threadId: event.threadId,
+    message: result.message,
+  });
 }
 
 function json(body: unknown, status = 200) {

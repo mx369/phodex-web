@@ -114,6 +114,15 @@ type PendingThreadCreateDispatch = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type PendingMessageSendDispatch = {
+  userId: string;
+  bridgeId: string;
+  requestId: string;
+  clientRequestId: string;
+  threadId: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFile);
 const serverRoot = resolve(currentDir, "..");
@@ -137,6 +146,7 @@ const THREAD_HISTORY_PAGE_SIZE = Math.max(1, Number(process.env.PHODEX_THREAD_HI
 const OTP_TTL_MS = 5 * 60 * 1000;
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const INSTALL_SETUP_TOKEN_TTL_MS = 5 * 60 * 1000;
+const MESSAGE_SEND_ACK_TIMEOUT_MS = 45_000;
 const RELAY_LABEL = process.env.PHODEX_RELAY_LABEL ?? "Phodex Public Relay";
 const DEFAULT_DEVICE_LABEL = process.env.PHODEX_DEVICE_LABEL ?? process.env.PHODEX_MAC_LABEL ?? hostname();
 const AUTH_ENV_FALLBACK_FILE =
@@ -171,6 +181,7 @@ const activeBridgeIdsByUserId = new Map<string, string>();
 const selectedThreadHistoryWindowByUserId = new Map<string, number>();
 const pendingProjectRequests = new Map<string, PendingProjectRequest>();
 const pendingThreadCreateDispatches = new Map<string, PendingThreadCreateDispatch>();
+const pendingMessageSendDispatches = new Map<string, PendingMessageSendDispatch>();
 
 function logFlowTrace(phase: string, details: Record<string, unknown> = {}) {
   if (!FLOW_TRACE_ENABLED) {
@@ -383,6 +394,7 @@ const server = Bun.serve<SocketData>({
           }
         }
         rejectPendingProjectRequestsForBridge(ws.data.userId, ws.data.bridgeId, "The selected bridge went offline.");
+        rejectPendingMessageSendsForBridge(ws.data.userId, ws.data.bridgeId, "The selected bridge went offline.");
         getBridgeConnectionMap(ws.data.userId).set(ws.data.bridgeId, {
           ...getBridgeConnection(ws.data.userId, ws.data.bridgeId),
           bridgeOnline: false,
@@ -564,19 +576,31 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       break;
     case "thread:rename":
     case "thread:archive":
-    case "message:send":
-      if (event.type === "message:send") {
-        logFlowTrace("client.message-send.received", {
-          userId: user.profile.id,
-          threadId: event.threadId,
-          promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
-          promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
-          threadState: getThreadMirror(user.profile.id).get(event.threadId)?.state ?? null,
-          activeBridgeId: getActiveBridgeId(user.profile.id),
-        });
-      }
       dispatchToBridge(user, event);
       break;
+    case "message:send": {
+      logFlowTrace("client.message-send.received", {
+        userId: user.profile.id,
+        requestId: event.requestId,
+        threadId: event.threadId,
+        promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
+        promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
+        threadState: getThreadMirror(user.profile.id).get(event.threadId)?.state ?? null,
+        activeBridgeId: getActiveBridgeId(user.profile.id),
+      });
+      const bridgeRequestId = dispatchToBridge(user, event);
+      if (bridgeRequestId) {
+        trackMessageSendDispatch(user.profile.id, bridgeRequestId, event);
+      } else {
+        sendEvent(ws, {
+          type: "message:send-failed",
+          requestId: event.requestId,
+          threadId: event.threadId,
+          message: "The local bridge is offline.",
+        });
+      }
+      break;
+    }
     case "draft:resume":
     case "draft:remove":
     case "run:stop":
@@ -601,7 +625,7 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
   if (!activeBridgeTarget) {
     broadcastPresence(user.profile.id);
     sendToast(user.profile.id, "error", "The local bridge is offline.");
-    return false;
+    return null;
   }
 
   const command: BridgeCommand = {
@@ -616,6 +640,7 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
       requestId: command.requestId,
       userId: user.profile.id,
       bridgeId: activeBridgeTarget.bridgeId,
+      clientRequestId: event.requestId,
       threadId: event.threadId,
       promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
       promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
@@ -629,7 +654,7 @@ function dispatchToBridge(user: PersistedUser, event: BridgeDispatchEvent) {
     });
   }
   activeBridgeTarget.socket.send(JSON.stringify(command));
-  return true;
+  return command.requestId;
 }
 
 function threadCreateDispatchKey(userId: string, requestId: string) {
@@ -662,6 +687,86 @@ function clearThreadCreateDispatch(userId: string, requestId: string) {
   }
   clearTimeout(pending.timer);
   pendingThreadCreateDispatches.delete(key);
+}
+
+function trackMessageSendDispatch(
+  userId: string,
+  bridgeRequestId: string,
+  event: Extract<ClientEvent, { type: "message:send" }>
+) {
+  clearMessageSendDispatch(bridgeRequestId);
+  pendingMessageSendDispatches.set(bridgeRequestId, {
+    userId,
+    bridgeId: getActiveBridgeId(userId),
+    requestId: bridgeRequestId,
+    clientRequestId: event.requestId,
+    threadId: event.threadId,
+    timer: setTimeout(() => {
+      pendingMessageSendDispatches.delete(bridgeRequestId);
+      const message = "The computer did not acknowledge the message send. Check the bridge and try again.";
+      broadcast(userId, {
+        type: "message:send-failed",
+        requestId: event.requestId,
+        threadId: event.threadId,
+        message,
+      });
+      sendToast(userId, "error", message);
+    }, MESSAGE_SEND_ACK_TIMEOUT_MS),
+  });
+}
+
+function clearMessageSendDispatch(bridgeRequestId: string) {
+  const pending = pendingMessageSendDispatches.get(bridgeRequestId);
+  if (!pending) {
+    return null;
+  }
+  clearTimeout(pending.timer);
+  pendingMessageSendDispatches.delete(bridgeRequestId);
+  return pending;
+}
+
+function rejectPendingMessageSendsForBridge(userId: string, bridgeId: string, message: string) {
+  for (const pending of [...pendingMessageSendDispatches.values()]) {
+    if (pending.userId !== userId || pending.bridgeId !== bridgeId) {
+      continue;
+    }
+    clearMessageSendDispatch(pending.requestId);
+    broadcast(userId, {
+      type: "message:send-failed",
+      requestId: pending.clientRequestId,
+      threadId: pending.threadId,
+      message,
+    });
+    sendToast(userId, "error", message);
+  }
+}
+
+function resolveMessageSendDispatch(
+  userId: string,
+  bridgeId: string,
+  event: Extract<BridgeEvent, { type: "bridge:message:send-result" }>
+) {
+  const pending = clearMessageSendDispatch(event.requestId);
+  if (!pending || pending.userId !== userId || pending.bridgeId !== bridgeId) {
+    return;
+  }
+
+  if (event.ok) {
+    broadcast(userId, {
+      type: "message:send-accepted",
+      requestId: pending.clientRequestId,
+      threadId: event.threadId,
+      outcome: event.outcome,
+    });
+    return;
+  }
+
+  broadcast(userId, {
+    type: "message:send-failed",
+    requestId: pending.clientRequestId,
+    threadId: event.threadId,
+    message: event.message,
+  });
 }
 
 function acknowledgePendingThreadCreateFromMirror(userId: string, threadId: string | null | undefined) {
@@ -774,12 +879,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       for (const thread of event.threads) {
         mirror.set(thread.id, mergeIncomingMirroredThread(existingThreads.get(thread.id), thread));
       }
-      const selectedThreadId = persisted.users[bridgeUserId]?.selectedThreadId;
-      if (selectedThreadId) {
-        ensureMirroredThread(bridgeUserId, selectedThreadId);
-      }
       normalizeSelectionForUser(bridgeUserId);
-      acknowledgePendingThreadCreateFromMirror(bridgeUserId, persisted.users[bridgeUserId]?.selectedThreadId);
       broadcastSnapshot(bridgeUserId);
       broadcastPresence(bridgeUserId);
       break;
@@ -829,6 +929,12 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       }
       normalizeSelectionForUser(bridgeUserId);
       broadcastThreadToUser(bridgeUserId, event.thread.id);
+      break;
+    case "bridge:message:send-result":
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
+        break;
+      }
+      resolveMessageSendDispatch(bridgeUserId, bridgeId, event);
       break;
     case "bridge:message:appended":
       logFlowTrace("bridge.message-appended.received", {

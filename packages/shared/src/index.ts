@@ -162,6 +162,8 @@ export interface QueuedDraft {
   accessMode?: AccessMode;
 }
 
+export type MessageSendOutcome = "queued" | "started";
+
 export interface ThreadHistoryState {
   totalMessages: number | null;
   loadedMessages: number;
@@ -291,6 +293,7 @@ export type ClientEvent =
   | { type: "thread:archive"; threadId: string }
   | {
       type: "message:send";
+      requestId: string;
       threadId: string;
       text: string;
       images?: InputImageAttachment[];
@@ -340,6 +343,24 @@ export type BridgeEvent =
   | { type: "bridge:thread:create-failed"; userId: string; requestId: string; message: string }
   | { type: "bridge:thread:updated"; thread: ThreadRecord }
   | {
+      type: "bridge:message:send-result";
+      userId: string;
+      requestId: string;
+      clientRequestId: string;
+      threadId: string;
+      ok: true;
+      outcome: MessageSendOutcome;
+    }
+  | {
+      type: "bridge:message:send-result";
+      userId: string;
+      requestId: string;
+      clientRequestId: string;
+      threadId: string;
+      ok: false;
+      message: string;
+    }
+  | {
       type: "bridge:project:response";
       requestId: string;
       userId: string;
@@ -372,6 +393,8 @@ export type ServerEvent =
   | { type: "thread:created"; requestId: string; threadId: string }
   | { type: "thread:create-failed"; requestId: string; message: string }
   | { type: "thread:updated"; thread: ThreadRecord; selectedThreadId: string | null }
+  | { type: "message:send-accepted"; requestId: string; threadId: string; outcome: MessageSendOutcome }
+  | { type: "message:send-failed"; requestId: string; threadId: string; message: string }
   | { type: "message:appended"; threadId: string; message: ThreadMessage }
   | { type: "message:delta"; threadId: string; messageId: string; delta: string }
   | { type: "message:finished"; threadId: string; messageId: string }
