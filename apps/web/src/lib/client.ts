@@ -7,6 +7,7 @@ import type {
   ClientEvent,
   DeliveryMode,
   InputImageAttachment,
+  MessageSendOutcome,
   QueuedDraft,
   RequestCodeResponse,
   ServerEvent,
@@ -49,6 +50,7 @@ type PendingRunFeedback = {
   images: InputImageAttachment[];
   startedAt: string;
   promptAcknowledged: boolean;
+  acceptedOutcome?: MessageSendOutcome;
 };
 type PendingMessageSend = {
   requestId: string;
@@ -1003,14 +1005,21 @@ function updateConnectionState(next: AppSnapshot["connection"]["state"]) {
   state.snapshot.connection.state = next;
 }
 
-function handleMessageSendAccepted(requestId: string, threadId: string, outcome: "queued" | "started") {
+function handleMessageSendAccepted(requestId: string, threadId: string, outcome: MessageSendOutcome) {
+  const pending = pendingMessageSends.get(requestId) ?? null;
   logFlowTrace("message.send.accepted", {
     requestId,
     threadId,
     outcome,
+    hadPending: Boolean(pending),
   });
+  if (outcome === "queued" && pending && !optimisticQueuedDraftIdsByRequestId.has(requestId)) {
+    optimisticQueuedDraftIdsByRequestId.set(requestId, addOptimisticQueuedDraft(pending.threadId, pending.text, pending.images));
+  } else if (outcome !== "queued") {
+    optimisticQueuedDraftIdsByRequestId.delete(requestId);
+  }
+  markPendingRunFeedbackAccepted(requestId, outcome);
   pendingMessageSends.delete(requestId);
-  optimisticQueuedDraftIdsByRequestId.delete(requestId);
 }
 
 function handleMessageSendFailed(requestId: string, threadId: string) {
@@ -1290,6 +1299,14 @@ function beginPendingRunFeedback(threadId: string, prompt: string, images: Input
   };
 }
 
+function markPendingRunFeedbackAccepted(requestId: string, outcome: MessageSendOutcome) {
+  const pending = state.ui.pendingRunFeedback;
+  if (!pending || pending.requestId !== requestId) {
+    return;
+  }
+  pending.acceptedOutcome = outcome;
+}
+
 function clearAcknowledgedPendingRunFeedback(threadId?: string) {
   const pending = state.ui.pendingRunFeedback;
   if (!pending) {
@@ -1349,6 +1366,10 @@ function syncPendingRunFeedbackFromThread(thread: ThreadRecord) {
   }
 
   pending.promptAcknowledged = true;
+  if (pending.requestId) {
+    pendingMessageSends.delete(pending.requestId);
+    optimisticQueuedDraftIdsByRequestId.delete(pending.requestId);
+  }
   const hasAssistantProgress = thread.messages.some((message) => message.role !== "user");
   if (hasAssistantProgress || thread.state !== "running") {
     state.ui.pendingRunFeedback = null;
@@ -1450,7 +1471,7 @@ function flushComposer(threadId: string) {
   }
 
   const thread = findThread(threadId);
-  const willQueueDraft = thread?.state === "running";
+  const isRunningFollowUp = thread?.state === "running";
   const requestId = createClientId();
   const promptTrace = buildPromptTraceKey(text, images);
   const promptSummary = summarizePromptForTrace(text, images);
@@ -1468,7 +1489,7 @@ function flushComposer(threadId: string) {
   if (!sent) {
     return false;
   }
-  logFlowTrace(willQueueDraft ? "composer.send.queued" : "composer.send.started", {
+  logFlowTrace(isRunningFollowUp ? "composer.send.followup" : "composer.send.started", {
     requestId,
     threadId,
     promptTrace,
@@ -1484,11 +1505,7 @@ function flushComposer(threadId: string) {
     text,
     images,
   });
-  if (willQueueDraft) {
-    optimisticQueuedDraftIdsByRequestId.set(requestId, addOptimisticQueuedDraft(threadId, text, images));
-  } else {
-    beginPendingRunFeedback(threadId, text, images, requestId);
-  }
+  beginPendingRunFeedback(threadId, text, images, requestId);
   state.ui.composerText = "";
   state.ui.composerImages = [];
   return true;

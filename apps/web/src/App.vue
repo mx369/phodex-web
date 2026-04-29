@@ -886,7 +886,7 @@ const composerSendTone = computed(() => {
   if (composerSendDisabled.value) {
     return "idle";
   }
-  return currentThread.value?.state === "running" ? "queue" : "ready";
+  return "ready";
 });
 const composerSendTitle = computed(() => {
   if (isCurrentThreadPendingCreate.value) {
@@ -895,7 +895,7 @@ const composerSendTitle = computed(() => {
   if (!composerHasContent.value) {
     return "Compose or attach first";
   }
-  return currentThread.value?.state === "running" ? "Queue" : "Send";
+  return currentThread.value?.state === "running" ? "Send follow-up" : "Send";
 });
 const composerRuntimeLabel = computed(
   () => `${state.ui.selectedModel} · ${ACCESS_MODE_COMPACT_LABELS[state.ui.accessMode]}`
@@ -1173,9 +1173,21 @@ const pendingRunStatus = computed(() => {
     return null;
   }
   if (!pending.promptAcknowledged) {
+    if (pending.acceptedOutcome === "queued") {
+      return {
+        phase: "waiting" as const,
+        label: "Queued next",
+      };
+    }
+    if (currentThread.value.state === "running") {
+      return {
+        phase: "syncing" as const,
+        label: pending.acceptedOutcome === "steered" ? "Added to running turn" : "Adding to running turn",
+      };
+    }
     return {
       phase: "syncing" as const,
-      label: null,
+      label: "Sending",
     };
   }
   return null;
@@ -3973,6 +3985,9 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               :class="`phone-message__status-dot--${pendingRunStatus.phase}`"
                               aria-hidden="true"
                             ></span>
+                            <span v-if="pendingRunStatus?.label" class="phone-message__pending-status">
+                              {{ pendingRunStatus.label }}
+                            </span>
 
                             <div class="phone-message__card">
                               <div v-if="currentPendingRunFeedback.images.length" class="message-input-images">
@@ -4440,7 +4455,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                   : !composerHasContent
                                     ? 'Compose or attach first'
                                     : currentThread?.state === 'running'
-                                      ? 'Queue draft'
+                                      ? 'Send follow-up'
                                       : 'Send'
                               "
                               :title="composerSendTitle"

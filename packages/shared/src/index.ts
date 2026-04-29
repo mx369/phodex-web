@@ -162,7 +162,7 @@ export interface QueuedDraft {
   accessMode?: AccessMode;
 }
 
-export type MessageSendOutcome = "queued" | "started";
+export type MessageSendOutcome = "queued" | "started" | "steered";
 
 export interface ThreadHistoryState {
   totalMessages: number | null;

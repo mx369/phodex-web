@@ -214,6 +214,7 @@ let codexRateLimits: CodexRateLimitSnapshot | null = null;
 let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
+let codexSupportsTurnSteer = true;
 let serviceTierUnsupportedToastSent = false;
 const selectedThreadHydrationRetryCounts = new Map<string, number>();
 const selectedThreadHydrationRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -907,6 +908,79 @@ async function startThreadRun(
   }
 }
 
+async function steerThreadRun(
+  user: PersistedUser,
+  thread: ThreadRecord,
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  text: string,
+  preview: string
+): Promise<MessageSendResult | null> {
+  if (!codexSupportsTurnSteer) {
+    return null;
+  }
+
+  const activeTurn = activeTurns.get(thread.id);
+  if (!activeTurn?.turnId) {
+    return null;
+  }
+
+  const images = normalizeInputImages(event.images);
+  const input = buildTurnInput(text, images);
+  const promptTrace = buildPromptTraceKey(text, images);
+  const promptSummary = summarizePromptForTrace(text, images);
+  if (user.selectedThreadId === thread.id) {
+    sendUserPatch(user.profile.id, {
+      banner: null,
+    });
+  }
+
+  try {
+    logFlowTrace("codex.turn-steer.request", {
+      threadId: thread.id,
+      turnId: activeTurn.turnId,
+      userId: user.profile.id,
+      promptTrace,
+      promptSummary,
+    });
+    const result = await codexRequest("turn/steer", {
+      threadId: thread.id,
+      input,
+      expectedTurnId: activeTurn.turnId,
+    });
+    thread.state = "running";
+    thread.preview = preview;
+    thread.lastActivityAt = new Date().toISOString();
+    schedulePersist();
+    broadcastThreadToAllUsers(thread.id);
+    codexLastSyncAt = new Date().toISOString();
+    publishPresenceToAllUsers();
+    logFlowTrace("codex.turn-steer.response", {
+      threadId: thread.id,
+      turnId: readString(result?.turnId) || activeTurn.turnId,
+      promptTrace,
+      promptSummary,
+    });
+    return { ok: true, outcome: "steered" };
+  } catch (error) {
+    if (isTurnSteerUnsupportedError(error)) {
+      codexSupportsTurnSteer = false;
+    }
+    if (shouldQueueAfterTurnSteerFailure(error)) {
+      logFlowTrace("codex.turn-steer.fallback-queue", {
+        threadId: thread.id,
+        turnId: activeTurn.turnId,
+        promptTrace,
+        promptSummary,
+        message: readErrorMessage(error),
+      });
+      return null;
+    }
+    const message = readErrorMessage(error);
+    sendToast(user.profile.id, "error", message);
+    return { ok: false, message };
+  }
+}
+
 async function handleMessageSend(
   user: PersistedUser,
   event: Extract<ClientEvent, { type: "message:send" }>
@@ -950,6 +1024,10 @@ async function handleMessageSend(
     }
 
     if (thread.state === "running") {
+      const steered = await steerThreadRun(user, thread, event, text, preview);
+      if (steered) {
+        return steered;
+      }
       queueDraft(thread, text, images, event, preview);
       sendToast(user.profile.id, "info", "Draft queued while the current run finishes.");
       return { ok: true, outcome: "queued" };
@@ -1211,6 +1289,7 @@ function connectCodexSocket() {
 
   socket.addEventListener("open", () => {
     codexSupportsServiceTier = true;
+    codexSupportsTurnSteer = true;
     serviceTierUnsupportedToastSent = false;
     void codexRequest(
       "initialize",
@@ -3864,6 +3943,29 @@ function shouldRetryTurnStartWithoutServiceTier(error: unknown) {
     || message.includes("unrecognized field")
     || message.includes("invalid param")
     || message.includes("invalid params");
+}
+
+function isTurnSteerUnsupportedError(error: unknown) {
+  const code = (error as (Error & { code?: unknown }) | null)?.code;
+  const message = readErrorMessage(error).toLowerCase();
+  return (
+    code === -32601 ||
+    message.includes("method not found") ||
+    message.includes("unknown method") ||
+    (message.includes("turn/steer") && message.includes("not found"))
+  );
+}
+
+function shouldQueueAfterTurnSteerFailure(error: unknown) {
+  const message = readErrorMessage(error).toLowerCase();
+  return (
+    isTurnSteerUnsupportedError(error) ||
+    message.includes("no active turn to steer") ||
+    message.includes("expected active turn id") ||
+    message.includes("cannot steer") ||
+    message.includes("activeturnnotsteerable") ||
+    message.includes("active turn not steerable")
+  );
 }
 
 function isThreadNotFoundError(error: unknown) {

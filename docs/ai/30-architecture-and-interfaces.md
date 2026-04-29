@@ -68,7 +68,7 @@ Read this file for relay, auth, client, and Codex bridge work.
 - The production web bundle should call relay HTTP routes via same-origin paths and derive the relay websocket from the current page origin. Do not bake loopback client targets such as `127.0.0.1:3443` into a public build.
 - Bridge snapshots should always include the full thread list metadata so the drawer can show every conversation. Keep message bodies lazy by hydrating the selected thread through `thread:updated` and message events instead of every snapshot.
 - Bridge `thread:updated` payloads may carry a selected thread with `messages: []` and `history.isHydrating=true`; the client should treat that as an explicit history-loading state rather than an empty conversation.
-- `message:send` is request-scoped. The web client sends a `requestId`, the relay tracks the bridge dispatch, and the bridge must return `bridge:message:send-result` so the relay can emit either `message:send-accepted` or `message:send-failed` back to the client. A relay-to-bridge dispatch is not enough to clear or confirm the client pending message.
+- `message:send` is request-scoped. The web client sends a `requestId`, the relay tracks the bridge dispatch, and the bridge must return `bridge:message:send-result` so the relay can emit either `message:send-accepted` or `message:send-failed` back to the client. A relay-to-bridge dispatch is not enough to clear or confirm the client pending message. If a regular turn is already running, the bridge should prefer Codex app-server `turn/steer` so follow-ups attach to the active turn and stay visible immediately; queued drafts are the fallback when steering is unavailable or rejected.
 - Relay bridge-state sync must not fabricate a missing selected thread. If the active bridge's full thread list omits the selected thread, the relay should normalize selection to an existing thread or `null` instead of keeping a ghost thread that can receive sends.
 - Project browsing follows the same pattern: keep the drawer and thread metadata complete, but load directory listings, file previews, and diff payloads on demand from the relay HTTP routes.
 - New-chat navigation is optimistic: the web client inserts a temporary `pending-thread:*` record, immediately routes to that temporary thread ID, shows a lightweight creating notice, and replaces the URL with the real Codex thread route when `thread:created` resolves.
@@ -77,19 +77,19 @@ Read this file for relay, auth, client, and Codex bridge work.
 - Historical thread reads and live item notifications map richer Codex execution items into structured thread cards.
 - If Codex `thread/read` omits completed tool items, the server backfills diff/file summaries from the session JSONL plus live git state.
 - The web shell inserts local pending placeholders for both `thread:create` and `message:send` until real server items arrive.
-- The client/relay/bridge shared protocol uses `InputImageAttachment` records, but the local bridge must translate them to Codex app-server `turn/start.input` items shaped like `{ type: "text", text }` and `{ type: "image", url, detail? }`.
+- The client/relay/bridge shared protocol uses `InputImageAttachment` records, but the local bridge must translate them to Codex app-server turn input items shaped like `{ type: "text", text }` and `{ type: "image", url, detail? }` for both `turn/start` and `turn/steer`.
 - `thread/read` user history may come back with image entries on `userMessage.content`, so the bridge keeps a separate mapping layer when rehydrating `ThreadMessage.inputImages`.
 - `thread:create` resolves cwd on the server: absolute paths are used directly, `~/...` expands against the user home, and plain folder names resolve inside `~/.phodex-web/projects` unless `PHODEX_PROJECTS_ROOT` overrides that root.
 - Local chats create missing directories with `mkdir -p`; worktree chats run `git worktree add` under `~/.codex/worktrees/<repo>/...`.
 - Thread grouping follows the Git common-dir root so worktree chats stay grouped under the main project.
 - Rename applies a local override immediately, then best-effort syncs `thread/name/set`.
 - `fastMode` maps to `turn/start.serviceTier="fast"` and retries without it if the bridge rejects that field.
-- Queued drafts retain runtime metadata (`model`, `planArmed`, `fastMode`, `accessMode`) for later resume.
+- Queued drafts retain runtime metadata (`model`, `planArmed`, `fastMode`, `accessMode`) for later resume. Running-turn follow-ups use `turn/steer`, which intentionally reuses the active turn context instead of applying new runtime overrides.
 - `on-request` sandbox writable roots are derived from each thread cwd.
 
 ## Codex App-Server Methods In Use
 
-- `thread/start`, `thread/list`, `thread/read`, `thread/turns/list`, `thread/name/set`, `thread/archive`, `thread/unarchive`, `turn/start`, `turn/interrupt`
+- `thread/start`, `thread/list`, `thread/read`, `thread/turns/list`, `thread/name/set`, `thread/archive`, `thread/unarchive`, `turn/start`, `turn/steer`, `turn/interrupt`
 
 ## Codex Notifications Consumed
 
