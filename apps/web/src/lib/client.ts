@@ -36,6 +36,7 @@ type PendingThreadCreate = {
   confirmedThreadId: string | null;
   slowTimerId: number;
   failureTimerId: number | null;
+  bridgeAccepted: boolean;
   isSlow: boolean;
   resolve: (threadId: string) => void;
   reject: (error: Error) => void;
@@ -78,6 +79,7 @@ const PENDING_THREAD_PREFIX = "pending-thread:";
 const OPTIMISTIC_QUEUED_DRAFT_PREFIX = "optimistic-queued:";
 const PENDING_THREAD_SLOW_MS = 18_000;
 const PENDING_THREAD_FAILURE_MS = 75_000;
+const PENDING_THREAD_ACCEPTED_FAILURE_MS = 150_000;
 const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
 const DEFAULT_SELECTED_MODEL = "GPT-5.4";
 const DEFAULT_ACCESS_MODE: AccessMode = "full-access";
@@ -751,6 +753,9 @@ function refreshSelectedThreadOnConnect() {
 
 function handleServerEvent(event: ServerEvent) {
   switch (event.type) {
+    case "thread:create-accepted":
+      markPendingThreadCreateAccepted(event.requestId);
+      break;
     case "thread:created":
       resolvePendingThreadCreateSuccess(event.requestId, event.threadId);
       break;
@@ -879,9 +884,6 @@ function handleServerEvent(event: ServerEvent) {
       }
       break;
     case "toast":
-      if (event.tone === "error" && pendingThreadCreate && state.snapshot?.selectedThreadId === pendingThreadCreate.tempId) {
-        rollbackPendingThreadCreate(false);
-      }
       pushToast(event.tone, event.message);
       break;
   }
@@ -1114,6 +1116,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
         markPendingThreadCreateSlow(tempId, mode);
       }, PENDING_THREAD_SLOW_MS),
       failureTimerId: null,
+      bridgeAccepted: false,
       isSlow: false,
       resolve,
       reject,
@@ -1121,6 +1124,26 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
   }) as PendingThreadCreatePromise;
   promise.tempId = tempId;
   return promise;
+}
+
+function markPendingThreadCreateAccepted(requestId: string) {
+  if (!pendingThreadCreate || pendingThreadCreate.requestId !== requestId) {
+    return;
+  }
+  pendingThreadCreate.bridgeAccepted = true;
+  if (pendingThreadCreate.failureTimerId !== null) {
+    window.clearTimeout(pendingThreadCreate.failureTimerId);
+  }
+  pendingThreadCreate.failureTimerId = window.setTimeout(() => {
+    failPendingThreadCreate("Codex accepted the new chat request but did not finish opening it. Try again.");
+  }, PENDING_THREAD_ACCEPTED_FAILURE_MS);
+  const thread = findThread(pendingThreadCreate.tempId);
+  if (thread) {
+    thread.preview = pendingThreadCreate.isSlow
+      ? "Still waiting for Codex to finish opening the new chat…"
+      : "Computer accepted the new chat request…";
+    thread.lastActivityAt = new Date().toISOString();
+  }
 }
 
 function resolvePendingThreadCreate(selectedThreadId: string | null) {
@@ -1275,14 +1298,21 @@ function markPendingThreadCreateSlow(tempId: string, mode: ThreadCreateMode) {
 
   const thread = findThread(tempId);
   if (thread) {
-    thread.preview =
-      mode === "worktree"
-        ? "Still creating your worktree chat on the computer…"
-        : "Still starting the new chat on the computer…";
+    if (pendingThreadCreate.bridgeAccepted) {
+      thread.preview = "Still waiting for Codex to finish opening the new chat…";
+    } else {
+      thread.preview =
+        mode === "worktree"
+          ? "Still creating your worktree chat on the computer…"
+          : "Still starting the new chat on the computer…";
+    }
     thread.lastActivityAt = new Date().toISOString();
   }
 
   pushToast("error", "Starting the new chat is taking longer than usual. Still waiting on your computer.");
+  if (pendingThreadCreate.bridgeAccepted) {
+    return;
+  }
   pendingThreadCreate.failureTimerId = window.setTimeout(() => {
     failPendingThreadCreate("Starting the new chat failed. Try again.");
   }, Math.max(PENDING_THREAD_FAILURE_MS - PENDING_THREAD_SLOW_MS, 0));

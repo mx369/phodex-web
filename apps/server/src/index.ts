@@ -159,6 +159,15 @@ const WORKTREE_ROOT = process.env.PHODEX_WORKTREE_ROOT ?? resolve(homedir(), ".c
 const MAX_IMAGE_ARTIFACT_PREVIEW_BYTES = 5 * 1024 * 1024;
 const CODEX_WS_URL = process.env.PHODEX_CODEX_WS_URL ?? "ws://127.0.0.1:8765";
 const CODEX_READY_URL = CODEX_WS_URL.replace(/^ws/i, "http") + "/readyz";
+const CODEX_REQUEST_TIMEOUT_MS = 20_000;
+const configuredThreadStartTimeoutMs = Number(process.env.PHODEX_CODEX_THREAD_START_TIMEOUT_MS ?? "120000");
+const CODEX_THREAD_START_TIMEOUT_MS = Number.isFinite(configuredThreadStartTimeoutMs)
+  ? Math.max(60_000, configuredThreadStartTimeoutMs)
+  : 120_000;
+const configuredThreadStartRetries = Number(process.env.PHODEX_CODEX_THREAD_START_RETRIES ?? "2");
+const CODEX_THREAD_START_RETRIES = Number.isFinite(configuredThreadStartRetries)
+  ? Math.max(0, Math.floor(configuredThreadStartRetries))
+  : 2;
 const MANAGE_CODEX = process.env.PHODEX_MANAGE_CODEX !== "false";
 const ACTIVE_TURN_STALE_MS = Math.max(60_000, Number(process.env.PHODEX_ACTIVE_TURN_STALE_MS ?? "600000"));
 const CODEX_THREAD_TURNS_PAGE_SIZE = Math.max(1, Number(process.env.PHODEX_CODEX_THREAD_TURNS_PAGE_SIZE ?? "100"));
@@ -517,6 +526,21 @@ function sendBridgeEvent(event: BridgeEvent) {
   relaySocket.send(JSON.stringify(event));
 }
 
+function sendThreadCreateAccepted(user: PersistedUser, event: ThreadCreateRequest, ws?: ServerWebSocket<SocketData>) {
+  if (ws) {
+    sendEvent(ws, {
+      type: "thread:create-accepted",
+      requestId: event.requestId,
+    });
+    return;
+  }
+  sendBridgeEvent({
+    type: "bridge:thread:create-accepted",
+    userId: user.profile.id,
+    requestId: event.requestId,
+  });
+}
+
 function sendBridgeMessageSendResult(
   command: Extract<BridgeCommand, { type: "bridge:dispatch" }>,
   event: Extract<ClientEvent, { type: "message:send" }>,
@@ -657,12 +681,23 @@ async function handleThreadCreate(user: PersistedUser, event: ThreadCreateReques
         ? createWorktreeForProject(projectContext.projectRoot, event.projectLabel ?? basename(projectContext.projectRoot)).worktreeCwd
         : ensureLocalThreadCwd(requestedCwd);
 
-    const result = await codexRequest("thread/start", {
+    sendThreadCreateAccepted(user, event, ws);
+    logFlowTrace("codex.thread-start.accepted", {
+      requestId: event.requestId,
+      userId: user.profile.id,
+      mode: event.mode ?? "local",
+      cwd: threadCwd,
+    });
+
+    const result = await codexRequestWithRetry("thread/start", {
       cwd: threadCwd,
       model: "gpt-5.4",
       sandbox: "danger-full-access",
       approvalPolicy: "never",
       personality: "pragmatic",
+    }, {
+      timeoutMs: CODEX_THREAD_START_TIMEOUT_MS,
+      retries: CODEX_THREAD_START_RETRIES,
     });
     const thread = mergeCodexThread(result.thread, false, false);
     thread.history = buildLoadedThreadHistoryState(thread.messages.length, false);
@@ -3945,6 +3980,12 @@ function shouldRetryTurnStartWithoutServiceTier(error: unknown) {
     || message.includes("invalid params");
 }
 
+function isRetryableCodexBackpressureError(error: unknown) {
+  const code = (error as (Error & { code?: unknown }) | null)?.code;
+  const message = readErrorMessage(error).toLowerCase();
+  return code === -32001 || (message.includes("server overloaded") && message.includes("retry"));
+}
+
 function isTurnSteerUnsupportedError(error: unknown) {
   const code = (error as (Error & { code?: unknown }) | null)?.code;
   const message = readErrorMessage(error).toLowerCase();
@@ -3992,6 +4033,10 @@ function isThreadTurnsListUnsupportedError(error: unknown) {
     message.includes("unknown method") ||
     (message.includes("thread/turns/list") && message.includes("not found"))
   );
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function handleMissingThread(userId: string | undefined, threadId: string, error: unknown) {
@@ -4397,7 +4442,42 @@ function ensureCodexReady() {
   }
 }
 
-function codexRequest(method: string, params: unknown, options: { allowBeforeReady?: boolean } = {}) {
+type CodexRequestOptions = {
+  allowBeforeReady?: boolean;
+  timeoutMs?: number;
+};
+
+type CodexRequestRetryOptions = CodexRequestOptions & {
+  retries?: number;
+  retryBaseDelayMs?: number;
+};
+
+async function codexRequestWithRetry(method: string, params: unknown, options: CodexRequestRetryOptions = {}) {
+  const retries = Math.max(0, options.retries ?? 0);
+  const retryBaseDelayMs = Math.max(100, options.retryBaseDelayMs ?? 750);
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await codexRequest(method, params, options);
+    } catch (error) {
+      if (attempt >= retries || !isRetryableCodexBackpressureError(error)) {
+        throw error;
+      }
+      const delayMs = retryBaseDelayMs * 2 ** attempt + Math.floor(Math.random() * 250);
+      logFlowTrace("codex.request.retry", {
+        method,
+        attempt: attempt + 1,
+        delayMs,
+        message: readErrorMessage(error),
+      });
+      await sleep(delayMs);
+      attempt += 1;
+    }
+  }
+}
+
+function codexRequest(method: string, params: unknown, options: CodexRequestOptions = {}) {
   if (!options.allowBeforeReady) {
     ensureCodexReady();
   } else if (!codexSocket || codexSocket.readyState !== WebSocket.OPEN) {
@@ -4416,7 +4496,7 @@ function codexRequest(method: string, params: unknown, options: { allowBeforeRea
     const timer = setTimeout(() => {
       codexRequestWaiters.delete(requestId);
       rejectPromise(new Error(`Codex request timed out: ${method}`));
-    }, 20_000);
+    }, options.timeoutMs ?? CODEX_REQUEST_TIMEOUT_MS);
 
     codexRequestWaiters.set(requestId, {
       method,

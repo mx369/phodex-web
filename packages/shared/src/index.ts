@@ -339,6 +339,7 @@ export type BridgeCommand =
 
 export type BridgeEvent =
   | { type: "bridge:state"; threads: ThreadRecord[]; connection: RelayConnection }
+  | { type: "bridge:thread:create-accepted"; userId: string; requestId: string }
   | { type: "bridge:thread:created"; userId: string; requestId: string; threadId: string; thread?: ThreadRecord }
   | { type: "bridge:thread:create-failed"; userId: string; requestId: string; message: string }
   | { type: "bridge:thread:updated"; thread: ThreadRecord }
@@ -390,6 +391,7 @@ export type BridgeEvent =
 
 export type ServerEvent =
   | { type: "snapshot"; snapshot: AppSnapshot }
+  | { type: "thread:create-accepted"; requestId: string }
   | { type: "thread:created"; requestId: string; threadId: string }
   | { type: "thread:create-failed"; requestId: string; message: string }
   | { type: "thread:updated"; thread: ThreadRecord; selectedThreadId: string | null }

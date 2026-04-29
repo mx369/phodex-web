@@ -906,6 +906,17 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
       broadcastSnapshot(event.userId);
       break;
     }
+    case "bridge:thread:create-accepted": {
+      if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
+        break;
+      }
+      clearThreadCreateDispatch(event.userId, event.requestId);
+      broadcast(event.userId, {
+        type: "thread:create-accepted",
+        requestId: event.requestId,
+      });
+      break;
+    }
     case "bridge:thread:create-failed": {
       if (getActiveBridgeId(bridgeUserId) !== bridgeId || event.userId !== bridgeUserId) {
         break;
