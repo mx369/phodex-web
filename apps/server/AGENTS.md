@@ -14,8 +14,7 @@ Read this file before editing anything under `apps/server`.
 - Keep the bridge connected to the real local Codex CLI service.
 - Do not add OTP backdoors, static bypass codes, or local dev-only auth shortcuts.
 - Do not claim thread deletion works; Codex app-server does not currently expose it.
-- Do not add QR login or camera pairing support.
-- Do not add end-to-end encryption on top of HTTPS/WSS.
+- Apply product exclusions from `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md` when touching auth, pairing, encryption, or transport security.
 
 ## Current Truth
 
@@ -24,7 +23,7 @@ Read this file before editing anything under `apps/server`.
 - OTP auth requires real email delivery on the public relay; no dev-code lookup or static bypass remains.
 - The relay now keeps user/session state, while thread execution and Codex filesystem work stay on the local bridge.
 - Public relay bridge state is account-bound. Do not collapse it back into a single global bridge socket, global thread mirror, or public pre-login install token flow.
-- Bridge thread lists should stay fully populated for the drawer and sidebar. Keep full thread metadata synced, but only hydrate message bodies for the currently selected thread unless a task explicitly needs more.
+- Keep full thread metadata synced for navigation, but hydrate message bodies only for the selected thread unless the task needs more.
 - Codex integration currently uses thread start/list/read, thread name update, archive/unarchive, turn start, and turn interrupt.
 - Richer upstream message mapping is still incomplete.
 

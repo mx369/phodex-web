@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-04-15
+updated_at: 2026-04-29
 intent: >
   Progressive-disclosure map for phodex-web. Read the smallest sufficient layer first.
 
@@ -10,8 +10,8 @@ entrypoints:
 defaults:
   strategy:
     - Read `00-start-here` first.
-    - Read `05-product-decisions` before auth, onboarding, security, or restoration work.
-    - Then read the nearest package guide.
+    - Read the nearest package guide before editing code.
+    - Read `05-product-decisions` only before auth, onboarding, security, restoration, or product-rule work.
     - Pull in deeper docs only for the active surface.
   constraints:
     - Do not load all files into context by default.
@@ -41,7 +41,7 @@ resources:
   - id: start
     level: 0
     path: /Users/young/mx/tmp/phodex-web/docs/ai/00-start-here.md
-    approx_tokens: 350
+    approx_tokens: 250
     read_when: first read
     stop_if_sufficient: true
     next:
@@ -54,7 +54,7 @@ resources:
     level: 0
     path: /Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md
     approx_tokens: 220
-    read_when: auth, security, onboarding, or restoration work
+    read_when: auth, onboarding, security, restoration, or product-rule work
     stop_if_sufficient: true
     next:
       - /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
@@ -87,7 +87,7 @@ resources:
   - id: web_scope
     level: 1
     path: /Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md
-    approx_tokens: 450
+    approx_tokens: 210
     read_when: You will edit files under apps/web.
     stop_if_sufficient: true
     next:
@@ -96,7 +96,7 @@ resources:
   - id: server_scope
     level: 1
     path: /Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md
-    approx_tokens: 450
+    approx_tokens: 350
     read_when: You will edit files under apps/server.
     stop_if_sufficient: true
     next:

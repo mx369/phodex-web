@@ -1,73 +1,58 @@
 # AGENTS.md
 
-Use progressive disclosure for AI context. Read only the smallest set of docs needed for the task.
+Use progressive disclosure. Default to the smallest safe doc set.
 
 ## Read Order
 
 1. Read `/Users/young/mx/tmp/phodex-web/docs/ai/00-start-here.md`.
-2. Read `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md`.
-3. Read the nearest subproject guide before editing code:
+2. Before editing code, read only the nearest subproject guide:
    - `/Users/young/mx/tmp/phodex-web/apps/web/AGENTS.md`
    - `/Users/young/mx/tmp/phodex-web/apps/server/AGENTS.md`
-4. Read `/Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md` when verifying work.
-5. Read `/Users/young/mx/tmp/phodex-web/docs/ai/context-manifest.yaml` only if you need deeper routing.
+3. Read `/Users/young/mx/tmp/phodex-web/docs/ai/05-product-decisions.md` only for auth, onboarding, security, upstream restoration, or product-rule changes.
+4. Read `/Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md` only when verification commands or acceptance evidence are unclear.
+5. Read `/Users/young/mx/tmp/phodex-web/docs/ai/context-manifest.yaml` only when the needed deeper doc is unclear.
 
 ## Repo Truth
 
-- The target is a source-driven recreation of the `remodex` mobile app behavior and UI, not a desktop web app with fake phone hardware chrome.
-- The build is still partial. Real email OTP, relay transport, and local Codex chat bridging work; source parity does not.
-- Excluded scope: QR/camera pairing and end-to-end encryption.
+- Source-driven recreation of the `remodex` mobile app behavior/UI.
+- Real today: email OTP, public relay, local Codex bridge, chat create/send/stream/stop/rename/archive.
+- Partial: source parity, rich turn surfaces, purchases.
+- Excluded: QR/camera pairing and end-to-end encryption.
 
 ## Working Rules
 
 - If another repo document conflicts with this file, follow this file.
-- Use current code and current behavior as the baseline. Do not rely on stale plans or memory.
-- When the user asks to add or revise standing AI rules, first condense them into the smallest durable, non-redundant version before writing them into repo docs.
-- Prefer the smallest, simplest change with the smallest diff that actually solves the task.
-  Smallest diff means narrow scope and normal readable code, not code golf, one-letter names, or collapsing code into one line.
+- Use current code/behavior as truth; do not rely on stale plans or memory.
+- Add standing AI rules only in the smallest durable, non-redundant form.
+- Prefer the smallest readable diff that solves the task.
 - Prefer environment variables or sourced secret files over inline secret strings. Do not paste tokens, passwords, or API keys into commands, docs, logs, or temp scripts when an env-based path exists.
-- Treat this as a real product. Do not add fake, mock, random, hardcoded, or placeholder product data to production paths. If a real signal is unavailable, show an explicit unavailable/unknown state, hide the metric, or report the verification gap instead of fabricating a value.
-- For CNB Git operations from the Codex shell, self-correct before asking the user: switch to the `cnb-dev-deploy` skill flow, use its authenticated `cnb-git.sh` wrapper, and verify remote/auth state before treating a push failure as a missing repository.
-- Do not deploy after merge or push by default. Deploy only when the user explicitly asks to deploy, publish, release, or restart the live environment.
-- If the user says to deploy without naming a target, deploy to QCP by default.
-- For QCP deployments, place the project in a normal app/frontend directory, not under `/root` or another root-user home path, unless the user explicitly asks for that layout.
-- Before a QCP deploy, inspect the live Nginx and systemd config on the host to confirm the active service, static root, relay source tree, and Bun path. Do not assume `/root/project/phodex-web` is live just because it exists.
-- When the local skill `/Users/young/.codex/skills/phodex-qcp-deploy` exists, use it for QCP deploy and live-topology inspection before improvising your own steps.
+- No fake/mock/random/placeholder production data; show unavailable/unknown or report the verification gap.
+- CNB Git: use the `cnb-dev-deploy` authenticated flow before treating push/auth failures as missing repos.
+- Deploy only when explicitly asked; unnamed deploy target means QCP. For QCP, use `/Users/young/.codex/skills/phodex-qcp-deploy` when present.
 - If a task changes architecture, commands, ownership, page truth, or acceptance flow, update the relevant AI docs in the same commit.
-- Do not bypass existing security or deployment boundaries unless the user explicitly asks.
-- Commit each intentional change separately.
-- Commit messages should be primarily in Chinese. Keep commands, paths, code symbols, and proper nouns in English when that is clearer.
+- Do not bypass security/deployment boundaries unless explicitly asked.
+- Commit intentional changes separately; commit messages should be primarily in Chinese.
 
 ## Execution
 
-- The main thread owns coordination, integration, and final acceptance.
-- Delegate in small units with clear acceptance criteria.
-- Delegation does not transfer final responsibility.
 - In fix loops: reproduce, fix, verify.
-- Before editing files, inspect current repo changes and decide whether the target files conflict with existing work. Use the current worktree when there is no conflict; create a dedicated Git worktree only when existing changes would overlap or make the edit unsafe to isolate.
+- Before editing, inspect worktree changes. Use a separate worktree only for overlapping/conflicting changes.
 - For conflict-driven worktree setup, merge-back, ignored artifacts, and recurring Bun mode-bit cleanup, follow `/Users/young/mx/tmp/phodex-web/docs/ai/15-bugfix-workflow.md#worktree-discipline`.
-- Before fixing a bug, reproduce it first with the lightest reliable evidence. Use CDP screenshots or frame sequences only when the failure is visual, interaction-heavy, or transient enough that simple logs/checks are insufficient.
-- Browser/UI validation defaults to lightweight checks. Use the local `electron-cdp-automation` skill and hidden Electron CDP wrapper only when browser behavior, visual acceptance, or timing-sensitive UI evidence matters; if browser automation is needed, prefer Electron CDP over Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks otherwise or Electron CDP cannot cover the required capability.
+- Before fixing a bug, reproduce it with the lightest reliable evidence.
+- Use Electron CDP only when browser behavior, visual acceptance, or timing-sensitive UI evidence matters.
 - Use real running output for UI work. Do not infer visual truth from static code alone.
-- Do not add fake iPhone hardware, status bars, dynamic islands, or promo-shot framing unless the source app itself renders them.
-- Prioritize work surfaces and interactions over decorative marketing composition.
-- Empty states should explain the next action, not act like landing pages.
+- Do not add fake phone hardware, status bars, dynamic islands, or promo-shot framing unless the source app renders them.
 
 ## Verification
 
 - Default order: build, targeted checks, then real-flow validation only when the task risk justifies it.
-- Browser-based validation is not required by default. When it is needed, use Electron CDP rather than Chrome, Firefox, Playwright, or Selenium unless the user explicitly asks otherwise or Electron CDP cannot cover the required capability.
-- For timing-sensitive browser state-machine regressions, capture both the early transient state and the settled state; a final screenshot alone is not enough.
-- Real OTP acceptance must send a real email and fetch the code through a mailbox-reading skill. If that path is unavailable, report the verification gap instead of faking success.
-- On this workstation, default real OTP validation to `otth.xyz@qq.com` through the local Apple Mail `QQ` account unless the user explicitly names another email.
-- Local email inspection must use the `apple-mail-reader` skill; if that skill or Mail automation is unavailable, report the blocker instead of reading `~/Library/Mail` directly.
+- For timing-sensitive UI/state-machine regressions, capture early transient and settled states when browser validation is needed.
+- Real OTP acceptance uses real email and the `apple-mail-reader` skill; default mailbox is `otth.xyz@qq.com` via local Apple Mail `QQ`.
 - If something was not verified, say so explicitly.
 
-## Deep Reads
+## Optional Deep Reads
 
-- `/Users/young/mx/tmp/phodex-web/llms.txt`
-- `/Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md`
-- `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`
-- `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`
-- `/Users/young/mx/tmp/phodex-web/docs/ai/40-verification-and-artifacts.md`
-- `/Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md`
+- Status/planning: `/Users/young/mx/tmp/phodex-web/docs/ai/10-current-state.md`, `/Users/young/mx/tmp/phodex-web/docs/ai/50-open-todo.md`
+- UI/flows: `/Users/young/mx/tmp/phodex-web/docs/ai/20-pages-and-flows.md`
+- Relay/bridge/protocol: `/Users/young/mx/tmp/phodex-web/docs/ai/30-architecture-and-interfaces.md`
+- Full routing: `/Users/young/mx/tmp/phodex-web/llms.txt`, `/Users/young/mx/tmp/phodex-web/docs/ai/context-manifest.yaml`
