@@ -25,6 +25,7 @@ This file is the UI and flow reference. Read it when you need page-level status 
 - Authenticated shell routes:
   `/` for Home, `/:machineId/:threadId` for the active chat, `/archived`, `/about`, `/pro`
 - The web client now treats these paths as the source of truth and syncs page/thread selection back into the URL instead of relying only on query-string boot params.
+- Only thread-to-thread navigation, such as chat A to chat B, auto-replaces the current history entry; page-to-thread and thread-to-page flows keep their existing route handlers.
 
 ## Flow Inventory
 

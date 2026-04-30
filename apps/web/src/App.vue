@@ -2623,10 +2623,12 @@ function openPanel(panel: ShellPageState, replace = false) {
 
 function navigateToThread(threadId: string, replace = false) {
   const machineId = currentRouteMachineId();
+  const shouldReplace =
+    replace || (route.name === "thread" && routeThreadId.value !== null && routeThreadId.value !== threadId);
   if (!machineId) {
     client.logFlowTrace("route.thread.manual-missing-machine", {
       threadId,
-      replace,
+      replace: shouldReplace,
     });
     client.selectThread(threadId);
     return;
@@ -2635,14 +2637,14 @@ function navigateToThread(threadId: string, replace = false) {
   client.logFlowTrace("route.thread.manual", {
     threadId,
     machineId,
-    replace,
+    replace: shouldReplace,
   });
   const target = {
     name: "thread",
     params: { machineId, threadId },
     query: preservedRouteQuery(),
   } satisfies RouteLocationRaw;
-  void (replace ? router.replace(target) : router.push(target));
+  void (shouldReplace ? router.replace(target) : router.push(target));
 }
 
 function handleThreadCreateNavigation(creation: ThreadCreateNavigationPromise) {
