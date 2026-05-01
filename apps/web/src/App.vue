@@ -343,6 +343,13 @@ type PendingThreadRouteState = {
 type ThreadCreateNavigationPromise = Promise<string> & {
   tempId?: string;
 };
+type DeferredThreadCreateRequest = {
+  projectLabel: string;
+  mode: ThreadCreateMode;
+  cwd?: string;
+  waitingForDialogLeave: boolean;
+  waitingForDrawerLeave: boolean;
+};
 
 type AppRouteName =
   | "home"
@@ -409,6 +416,7 @@ const USER_SCROLL_INTENT_MS = 900;
 const PROJECTS_ROOT_HINT = "~/.phodex-web/projects";
 const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
 const DRAWER_CLOSE_NAVIGATION_FALLBACK_MS = 320;
+const THREAD_CREATE_CHROME_CLOSE_FALLBACK_MS = 480;
 const DRAWER_THREAD_SYNC_HINT_MS = 8_000;
 const DRAWER_THREAD_BATCH_SIZE = 16;
 const ACCESS_MODE_OPTIONS: AccessMode[] = ["read-only", "on-request", "full-access"];
@@ -427,6 +435,8 @@ let userConversationScrollIntentUntil = 0;
 let installCommandCopyTimer: number | null = null;
 let drawerThreadSyncTimer: number | null = null;
 let drawerThreadNavigationTimer: number | null = null;
+let deferredThreadCreateFallbackTimer: number | null = null;
+let deferredThreadCreateRequest: DeferredThreadCreateRequest | null = null;
 let pendingDrawerThreadNavigationId: string | null = null;
 let previousScrollRestoration: ScrollRestoration | null = null;
 const installManifest = ref<InstallManifest | null>(null);
@@ -595,6 +605,7 @@ onBeforeUnmount(() => {
   clearInstallCommandCopyTimer();
   clearDrawerThreadSyncTimer();
   clearPendingDrawerThreadNavigation();
+  clearDeferredThreadCreate();
 });
 
 const isAuthenticated = computed(() => Boolean(state.session && state.snapshot));
@@ -776,6 +787,19 @@ function clearDrawerThreadNavigationTimer() {
 function clearPendingDrawerThreadNavigation() {
   clearDrawerThreadNavigationTimer();
   pendingDrawerThreadNavigationId = null;
+}
+
+function clearDeferredThreadCreateFallbackTimer() {
+  if (deferredThreadCreateFallbackTimer === null) {
+    return;
+  }
+  window.clearTimeout(deferredThreadCreateFallbackTimer);
+  deferredThreadCreateFallbackTimer = null;
+}
+
+function clearDeferredThreadCreate() {
+  clearDeferredThreadCreateFallbackTimer();
+  deferredThreadCreateRequest = null;
 }
 
 function showDrawerThreadSyncHint() {
@@ -2667,9 +2691,35 @@ function handleThreadCreateNavigation(creation: ThreadCreateNavigationPromise) {
 }
 
 function createThreadAfterClosingChrome(projectLabel: string, mode: ThreadCreateMode, cwd?: string) {
+  clearDeferredThreadCreate();
+  deferredThreadCreateRequest = {
+    projectLabel,
+    mode,
+    cwd,
+    waitingForDialogLeave: Boolean(dialogState.value),
+    waitingForDrawerLeave: state.ui.sidebarOpen,
+  };
+  deferredThreadCreateFallbackTimer = window.setTimeout(() => {
+    if (!deferredThreadCreateRequest) {
+      return;
+    }
+    deferredThreadCreateRequest.waitingForDialogLeave = false;
+    deferredThreadCreateRequest.waitingForDrawerLeave = false;
+    flushDeferredThreadCreate();
+  }, THREAD_CREATE_CHROME_CLOSE_FALLBACK_MS);
   closeDialog();
   closeSidebar();
-  handleThreadCreateNavigation(client.createThread(projectLabel, mode, cwd));
+  flushDeferredThreadCreate();
+}
+
+function flushDeferredThreadCreate() {
+  const request = deferredThreadCreateRequest;
+  if (!request || request.waitingForDialogLeave || request.waitingForDrawerLeave) {
+    return;
+  }
+  clearDeferredThreadCreateFallbackTimer();
+  deferredThreadCreateRequest = null;
+  handleThreadCreateNavigation(client.createThread(request.projectLabel, request.mode, request.cwd));
 }
 
 function handleDrawerThreadClick(threadId: string) {
@@ -2695,9 +2745,21 @@ function flushPendingDrawerThreadNavigation() {
 }
 
 function handleDrawerAfterLeave() {
+  if (deferredThreadCreateRequest) {
+    deferredThreadCreateRequest.waitingForDrawerLeave = false;
+    flushDeferredThreadCreate();
+  }
   window.requestAnimationFrame(() => {
     flushPendingDrawerThreadNavigation();
   });
+}
+
+function handleDialogAfterLeave() {
+  if (!deferredThreadCreateRequest) {
+    return;
+  }
+  deferredThreadCreateRequest.waitingForDialogLeave = false;
+  flushDeferredThreadCreate();
 }
 
 function navigateHome() {
@@ -4492,7 +4554,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                 </div>
               </transition>
 
-              <transition name="scrim">
+              <transition name="scrim" @after-leave="handleDialogAfterLeave">
                 <div v-if="dialogState" class="app-dialog-scrim" @click.self="closeDialog">
                   <div
                     class="app-dialog-card"
