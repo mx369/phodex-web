@@ -1175,12 +1175,7 @@ const currentThreadHistory = computed(() => currentThread.value?.history ?? null
 const showCurrentThreadHistoryLoading = computed(() => {
   const thread = currentThread.value;
   const history = thread?.history;
-  return Boolean(
-    thread &&
-      history &&
-      !thread.messages.length &&
-      (history.isHydrating || history.totalMessages === null || history.hasMoreBefore)
-  );
+  return Boolean(thread && history?.isHydrating && !thread.messages.length);
 });
 const emptyThreadStarterActions = computed<TurnStarterAction[]>(() => {
   const repoName = currentThreadRepoName.value || currentThread.value?.projectLabel || "this workspace";
@@ -1417,6 +1412,35 @@ watch(
     pendingThreadRoute.value = null;
   },
   { immediate: true }
+);
+
+watch(
+  () => {
+    const threadId = routeThreadId.value;
+    if (!threadId || !state.snapshot) {
+      return null;
+    }
+    return {
+      threadId,
+      hasThread: state.snapshot.threads.some((thread) => thread.id === threadId),
+    };
+  },
+  (nextRouteState, previousRouteState) => {
+    if (!isAuthenticated.value || route.name !== "thread" || !routeThreadId.value) {
+      return;
+    }
+    if (
+      !nextRouteState ||
+      !previousRouteState ||
+      nextRouteState.threadId !== previousRouteState.threadId ||
+      previousRouteState.hasThread !== true ||
+      nextRouteState.hasThread !== false
+    ) {
+      return;
+    }
+    pendingThreadRoute.value = null;
+    syncRouteFromState();
+  }
 );
 const createThreadSelection = computed(() => {
   if (!dialogState.value || dialogState.value.kind !== "create-thread") {
@@ -2973,6 +2997,22 @@ function routeLocationForState(): RouteLocationRaw {
     isPendingThreadId(routeThreadId.value) &&
     selectedThreadId &&
     selectedThreadId !== routeThreadId.value &&
+    state.snapshot?.threads.some((thread) => thread.id === selectedThreadId)
+  ) {
+    const machineId = currentRouteMachineId();
+    if (machineId) {
+      return {
+        name: "thread",
+        params: { machineId, threadId: selectedThreadId },
+        query: preservedRouteQuery(),
+      };
+    }
+  }
+  if (
+    routeThreadId.value &&
+    selectedThreadId &&
+    selectedThreadId !== routeThreadId.value &&
+    pendingThreadRoute.value?.threadId !== routeThreadId.value &&
     state.snapshot?.threads.some((thread) => thread.id === selectedThreadId)
   ) {
     const machineId = currentRouteMachineId();
