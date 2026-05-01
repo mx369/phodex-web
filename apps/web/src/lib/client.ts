@@ -1026,26 +1026,28 @@ function handleMessageSendAccepted(requestId: string, threadId: string, outcome:
 
 function handleMessageSendFailed(requestId: string, threadId: string) {
   const pending = pendingMessageSends.get(requestId) ?? null;
+  const pendingRun = state.ui.pendingRunFeedback?.requestId === requestId ? state.ui.pendingRunFeedback : null;
+  const failedMessage = pending ?? (pendingRun ? { text: pendingRun.prompt, images: pendingRun.images } : null);
   logFlowTrace("message.send.failed", {
     requestId,
     threadId,
     hadPending: Boolean(pending),
+    hadPendingRun: Boolean(pendingRun),
   });
   pendingMessageSends.delete(requestId);
-  removeOptimisticQueuedDraftForRequest(requestId, pending?.threadId ?? threadId);
+  removeOptimisticQueuedDraftForRequest(requestId, pending?.threadId ?? pendingRun?.threadId ?? threadId);
 
-  const pendingRun = state.ui.pendingRunFeedback;
   if (pendingRun?.requestId === requestId && !pendingRun.promptAcknowledged) {
     state.ui.pendingRunFeedback = null;
   }
 
-  if (!pending) {
+  if (!failedMessage) {
     return;
   }
 
   if (!state.ui.composerText.trim() && state.ui.composerImages.length === 0) {
-    state.ui.composerText = pending.text;
-    state.ui.composerImages = pending.images.map((image) => ({ ...image }));
+    state.ui.composerText = failedMessage.text;
+    state.ui.composerImages = failedMessage.images.map((image) => ({ ...image }));
   }
 }
 

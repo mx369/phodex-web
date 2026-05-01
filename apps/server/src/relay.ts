@@ -580,18 +580,27 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       dispatchToBridge(user, event);
       break;
     case "message:send": {
+      const thread = getThreadMirror(user.profile.id).get(event.threadId) ?? null;
       logFlowTrace("client.message-send.received", {
         userId: user.profile.id,
         requestId: event.requestId,
         threadId: event.threadId,
         promptTrace: buildPromptTraceKey(event.text, event.images ?? []),
         promptSummary: summarizePromptForTrace(event.text, event.images ?? []),
-        threadState: getThreadMirror(user.profile.id).get(event.threadId)?.state ?? null,
+        threadState: thread?.state ?? null,
         activeBridgeId: getActiveBridgeId(user.profile.id),
       });
       const bridgeRequestId = dispatchToBridge(user, event);
       if (bridgeRequestId) {
         trackMessageSendDispatch(user.profile.id, bridgeRequestId, event);
+        if (thread?.state === "running") {
+          sendEvent(ws, {
+            type: "message:send-accepted",
+            requestId: event.requestId,
+            threadId: event.threadId,
+            outcome: "steered",
+          });
+        }
       } else {
         sendEvent(ws, {
           type: "message:send-failed",

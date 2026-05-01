@@ -643,6 +643,9 @@ function handleClientEvent(ws: ServerWebSocket<SocketData>, event: ClientEvent) 
       void handleThreadArchive(user, event.threadId);
       break;
     case "message:send":
+      if (threadCache.get(event.threadId)?.state === "running") {
+        sendClientMessageSendResult(ws, event, { ok: true, outcome: "steered" });
+      }
       void handleMessageSend(user, event).then((result) => {
         sendClientMessageSendResult(ws, event, result);
       });
