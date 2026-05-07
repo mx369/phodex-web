@@ -743,8 +743,17 @@ const threadGroups = computed<DrawerThreadGroup[]>(() => {
   });
 });
 watch(
-  [threadGroups, () => currentThread.value?.projectLabel ?? "", () => state.ui.search.trim()],
-  ([groups, currentProjectLabel, search]) => {
+  [
+    () => state.ui.sidebarOpen,
+    () => currentThread.value?.projectLabel ?? "",
+    () => state.ui.search.trim(),
+    () => (state.ui.sidebarOpen ? liveThreadCount.value : 0),
+  ],
+  ([sidebarOpen, currentProjectLabel, search]) => {
+    if (!sidebarOpen) {
+      return;
+    }
+    const groups = threadGroups.value;
     const available = new Set(groups.map((group) => group.label));
     const preserved = expandedDrawerGroups.value.filter((label) => available.has(label));
     const nextExpanded = new Set(preserved);
@@ -821,12 +830,15 @@ watch(
   }
 );
 
-watch(liveThreadCount, (count) => {
-  if (count > 0) {
-    drawerThreadSyncing.value = false;
-    clearDrawerThreadSyncTimer();
+watch(
+  () => (state.ui.sidebarOpen ? liveThreadCount.value : 0),
+  (count) => {
+    if (count > 0) {
+      drawerThreadSyncing.value = false;
+      clearDrawerThreadSyncTimer();
+    }
   }
-});
+);
 
 const drawerProjectTargets = computed<DrawerProjectTarget[]>(() => {
   const targets: DrawerProjectTarget[] = threadGroups.value.map((group) => ({
@@ -2720,8 +2732,8 @@ function createThreadAfterClosingChrome(projectLabel: string, mode: ThreadCreate
     projectLabel,
     mode,
     cwd,
-    waitingForDialogLeave: Boolean(dialogState.value),
-    waitingForDrawerLeave: state.ui.sidebarOpen,
+    waitingForDialogLeave: false,
+    waitingForDrawerLeave: false,
   };
   deferredThreadCreateFallbackTimer = window.setTimeout(() => {
     if (!deferredThreadCreateRequest) {
@@ -2733,7 +2745,9 @@ function createThreadAfterClosingChrome(projectLabel: string, mode: ThreadCreate
   }, THREAD_CREATE_CHROME_CLOSE_FALLBACK_MS);
   closeDialog();
   closeSidebar();
-  flushDeferredThreadCreate();
+  window.requestAnimationFrame(() => {
+    flushDeferredThreadCreate();
+  });
 }
 
 function flushDeferredThreadCreate() {

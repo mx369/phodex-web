@@ -1104,7 +1104,7 @@ function beginPendingThreadCreate(requestId: string, projectLabel: string, mode:
   };
 
   state.snapshot.selectedThreadId = tempId;
-  state.snapshot.threads = [tempThread, ...state.snapshot.threads.filter((thread) => thread.id !== tempId)];
+  state.snapshot.threads.unshift(tempThread);
 
   const promise = new Promise<string>((resolve, reject) => {
     pendingThreadCreate = {
@@ -1195,10 +1195,9 @@ function resolvePendingThreadCreateSuccess(requestId: string, threadId: string) 
         state: "idle" as const,
         lastActivityAt: new Date().toISOString(),
       };
-      state.snapshot.threads = [
-        confirmedThread,
-        ...state.snapshot.threads.filter((thread) => thread.id !== pending.tempId && thread.id !== threadId),
-      ];
+      removeThreadInPlace(pending.tempId);
+      removeThreadInPlace(threadId);
+      state.snapshot.threads.unshift(confirmedThread);
       state.snapshot.selectedThreadId = threadId;
       if (pendingSendAfterThreadCreate && confirmedThread.messages.length === 0) {
         pendingSendAfterThreadCreate = false;
@@ -1223,7 +1222,7 @@ function finalizePendingThreadCreate(threadId: string) {
 
   const { tempId, resolve } = pendingThreadCreate;
   state.snapshot.selectedThreadId = threadId;
-  state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
+  removeThreadInPlace(tempId);
 
   window.clearTimeout(pendingThreadCreate.slowTimerId);
   if (pendingThreadCreate.failureTimerId !== null) {
@@ -1261,7 +1260,7 @@ function rollbackPendingThreadCreate(pushFallbackToast = true) {
   }
 
   if (state.snapshot) {
-    state.snapshot.threads = state.snapshot.threads.filter((thread) => thread.id !== tempId);
+    removeThreadInPlace(tempId);
     if (state.snapshot.selectedThreadId === tempId) {
       const nextSelectedThreadId =
         previousSelectedThreadId &&
@@ -1487,6 +1486,19 @@ function normalizePendingRunPrompt(value: string) {
 
 function findThread(threadId: string) {
   return state.snapshot?.threads.find((thread) => thread.id === threadId) ?? null;
+}
+
+function removeThreadInPlace(threadId: string) {
+  const threads = state.snapshot?.threads;
+  if (!threads) {
+    return false;
+  }
+  const index = threads.findIndex((thread) => thread.id === threadId);
+  if (index === -1) {
+    return false;
+  }
+  threads.splice(index, 1);
+  return true;
 }
 
 function flushComposer(threadId: string) {
