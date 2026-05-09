@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, resolve } from "node:path";
 import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
+import { buildPromptTraceKey, dedupeThreadMessages, summarizePromptForTrace, upsertThreadMessage } from "@phodex/shared";
 import type {
   AppSettings,
   AppSnapshot,
@@ -1076,15 +1076,7 @@ function handleBridgeMessage(ws: ServerWebSocket<SocketData>, raw: string) {
 
 function appendMirroredMessage(userId: string, threadId: string, message: ThreadMessage) {
   const thread = ensureMirroredThread(userId, threadId);
-  const existingIndex = thread.messages.findIndex((entry) => entry.id === message.id);
-  if (existingIndex === -1) {
-    thread.messages.push(message);
-  } else {
-    thread.messages[existingIndex] = {
-      ...thread.messages[existingIndex],
-      ...message,
-    };
-  }
+  upsertThreadMessage(thread.messages, message);
   thread.preview = summarizeMessagePreview(message) || thread.preview;
   thread.lastActivityAt = message.createdAt;
 }
@@ -1192,25 +1184,29 @@ function setSelectedThreadForUser(userId: string, selectedThreadId: string | nul
 }
 
 function mergeIncomingMirroredThread(existing: ThreadRecord | undefined, incoming: ThreadRecord) {
+  const normalizedIncoming = {
+    ...incoming,
+    messages: dedupeThreadMessages(incoming.messages),
+  };
   if (!existing) {
-    return incoming;
+    return normalizedIncoming;
   }
 
-  if (incoming.messages.length > 0) {
-    return incoming;
+  if (normalizedIncoming.messages.length > 0) {
+    return normalizedIncoming;
   }
 
-  if (!existing.messages.length && !incoming.messages.length) {
+  if (!existing.messages.length && !normalizedIncoming.messages.length) {
     return {
-      ...incoming,
-      history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, incoming.history ?? null, 0),
+      ...normalizedIncoming,
+      history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, normalizedIncoming.history ?? null, 0),
     } satisfies ThreadRecord;
   }
 
   return {
-    ...incoming,
-    messages: existing.messages,
-    history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, incoming.history ?? null, existing.messages.length),
+    ...normalizedIncoming,
+    messages: dedupeThreadMessages(existing.messages),
+    history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, normalizedIncoming.history ?? null, existing.messages.length),
   } satisfies ThreadRecord;
 }
 

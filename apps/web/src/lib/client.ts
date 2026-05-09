@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
+import { buildPromptTraceKey, dedupeThreadMessages, summarizePromptForTrace, upsertThreadMessage } from "@phodex/shared";
 import type {
   AccessMode,
   AppSnapshot,
@@ -823,8 +823,8 @@ function handleServerEvent(event: ServerEvent) {
       if (!thread) {
         return;
       }
-      if (!thread.messages.some((message) => message.id === event.message.id)) {
-        thread.messages.push(event.message);
+      const result = upsertThreadMessage(thread.messages, event.message);
+      if (result === "inserted") {
         thread.lastActivityAt = event.message.createdAt;
         if (thread.history) {
           const totalMessages = thread.history.totalMessages == null ? null : thread.history.totalMessages + 1;
@@ -839,6 +839,8 @@ function handleServerEvent(event: ServerEvent) {
             isHydrating: false,
           };
         }
+      } else {
+        thread.lastActivityAt = event.message.createdAt;
       }
       syncPendingRunFeedbackFromMessage(event.threadId, event.message.role, event.message.text);
       break;
@@ -941,20 +943,24 @@ function coercePendingThreadSelection(selectedThreadId: string | null) {
 }
 
 function stabilizeIncomingThread(nextThread: ThreadRecord) {
+  const incomingThread = {
+    ...nextThread,
+    messages: dedupeThreadMessages(nextThread.messages),
+  };
   const existing = state.snapshot?.threads.find((thread) => thread.id === nextThread.id) ?? null;
   if (!existing) {
-    return mergeIncomingQueuedDrafts(nextThread);
+    return mergeIncomingQueuedDrafts(incomingThread);
   }
 
   const shouldPreserveCachedMessages =
-    nextThread.messages.length === 0 && existing.messages.length > 0;
+    incomingThread.messages.length === 0 && existing.messages.length > 0;
 
   if (!shouldPreserveCachedMessages) {
-    return mergeIncomingQueuedDrafts(nextThread);
+    return mergeIncomingQueuedDrafts(incomingThread);
   }
 
   return mergeIncomingQueuedDrafts({
-    ...nextThread,
+    ...incomingThread,
     messages: existing.messages,
     history: mergeHistoryAfterMetadataUpdate(existing.history ?? null, nextThread.history ?? null, existing.messages.length),
   });

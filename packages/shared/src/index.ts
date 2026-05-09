@@ -435,6 +435,87 @@ export function buildPromptTraceKey(text: string, images: InputImageAttachment[]
   return hashTraceValue(`${normalizeTraceText(text)}::${buildTraceImageSignature(images)}`);
 }
 
+export const GENERATED_USER_MESSAGE_ID_PREFIX = "generated-user-message:";
+const USER_MESSAGE_DEDUPE_WINDOW_MS = 120_000;
+
+export function buildGeneratedUserMessageId(text: string, images: InputImageAttachment[] = [], createdAt: string) {
+  return `${GENERATED_USER_MESSAGE_ID_PREFIX}${buildPromptTraceKey(text, images)}:${Date.parse(createdAt) || createdAt}`;
+}
+
+export function isGeneratedUserMessageId(id: string) {
+  return id.startsWith(GENERATED_USER_MESSAGE_ID_PREFIX);
+}
+
+export function findEquivalentThreadMessageIndex(messages: ThreadMessage[], nextMessage: ThreadMessage) {
+  const exactIndex = messages.findIndex((message) => message.id === nextMessage.id);
+  if (exactIndex !== -1 || nextMessage.role !== "user") {
+    return exactIndex;
+  }
+
+  const nextTraceKey = buildPromptTraceKey(nextMessage.text, nextMessage.inputImages ?? []);
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const existing = messages[index];
+    if (existing.role !== "user") {
+      continue;
+    }
+    if (!isGeneratedUserMessageId(existing.id) && !isGeneratedUserMessageId(nextMessage.id)) {
+      continue;
+    }
+    if (buildPromptTraceKey(existing.text, existing.inputImages ?? []) !== nextTraceKey) {
+      continue;
+    }
+    if (!messagesAreCloseInTime(existing.createdAt, nextMessage.createdAt)) {
+      continue;
+    }
+    return index;
+  }
+
+  return -1;
+}
+
+export function upsertThreadMessage(messages: ThreadMessage[], nextMessage: ThreadMessage) {
+  const index = findEquivalentThreadMessageIndex(messages, nextMessage);
+  if (index === -1) {
+    messages.push(nextMessage);
+    return "inserted" as const;
+  }
+
+  const existing = messages[index];
+  messages[index] = {
+    ...existing,
+    ...nextMessage,
+    id: chooseThreadMessageId(existing.id, nextMessage.id),
+  };
+  return "updated" as const;
+}
+
+export function dedupeThreadMessages(messages: ThreadMessage[]) {
+  const next: ThreadMessage[] = [];
+  for (const message of messages) {
+    upsertThreadMessage(next, message);
+  }
+  return next;
+}
+
+function chooseThreadMessageId(existingId: string, nextId: string) {
+  if (isGeneratedUserMessageId(existingId) && !isGeneratedUserMessageId(nextId)) {
+    return nextId;
+  }
+  if (!isGeneratedUserMessageId(existingId) && isGeneratedUserMessageId(nextId)) {
+    return existingId;
+  }
+  return nextId;
+}
+
+function messagesAreCloseInTime(left: string, right: string) {
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) {
+    return false;
+  }
+  return Math.abs(leftTime - rightTime) <= USER_MESSAGE_DEDUPE_WINDOW_MS;
+}
+
 export function summarizePromptForTrace(text: string, images: InputImageAttachment[] = []) {
   const normalizedText = normalizeTraceText(text);
   const textSummary = normalizedText

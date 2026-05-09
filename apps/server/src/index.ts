@@ -4,7 +4,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSyn
 import { basename, dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { homedir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
-import { buildPromptTraceKey, summarizePromptForTrace } from "@phodex/shared";
+import {
+  buildGeneratedUserMessageId,
+  buildPromptTraceKey,
+  dedupeThreadMessages,
+  findEquivalentThreadMessageIndex,
+  summarizePromptForTrace,
+  upsertThreadMessage,
+} from "@phodex/shared";
 import type {
   AppSettings,
   AppSnapshot,
@@ -1669,7 +1676,6 @@ function handleItemCompleted(params: any) {
   }
 
   const thread = ensureThreadRecord(threadId);
-  const messageExists = thread.messages.some((entry) => entry.id === readString(item?.id));
   const message = mapLiveItemToMessage(
     item,
     activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
@@ -1681,8 +1687,9 @@ function handleItemCompleted(params: any) {
     return;
   }
 
+  const existingMessage = thread.messages[findEquivalentThreadMessageIndex(thread.messages, message)];
   appendMessage(threadId, message);
-  if (!messageExists) {
+  if (!existingMessage || existingMessage.id !== message.id) {
     sendBridgeEvent({ type: "bridge:message:appended", threadId, message });
     logFlowTrace("relay.message-appended.sent", {
       threadId,
@@ -2225,11 +2232,12 @@ function mapLiveItemToMessage(
   const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
     const inputImages = readUserItemImages(item);
+    const text = readUserItemText(item);
     return {
-      id: itemId,
+      id: readString(item?.id) || buildGeneratedUserMessageId(text, inputImages, createdAt),
       role: "user",
       kind: "chat",
-      text: readUserItemText(item),
+      text,
       inputImages,
       createdAt,
     } satisfies ThreadMessage;
@@ -2313,15 +2321,7 @@ function mapLiveItemToMessage(
 
 function appendMessage(threadId: string, nextMessage: ThreadMessage) {
   const thread = ensureThreadRecord(threadId);
-  const index = thread.messages.findIndex((message) => message.id === nextMessage.id);
-  if (index === -1) {
-    thread.messages.push(nextMessage);
-  } else {
-    thread.messages[index] = {
-      ...thread.messages[index],
-      ...nextMessage,
-    };
-  }
+  upsertThreadMessage(thread.messages, nextMessage);
   thread.preview = summarizeMessagePreview(nextMessage.text, nextMessage.inputImages) || thread.preview;
   thread.lastActivityAt = nextMessage.createdAt;
   return thread;
@@ -3385,11 +3385,7 @@ function normalizeComparablePath(filePath: string) {
 }
 
 function dedupeMessages(messages: ThreadMessage[]) {
-  const next = new Map<string, ThreadMessage>();
-  for (const message of messages) {
-    next.set(message.id, message);
-  }
-  return [...next.values()];
+  return dedupeThreadMessages(messages);
 }
 
 function hasMessageId(turns: any, messageId: string) {
