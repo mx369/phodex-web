@@ -10,6 +10,15 @@ This project is independently maintained. It is not affiliated with, endorsed by
 
 Product names, service names, trademarks, and logos belong to their respective owners. References to those names are for identification and interoperability only.
 
+## Upstream Reference
+
+This repository is a source-driven reconstruction project. It references upstream behaviors, interfaces, and documentation to improve compatibility and developer experience.
+
+Primary upstream reference:
+- Remodex: https://github.com/Emanuele-web04/remodex
+
+We appreciate the work of upstream maintainers and contributors. This acknowledgement does not imply partnership, endorsement, or trademark license beyond nominative use.
+
 ## Security And Secrets
 
 This repository must not contain production secrets, API keys, session tokens, bridge tokens, private certificates, or user data. Configure deployments through environment variables, secret managers, or untracked local files.

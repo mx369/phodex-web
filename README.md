@@ -1,5 +1,7 @@
 # Phodex Web
 
+[中文 README](README.zh-CN.md)
+
 Phodex Web is a Bun monorepo that recreates the Remodex-style mobile experience for Codex on the web. It provides a public web relay, email OTP sign-in, and a local outbound bridge that connects the browser session to a real local Codex app-server.
 
 This project is source-driven and still under active reconstruction. The current code is useful for development, experimentation, and self-hosting, but it is not a finished product.
@@ -85,6 +87,16 @@ Use [.env.example](.env.example) as a reference for local relay and bridge setti
 - Keep the local bridge outbound; public relay code should not execute local filesystem work.
 - Do not add OTP bypasses, static test codes, or fake production data.
 - Preserve the product constraints documented in `docs/ai`.
+
+## Acknowledgements
+
+This project references and learns from upstream projects and ecosystems, especially:
+
+- [Remodex](https://github.com/Emanuele-web04/remodex) (the primary upstream reference for source behavior and UI reconstruction targets)
+- Codex and related app-server workflows
+- Bun, Vue, Vite, and Resend
+
+Thanks to the upstream maintainers and contributors for their public work and documentation.
 
 ## License
 
