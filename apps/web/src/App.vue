@@ -1715,7 +1715,8 @@ async function loadInstallManifest() {
 
   installManifestLoading.value = true;
   try {
-    const response = await fetch(`${API_ORIGIN}/install/manifest.json`, {
+    const manifestUrl = `${API_ORIGIN}/install/manifest.json?locationProtocol=${encodeURIComponent(window.location.protocol)}`;
+    const response = await fetch(manifestUrl, {
       headers: {
         authorization: `Bearer ${token}`,
       },

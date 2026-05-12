@@ -95,6 +95,7 @@ type OtpMailConfig = {
 
 type SetupTokenRecord = {
   userId: string;
+  relayOrigin: string;
   expiresAt: string;
   claimCount: number;
   lastClaimedAt: string | null;
@@ -2032,6 +2033,24 @@ function resolveForwardedOrigin(req: Request) {
   }
 }
 
+function resolveLocationProtocol(req: Request) {
+  const protocol = new URL(req.url).searchParams.get("locationProtocol")?.trim() ?? "";
+  return protocol === "http:" || protocol === "https:" ? protocol : "";
+}
+
+function applyOriginProtocol(origin: string, protocol: string) {
+  if (!protocol) {
+    return origin;
+  }
+  try {
+    const url = new URL(origin);
+    url.protocol = protocol;
+    return url.origin;
+  } catch {
+    return origin;
+  }
+}
+
 function withCors(req: Request, response: Response) {
   response.headers.set("access-control-allow-origin", buildOrigin(req));
   response.headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
@@ -2058,11 +2077,11 @@ async function handleInstallManifest(req: Request) {
   try {
     const version = computeInstallAssetsVersion();
     await ensureBundledBridgeRuntimeInstallAsset(version);
-    const origin = buildOrigin(req);
+    const origin = applyOriginProtocol(buildOrigin(req), resolveLocationProtocol(req));
     const installScriptUrl = `${origin}/install`;
     const bridgeInstallerUrl = `${origin}/install/bridge-installer-${version}.js`;
     const bridgeRuntimeUrl = `${origin}/install/bridge-runtime-${version}.ts`;
-    const { token, expiresAt } = issueInstallSetupToken(session.userId);
+    const { token, expiresAt } = issueInstallSetupToken(session.userId, origin);
     const shellCommand = `curl -fsSL "${installScriptUrl}" | bash -s -- --relay "${origin}" --token "${token}"`;
     return json({
       version,
@@ -2105,7 +2124,7 @@ async function handleInstallClaim(req: Request) {
   try {
     const version = computeInstallAssetsVersion();
     await ensureBundledBridgeRuntimeInstallAsset(version);
-    const origin = buildOrigin(req);
+    const origin = record.relayOrigin || buildOrigin(req);
     if (!user) {
       installSetupTokens.delete(token);
       return json({ ok: false, error: "Bridge user not found." }, 404);
@@ -2231,12 +2250,13 @@ function escapePowerShellSingleQuoted(value: string) {
   return value.replaceAll("'", "''");
 }
 
-function issueInstallSetupToken(userId: string) {
+function issueInstallSetupToken(userId: string, relayOrigin: string) {
   pruneExpiredInstallSetupTokens();
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + INSTALL_SETUP_TOKEN_TTL_MS).toISOString();
   installSetupTokens.set(token, {
     userId,
+    relayOrigin,
     expiresAt,
     claimCount: 0,
     lastClaimedAt: null,
