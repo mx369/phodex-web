@@ -437,6 +437,7 @@ export function buildPromptTraceKey(text: string, images: InputImageAttachment[]
 
 export const GENERATED_USER_MESSAGE_ID_PREFIX = "generated-user-message:";
 const USER_MESSAGE_DEDUPE_WINDOW_MS = 120_000;
+const CONTENT_MESSAGE_DEDUPE_WINDOW_MS = 5_000;
 
 export function buildGeneratedUserMessageId(text: string, images: InputImageAttachment[] = [], createdAt: string) {
   return `${GENERATED_USER_MESSAGE_ID_PREFIX}${buildPromptTraceKey(text, images)}:${Date.parse(createdAt) || createdAt}`;
@@ -448,23 +449,26 @@ export function isGeneratedUserMessageId(id: string) {
 
 export function findEquivalentThreadMessageIndex(messages: ThreadMessage[], nextMessage: ThreadMessage) {
   const exactIndex = messages.findIndex((message) => message.id === nextMessage.id);
-  if (exactIndex !== -1 || nextMessage.role !== "user") {
+  if (exactIndex !== -1 || !isContentDedupeCandidate(nextMessage)) {
     return exactIndex;
   }
 
-  const nextTraceKey = buildPromptTraceKey(nextMessage.text, nextMessage.inputImages ?? []);
+  const nextTraceKey = buildThreadMessageContentTraceKey(nextMessage);
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const existing = messages[index];
-    if (existing.role !== "user") {
+    if (!isContentDedupeCandidate(existing)) {
       continue;
     }
-    if (!isGeneratedUserMessageId(existing.id) && !isGeneratedUserMessageId(nextMessage.id)) {
+    if (existing.role !== nextMessage.role || existing.kind !== nextMessage.kind) {
       continue;
     }
-    if (buildPromptTraceKey(existing.text, existing.inputImages ?? []) !== nextTraceKey) {
+    if (buildThreadMessageContentTraceKey(existing) !== nextTraceKey) {
       continue;
     }
-    if (!messagesAreCloseInTime(existing.createdAt, nextMessage.createdAt)) {
+    const windowMs = shouldUseGeneratedUserDedupeWindow(existing, nextMessage)
+      ? USER_MESSAGE_DEDUPE_WINDOW_MS
+      : CONTENT_MESSAGE_DEDUPE_WINDOW_MS;
+    if (!messagesAreCloseInTime(existing.createdAt, nextMessage.createdAt, windowMs)) {
       continue;
     }
     return index;
@@ -507,13 +511,35 @@ function chooseThreadMessageId(existingId: string, nextId: string) {
   return nextId;
 }
 
-function messagesAreCloseInTime(left: string, right: string) {
+function isContentDedupeCandidate(message: ThreadMessage) {
+  if (message.role !== "user" && message.role !== "assistant") {
+    return false;
+  }
+  if (message.cards?.length || message.runEvents?.length || message.fileChanges?.length || message.codeBlock) {
+    return false;
+  }
+  return Boolean(message.text.trim() || message.inputImages?.length);
+}
+
+function shouldUseGeneratedUserDedupeWindow(existing: ThreadMessage, nextMessage: ThreadMessage) {
+  return (
+    existing.role === "user" &&
+    nextMessage.role === "user" &&
+    (isGeneratedUserMessageId(existing.id) || isGeneratedUserMessageId(nextMessage.id))
+  );
+}
+
+function buildThreadMessageContentTraceKey(message: ThreadMessage) {
+  return buildPromptTraceKey(message.text, message.inputImages ?? []);
+}
+
+function messagesAreCloseInTime(left: string, right: string, windowMs: number) {
   const leftTime = Date.parse(left);
   const rightTime = Date.parse(right);
   if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) {
     return false;
   }
-  return Math.abs(leftTime - rightTime) <= USER_MESSAGE_DEDUPE_WINDOW_MS;
+  return Math.abs(leftTime - rightTime) <= windowMs;
 }
 
 export function summarizePromptForTrace(text: string, images: InputImageAttachment[] = []) {
