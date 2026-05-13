@@ -9,6 +9,7 @@ import type {
   InputImageAttachment,
   MessageSendOutcome,
   QueuedDraft,
+  ReasoningEffort,
   RequestCodeResponse,
   ServerEvent,
   ThreadCreateMode,
@@ -67,6 +68,7 @@ type PendingResumeFeedback = {
 };
 type StoredComposerPreferences = {
   selectedModel?: string;
+  reasoningEffort?: ReasoningEffort;
   fastMode?: boolean;
   planArmed?: boolean;
   accessMode?: AccessMode;
@@ -82,6 +84,7 @@ const PENDING_THREAD_FAILURE_MS = 75_000;
 const PENDING_THREAD_ACCEPTED_FAILURE_MS = 150_000;
 const PENDING_RUN_FEEDBACK_STALE_MS = 20_000;
 const DEFAULT_SELECTED_MODEL = "GPT-5.4";
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = "medium";
 const DEFAULT_ACCESS_MODE: AccessMode = "full-access";
 const storedComposerPreferences = readStoredComposerPreferences();
 const runtimeHost = window.location.hostname || "localhost";
@@ -110,6 +113,7 @@ export const state = reactive({
     composerImages: [] as InputImageAttachment[],
     search: "",
     selectedModel: storedComposerPreferences.selectedModel ?? DEFAULT_SELECTED_MODEL,
+    reasoningEffort: storedComposerPreferences.reasoningEffort ?? DEFAULT_REASONING_EFFORT,
     fastMode: storedComposerPreferences.fastMode ?? false,
     planArmed: storedComposerPreferences.planArmed ?? false,
     accessMode: storedComposerPreferences.accessMode ?? DEFAULT_ACCESS_MODE,
@@ -218,6 +222,7 @@ function addOptimisticQueuedDraft(threadId: string, text: string, images: InputI
     createdAt: new Date().toISOString(),
     images: images.length ? images.map((image) => ({ ...image })) : undefined,
     model: state.ui.selectedModel,
+    reasoningEffort: state.ui.reasoningEffort,
     planArmed: state.ui.planArmed,
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
@@ -1532,6 +1537,7 @@ function flushComposer(threadId: string) {
     text,
     images,
     model: state.ui.selectedModel,
+    reasoningEffort: state.ui.reasoningEffort,
     planArmed: state.ui.planArmed,
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
@@ -1545,6 +1551,7 @@ function flushComposer(threadId: string) {
     promptTrace,
     promptSummary,
     model: state.ui.selectedModel,
+    reasoningEffort: state.ui.reasoningEffort,
     planArmed: state.ui.planArmed,
     fastMode: state.ui.fastMode,
     accessMode: state.ui.accessMode,
@@ -1589,6 +1596,7 @@ export function persistComposerPreferences() {
       COMPOSER_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
         selectedModel: state.ui.selectedModel,
+        reasoningEffort: state.ui.reasoningEffort,
         fastMode: state.ui.fastMode,
         planArmed: state.ui.planArmed,
         accessMode: state.ui.accessMode,
@@ -1620,6 +1628,13 @@ function readStoredComposerPreferences(): StoredComposerPreferences {
     const parsed = JSON.parse(raw) as StoredComposerPreferences;
     return {
       selectedModel: typeof parsed.selectedModel === "string" ? parsed.selectedModel : undefined,
+      reasoningEffort:
+        parsed.reasoningEffort === "low" ||
+        parsed.reasoningEffort === "medium" ||
+        parsed.reasoningEffort === "high" ||
+        parsed.reasoningEffort === "xhigh"
+          ? parsed.reasoningEffort
+          : undefined,
       fastMode: typeof parsed.fastMode === "boolean" ? parsed.fastMode : undefined,
       planArmed: typeof parsed.planArmed === "boolean" ? parsed.planArmed : undefined,
       accessMode:

@@ -232,8 +232,10 @@ let codexRateLimits: CodexRateLimitSnapshot | null = null;
 let codexRequestSeq = 0;
 let threadSyncInFlight: Promise<void> | null = null;
 let codexSupportsServiceTier = true;
+let codexSupportsReasoningEffort = true;
 let codexSupportsTurnSteer = true;
 let serviceTierUnsupportedToastSent = false;
+let reasoningEffortUnsupportedToastSent = false;
 const selectedThreadHydrationRetryCounts = new Map<string, number>();
 const selectedThreadHydrationRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 connectRelaySocket();
@@ -824,6 +826,7 @@ function buildQueuedDraft(
     images,
     createdAt: new Date().toISOString(),
     model: event.model,
+    reasoningEffort: event.reasoningEffort,
     planArmed: event.planArmed,
     fastMode: event.fastMode,
     accessMode: event.accessMode,
@@ -838,6 +841,7 @@ function buildQueuedDraftEvent(threadId: string, draft: QueuedDraft): Extract<Cl
     text: draft.text,
     images: draft.images,
     model: draft.model ?? "GPT-5.4",
+    reasoningEffort: draft.reasoningEffort ?? "medium",
     planArmed: draft.planArmed ?? false,
     fastMode: draft.fastMode ?? false,
     accessMode: draft.accessMode ?? "full-access",
@@ -1210,6 +1214,7 @@ async function startTurn(
     threadId: thread.id,
     input,
     model: normalizeModel(event.model),
+    reasoningEffort: event.reasoningEffort,
     approvalPolicy: mapApprovalPolicy(event.accessMode),
     sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
   };
@@ -1219,6 +1224,7 @@ async function startTurn(
     promptTrace,
     promptSummary,
     model: baseParams.model,
+    reasoningEffort: baseParams.reasoningEffort,
     approvalPolicy: baseParams.approvalPolicy,
     sandboxMode: baseParams.sandboxPolicy.mode,
   });
@@ -1259,28 +1265,46 @@ async function requestTurnStartWithFastModeFallback(
     threadId: string;
     input: ReturnType<typeof buildTurnInput>;
     model: string;
+    reasoningEffort: Extract<ClientEvent, { type: "message:send" }>["reasoningEffort"];
     approvalPolicy: ReturnType<typeof mapApprovalPolicy>;
     sandboxPolicy: ReturnType<typeof mapSandboxPolicy>;
   },
   event: Extract<ClientEvent, { type: "message:send" }>,
   userId: string
 ) {
-  try {
-    return await codexRequest("turn/start", {
-      ...baseParams,
+  let lastError: unknown = null;
+  const { reasoningEffort, ...turnParams } = baseParams;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const params = {
+      ...turnParams,
+      ...(codexSupportsReasoningEffort ? { reasoningEffort } : {}),
       ...(event.fastMode && codexSupportsServiceTier ? { serviceTier: "fast" as const } : {}),
-    });
-  } catch (error) {
-    if (event.fastMode && codexSupportsServiceTier && shouldRetryTurnStartWithoutServiceTier(error)) {
-      codexSupportsServiceTier = false;
-      if (!serviceTierUnsupportedToastSent) {
-        serviceTierUnsupportedToastSent = true;
-        sendToast(userId, "info", "Fast mode is unavailable on this bridge yet. This run was sent normally.");
+    };
+
+    try {
+      return await codexRequest("turn/start", params);
+    } catch (error) {
+      lastError = error;
+      if (codexSupportsReasoningEffort && shouldRetryTurnStartWithoutReasoningEffort(error)) {
+        codexSupportsReasoningEffort = false;
+        if (!reasoningEffortUnsupportedToastSent) {
+          reasoningEffortUnsupportedToastSent = true;
+          sendToast(userId, "info", "Thinking level is unavailable on this bridge yet. This run was sent normally.");
+        }
+        continue;
       }
-      return await codexRequest("turn/start", baseParams);
+      if (event.fastMode && codexSupportsServiceTier && shouldRetryTurnStartWithoutServiceTier(error)) {
+        codexSupportsServiceTier = false;
+        if (!serviceTierUnsupportedToastSent) {
+          serviceTierUnsupportedToastSent = true;
+          sendToast(userId, "info", "Fast mode is unavailable on this bridge yet. This run was sent normally.");
+        }
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
+  throw lastError;
 }
 
 async function resumeThreadForTurn(thread: ThreadRecord, event: Extract<ClientEvent, { type: "message:send" }>) {
@@ -1395,8 +1419,10 @@ function connectCodexSocket() {
 
   socket.addEventListener("open", () => {
     codexSupportsServiceTier = true;
+    codexSupportsReasoningEffort = true;
     codexSupportsTurnSteer = true;
     serviceTierUnsupportedToastSent = false;
+    reasoningEffortUnsupportedToastSent = false;
     void codexRequest(
       "initialize",
       {
@@ -4089,6 +4115,23 @@ function shouldRetryTurnStartWithoutServiceTier(error: unknown) {
   const message = readErrorMessage(error).toLowerCase();
   return message.includes("servicetier")
     || message.includes("service tier")
+    || message.includes("unknown field")
+    || message.includes("unexpected field")
+    || message.includes("unrecognized field")
+    || message.includes("invalid param")
+    || message.includes("invalid params");
+}
+
+function shouldRetryTurnStartWithoutReasoningEffort(error: unknown) {
+  const code = (error as Error & { code?: unknown })?.code;
+  if (code !== -32600 && code !== -32602) {
+    return false;
+  }
+
+  const message = readErrorMessage(error).toLowerCase();
+  return message.includes("reasoningeffort")
+    || message.includes("reasoning effort")
+    || message.includes("thinking")
     || message.includes("unknown field")
     || message.includes("unexpected field")
     || message.includes("unrecognized field")

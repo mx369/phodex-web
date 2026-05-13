@@ -157,6 +157,7 @@ export interface QueuedDraft {
   createdAt: string;
   images?: InputImageAttachment[];
   model?: string;
+  reasoningEffort?: ReasoningEffort;
   planArmed?: boolean;
   fastMode?: boolean;
   accessMode?: AccessMode;
@@ -298,6 +299,7 @@ export type ClientEvent =
       text: string;
       images?: InputImageAttachment[];
       model: string;
+      reasoningEffort: ReasoningEffort;
       planArmed: boolean;
       fastMode: boolean;
       accessMode: AccessMode;
@@ -411,6 +413,15 @@ export const ACCESS_MODE_LABELS: Record<AccessMode, string> = {
 };
 
 export const MODELS = ["GPT-5.5", "GPT-5.4", "GPT-5.4 mini", "o4-mini"] as const;
+export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+export const REASONING_EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "XHigh",
+};
 
 function normalizeTraceText(value: string) {
   return value.trim().replace(/\s+/g, " ");

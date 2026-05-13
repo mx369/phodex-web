@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import { ACCESS_MODE_LABELS, MODELS } from "@phodex/shared";
+import { ACCESS_MODE_LABELS, MODELS, REASONING_EFFORT_LABELS, REASONING_EFFORTS } from "@phodex/shared";
 import type {
   AccessMode,
   BridgeDeviceSummary,
@@ -14,6 +14,7 @@ import type {
   ProjectFilePayload,
   ProjectTreeEntry,
   ProjectTreePayload,
+  ReasoningEffort,
   ThreadCreateMode,
   ThreadRecord,
 } from "@phodex/shared";
@@ -934,7 +935,8 @@ const composerSendTitle = computed(() => {
   return currentThread.value?.state === "running" ? "Send follow-up" : "Send";
 });
 const composerRuntimeLabel = computed(
-  () => `${state.ui.selectedModel} · ${ACCESS_MODE_COMPACT_LABELS[state.ui.accessMode]}`
+  () =>
+    `${state.ui.selectedModel} · ${REASONING_EFFORT_LABELS[state.ui.reasoningEffort]} · ${ACCESS_MODE_COMPACT_LABELS[state.ui.accessMode]}`
 );
 const composerRuntimeState = computed(() => {
   const connection = state.snapshot?.connection;
@@ -2231,6 +2233,19 @@ function speedOptionCopy(fastMode: boolean) {
   return fastMode ? "Lower latency." : "Balanced latency.";
 }
 
+function reasoningEffortCopy(reasoningEffort: ReasoningEffort) {
+  switch (reasoningEffort) {
+    case "low":
+      return "Shorter thought for simple asks.";
+    case "medium":
+      return "Balanced thinking depth.";
+    case "high":
+      return "Deeper analysis for hard tasks.";
+    case "xhigh":
+      return "Maximum depth for complex work.";
+  }
+}
+
 function formatImageCountLabel(count: number) {
   return count === 1 ? "1 image attached" : `${count} images attached`;
 }
@@ -2398,6 +2413,12 @@ function selectModel(model: string) {
 
 function selectFastMode(fastMode: boolean) {
   state.ui.fastMode = fastMode;
+  persistComposerPreferences();
+  closeModelPicker();
+}
+
+function selectReasoningEffort(reasoningEffort: ReasoningEffort) {
+  state.ui.reasoningEffort = reasoningEffort;
   persistComposerPreferences();
   closeModelPicker();
 }
@@ -4433,7 +4454,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                 type="button"
                                 aria-haspopup="menu"
                                 :aria-expanded="modelPickerOpen"
-                                aria-label="Select model, speed, and access mode"
+                                aria-label="Select model, thinking, speed, and access mode"
                                 :disabled="isCurrentThreadPendingCreate"
                                 @click="toggleModelPicker"
                               >
@@ -4445,7 +4466,7 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                               </button>
 
                               <transition name="composer-picker">
-                                <div v-if="modelPickerOpen" class="model-picker__menu" role="menu" aria-label="Model and speed options">
+                                <div v-if="modelPickerOpen" class="model-picker__menu" role="menu" aria-label="Model, thinking, speed, and access options">
                                   <span class="model-picker__section-label">Model</span>
                                   <button
                                     v-for="model in MODELS"
@@ -4464,6 +4485,32 @@ function historyLoadButtonLabel(thread: ThreadRecord) {
                                     <span
                                       class="model-picker__status"
                                       :class="{ 'model-picker__status--visible': state.ui.selectedModel === model }"
+                                      aria-hidden="true"
+                                    >
+                                      <AppIcon name="check" />
+                                    </span>
+                                  </button>
+
+                                  <div class="model-picker__divider" aria-hidden="true"></div>
+                                  <span class="model-picker__section-label">Thinking</span>
+
+                                  <button
+                                    v-for="reasoningEffort in REASONING_EFFORTS"
+                                    :key="reasoningEffort"
+                                    class="model-picker__option"
+                                    :class="{ 'model-picker__option--active': state.ui.reasoningEffort === reasoningEffort }"
+                                    type="button"
+                                    role="menuitemradio"
+                                    :aria-checked="state.ui.reasoningEffort === reasoningEffort"
+                                    @click="selectReasoningEffort(reasoningEffort)"
+                                  >
+                                    <span class="model-picker__copy">
+                                      <strong>{{ REASONING_EFFORT_LABELS[reasoningEffort] }}</strong>
+                                      <span>{{ reasoningEffortCopy(reasoningEffort) }}</span>
+                                    </span>
+                                    <span
+                                      class="model-picker__status"
+                                      :class="{ 'model-picker__status--visible': state.ui.reasoningEffort === reasoningEffort }"
                                       aria-hidden="true"
                                     >
                                       <AppIcon name="check" />
