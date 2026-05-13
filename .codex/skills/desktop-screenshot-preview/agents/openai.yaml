@@ -1,0 +1,4 @@
+interface:
+  display_name: "Desktop Screenshot Preview"
+  short_description: "Capture desktop screenshots and preview them in chat."
+  default_prompt: "Use $desktop-screenshot-preview to capture my desktop and preview it in this conversation."
