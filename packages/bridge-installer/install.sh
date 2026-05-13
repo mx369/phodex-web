@@ -201,13 +201,6 @@ normalize_origin() {
   printf '%s\n' "$value"
 }
 
-codex_ready_url() {
-  local ws_url=${1%/}
-  ws_url="${ws_url/#ws:\/\//http://}"
-  ws_url="${ws_url/#wss:\/\//https://}"
-  printf '%s/readyz\n' "$ws_url"
-}
-
 codex_ws_port() {
   local ws_url=$1
   local without_scheme
@@ -224,14 +217,6 @@ codex_ws_port() {
 codex_ws_with_port() {
   local port=$1
   printf 'ws://127.0.0.1:%s\n' "$port"
-}
-
-probe_existing_codex_ready() {
-  local ws_url=$1
-  local ready_url
-  ready_url="$(codex_ready_url "$ws_url")"
-  http_request --silent --show-error --location --max-time 1.5 "$ready_url"
-  [[ $RESPONSE_STATUS == 200 ]]
 }
 
 port_listener_pids() {
@@ -570,17 +555,6 @@ start_bridge() {
   BRIDGE_PID="$pid"
 }
 
-wait_for_codex_ready() {
-  for _ in $(seq 1 48); do
-    if probe_existing_codex_ready "$CODEX_WS_URL"; then
-      return
-    fi
-    sleep 0.25
-  done
-
-  return 1
-}
-
 start_codex_launch_agent() {
   local plist_path
   local label
@@ -642,21 +616,14 @@ ensure_external_codex_app_server() {
       start_codex_process
     fi
 
-    if wait_for_codex_ready; then
-      if [[ $CODEX_WS_URL != "$preferred_url" ]]; then
-        info_bold "Codex app-server port $preferred_port was unavailable; Phodex will use $CODEX_WS_URL instead."
-      fi
-      return
+    if [[ $CODEX_WS_URL != "$preferred_url" ]]; then
+      info_bold "Codex app-server port $preferred_port was unavailable; Phodex will use $CODEX_WS_URL instead."
     fi
-
-    info "Codex app-server did not become ready on port $port; trying another port."
-    if [[ $(uname -s) == Darwin ]]; then
-      stop_codex_launch_agent
-    fi
+    return
   done
 
   port_source="${preferred_port:-8765}"
-  error "Codex app-server did not become ready. Tried $port_source and fallback ports 8766-8775. Check $(tildify "$CODEX_LOG_FILE")"
+  error "Codex app-server could not start because ports $port_source and 8766-8775 are occupied. Check $(tildify "$CODEX_LOG_FILE")"
 }
 
 wait_for_bridge_health() {
