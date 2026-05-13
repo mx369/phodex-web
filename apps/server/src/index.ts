@@ -9,6 +9,7 @@ import {
   buildPromptTraceKey,
   dedupeThreadMessages,
   findEquivalentThreadMessageIndex,
+  GENERATED_USER_MESSAGE_ID_PREFIX,
   summarizePromptForTrace,
   upsertThreadMessage,
 } from "@phodex/shared";
@@ -83,6 +84,7 @@ type ActiveTurnState = {
   threadId: string;
   turnId: string;
   assistantMessageId: string | null;
+  itemSequence: number;
   startedAt: string;
   mode: "chat" | "plan";
   promptTrace: string;
@@ -927,6 +929,7 @@ async function startThreadRun(
         threadId: thread.id,
         turnId,
         assistantMessageId: null,
+        itemSequence: 0,
         startedAt: new Date().toISOString(),
         mode: turnMode,
         promptTrace: pendingTrace?.promptTrace ?? promptTrace,
@@ -1618,6 +1621,7 @@ function handleTurnStarted(params: any) {
     threadId,
     turnId,
     assistantMessageId: null,
+    itemSequence: currentTurn?.itemSequence ?? 0,
     startedAt: thread.lastActivityAt,
     mode: currentTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
     promptTrace: currentTurn?.promptTrace ?? pendingTrace?.promptTrace ?? "",
@@ -1644,12 +1648,18 @@ function handleItemStarted(params: any) {
   const activeTurn = activeTurns.get(threadId);
   const pendingTrace = pendingTurnTraces.get(threadId);
   const startedAt = activeTurn?.startedAt ?? new Date().toISOString();
+  const itemIndex = activeTurn ? activeTurn.itemSequence++ : 0;
   const message = mapLiveItemToMessage(
     item,
     startedAt,
     "started",
     activeTurn?.mode ?? pendingTrace?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
-    thread.repoLabel
+    thread.repoLabel,
+    {
+      turnId: readString(params?.turnId) || activeTurn?.turnId || null,
+      itemIndex,
+      fallbackMessageId: readString(params?.itemId) || null,
+    }
   );
   if (!message) {
     return;
@@ -1739,7 +1749,11 @@ function handleItemCompleted(params: any) {
     activeTurns.get(threadId)?.startedAt ?? new Date().toISOString(),
     "completed",
     activeTurns.get(threadId)?.mode ?? pendingTurnModes.get(threadId) ?? "chat",
-    thread.repoLabel
+    thread.repoLabel,
+    {
+      turnId: readString(params?.turnId) || activeTurns.get(threadId)?.turnId || null,
+      fallbackMessageId: readString(params?.itemId) || activeTurns.get(threadId)?.assistantMessageId || null,
+    }
   );
   if (!message) {
     return;
@@ -2248,13 +2262,16 @@ function mapTurnsToMessages(
     const createdAt = toIsoFromEpoch(turn?.startedAt) ?? new Date().toISOString();
     const turnMode = deriveTurnModeFromItems(Array.isArray(turn?.items) ? turn.items : []);
     const turnMessages: ThreadMessage[] = [];
-    for (const item of Array.isArray(turn?.items) ? turn.items : []) {
-      const message = mapLiveItemToMessage(item, createdAt, "history", turnMode, cwd);
+    const turnId = readString(turn?.id);
+    for (const [itemIndex, item] of (Array.isArray(turn?.items) ? turn.items : []).entries()) {
+      const message = mapLiveItemToMessage(item, createdAt, "history", turnMode, cwd, {
+        turnId: turnId || null,
+        itemIndex,
+      });
       if (message) {
         turnMessages.push(message);
       }
     }
-    const turnId = readString(turn?.id);
     const fallback = turnId ? fallbackTurns.get(turnId) : null;
     if (fallback?.fileChanges.length && !turnMessages.some((message) => message.fileChanges?.length)) {
       const changeSummary = summarizeFileChanges(fallback.fileChanges);
@@ -2280,19 +2297,60 @@ function mapTurnsToMessages(
   return messages;
 }
 
+const GENERATED_ITEM_MESSAGE_ID_PREFIX = "generated-codex-item-message:";
+
+type ItemMessageContext = {
+  turnId?: string | null;
+  itemIndex?: number;
+  fallbackMessageId?: string | null;
+};
+
+function stableUserMessageId(
+  item: any,
+  text: string,
+  inputImages: InputImageAttachment[],
+  createdAt: string,
+  context: ItemMessageContext
+) {
+  const explicitId = readString(item?.id) || readString(context.fallbackMessageId);
+  if (explicitId) {
+    return explicitId;
+  }
+  if (context.turnId) {
+    return `${GENERATED_USER_MESSAGE_ID_PREFIX}${context.turnId}:${buildPromptTraceKey(text, inputImages)}`;
+  }
+  return buildGeneratedUserMessageId(text, inputImages, createdAt);
+}
+
+function stableItemMessageId(item: any, context: ItemMessageContext) {
+  const explicitId = readString(item?.id) || readString(context.fallbackMessageId);
+  if (explicitId) {
+    return explicitId;
+  }
+
+  const itemType = readString(item?.type) || "item";
+  if (context.turnId && Number.isInteger(context.itemIndex)) {
+    return `${GENERATED_ITEM_MESSAGE_ID_PREFIX}${context.turnId}:${context.itemIndex}:${itemType}`;
+  }
+  if (context.turnId) {
+    return `${GENERATED_ITEM_MESSAGE_ID_PREFIX}${context.turnId}:${itemType}:${buildPromptTraceKey(readString(item?.text), [])}`;
+  }
+  return randomUUID();
+}
+
 function mapLiveItemToMessage(
   item: any,
   createdAt: string,
   stage: "history" | "started" | "completed" = "history",
   assistantKind: "chat" | "plan" = "chat",
-  cwd = DEFAULT_THREAD_CWD
+  cwd = DEFAULT_THREAD_CWD,
+  context: ItemMessageContext = {}
 ) {
-  const itemId = readString(item?.id) || randomUUID();
   if (item?.type === "userMessage") {
     const inputImages = readUserItemImages(item);
     const text = readUserItemText(item);
     return {
-      id: readString(item?.id) || buildGeneratedUserMessageId(text, inputImages, createdAt),
+      id: stableUserMessageId(item, text, inputImages, createdAt, context),
       role: "user",
       kind: "chat",
       text,
@@ -2301,6 +2359,7 @@ function mapLiveItemToMessage(
     } satisfies ThreadMessage;
   }
 
+  const itemId = stableItemMessageId(item, context);
   if (item?.type === "agentMessage") {
     const phase = readString(item?.phase);
     return {
