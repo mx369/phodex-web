@@ -1211,19 +1211,17 @@ async function startTurn(
     sandboxPolicy: mapSandboxPolicy(event.accessMode, writableRootForThread(thread)),
   };
 
+  logFlowTrace("codex.turn-start.request", {
+    threadId: thread.id,
+    promptTrace,
+    promptSummary,
+    model: baseParams.model,
+    approvalPolicy: baseParams.approvalPolicy,
+    sandboxMode: baseParams.sandboxPolicy.mode,
+  });
+
   try {
-    logFlowTrace("codex.turn-start.request", {
-      threadId: thread.id,
-      promptTrace,
-      promptSummary,
-      model: baseParams.model,
-      approvalPolicy: baseParams.approvalPolicy,
-      sandboxMode: baseParams.sandboxPolicy.mode,
-    });
-    const result = await codexRequest("turn/start", {
-      ...baseParams,
-      ...(event.fastMode && codexSupportsServiceTier ? { serviceTier: "fast" as const } : {}),
-    });
+    const result = await requestTurnStartWithFastModeFallback(baseParams, event, userId);
     logFlowTrace("codex.turn-start.response", {
       threadId: thread.id,
       promptTrace,
@@ -1231,6 +1229,44 @@ async function startTurn(
       turnId: readString(result?.turn?.id) || null,
     });
     return result;
+  } catch (error) {
+    if (!isThreadNotLoadedError(error)) {
+      throw error;
+    }
+    logFlowTrace("codex.thread-resume-before-turn.request", {
+      threadId: thread.id,
+      promptTrace,
+      promptSummary,
+    });
+    await resumeThreadForTurn(thread, event);
+    const result = await requestTurnStartWithFastModeFallback(baseParams, event, userId);
+    logFlowTrace("codex.turn-start.response", {
+      threadId: thread.id,
+      promptTrace,
+      promptSummary,
+      turnId: readString(result?.turn?.id) || null,
+      resumed: true,
+    });
+    return result;
+  }
+}
+
+async function requestTurnStartWithFastModeFallback(
+  baseParams: {
+    threadId: string;
+    input: ReturnType<typeof buildTurnInput>;
+    model: string;
+    approvalPolicy: ReturnType<typeof mapApprovalPolicy>;
+    sandboxPolicy: ReturnType<typeof mapSandboxPolicy>;
+  },
+  event: Extract<ClientEvent, { type: "message:send" }>,
+  userId: string
+) {
+  try {
+    return await codexRequest("turn/start", {
+      ...baseParams,
+      ...(event.fastMode && codexSupportsServiceTier ? { serviceTier: "fast" as const } : {}),
+    });
   } catch (error) {
     if (event.fastMode && codexSupportsServiceTier && shouldRetryTurnStartWithoutServiceTier(error)) {
       codexSupportsServiceTier = false;
@@ -1241,6 +1277,28 @@ async function startTurn(
       return await codexRequest("turn/start", baseParams);
     }
     throw error;
+  }
+}
+
+async function resumeThreadForTurn(thread: ThreadRecord, event: Extract<ClientEvent, { type: "message:send" }>) {
+  const result = await codexRequest("thread/resume", {
+    threadId: thread.id,
+    cwd: writableRootForThread(thread),
+    model: normalizeModel(event.model),
+    approvalPolicy: mapApprovalPolicy(event.accessMode),
+    sandbox: mapSandboxMode(event.accessMode),
+    personality: "pragmatic",
+  });
+  if (result?.thread) {
+    const resumedThread = mergeCodexThread(
+      result.thread,
+      thread.state === "archived",
+      Array.isArray(result.thread.turns)
+    );
+    threadCache.set(resumedThread.id, resumedThread);
+    codexLastSyncAt = new Date().toISOString();
+    broadcastThreadToAllUsers(resumedThread.id, true);
+    publishPresenceToAllUsers();
   }
 }
 
@@ -4011,8 +4069,11 @@ function shouldQueueAfterTurnSteerFailure(error: unknown) {
 function isThreadNotFoundError(error: unknown) {
   const message = readErrorMessage(error).toLowerCase();
   return message.startsWith("thread not found")
-    || message.startsWith("thread not loaded")
     || message.startsWith("invalid thread id");
+}
+
+function isThreadNotLoadedError(error: unknown) {
+  return readErrorMessage(error).toLowerCase().startsWith("thread not loaded");
 }
 
 function isThreadNotMaterializedError(error: unknown) {
@@ -4052,6 +4113,13 @@ function mapApprovalPolicy(accessMode: "read-only" | "on-request" | "full-access
     return "on-request";
   }
   return "never";
+}
+
+function mapSandboxMode(accessMode: "read-only" | "on-request" | "full-access") {
+  if (accessMode === "read-only") {
+    return "read-only";
+  }
+  return "danger-full-access";
 }
 
 function writableRootForThread(thread: ThreadRecord) {
